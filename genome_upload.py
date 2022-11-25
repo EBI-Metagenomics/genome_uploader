@@ -159,6 +159,7 @@ geographicLocations = ["Afghanistan", "Albania", "Algeria", "American Samoa", "A
     "Wallis and Futuna", "West Bank", "Western Sahara", "Yemen", "Zambia", "Zimbabwe"]
 TAX_ID_UNCULTURED_EUK = "2759"
 RETRY_COUNT = 5
+error = "\nERROR: "
 HQ = ("Multiple fragments where gaps span repetitive regions. Presence of the "
     "23S, 16S, and 5S rRNA genes and at least 18 tRNAs.")
 MQ = ("Many fragments with little to no review of assembly other than reporting "
@@ -166,11 +167,11 @@ MQ = ("Many fragments with little to no review of assembly other than reporting 
 
 class NoDataException(ValueError):
     pass
-
+# TODO: add -out parameter for upload directory (default: pwd)
 def parse_args(argv):
     parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
         description="Allows to create xmls and manifest files for genome upload to ENA. " +
-        "--xmls, --manifests, and --upload are needed to determine the action the script " +
+        "--xmls and --manifests are needed to determine the action the script " +
         "should perform. The use of more than one option is encouraged. To spare time, " +
         "-xmls and -manifests should be called only if respective xml or manifest files " +
         "do not already exist.")
@@ -186,10 +187,7 @@ def parse_args(argv):
         "genome registration xmls")
     parser.add_argument("--manifests", action='store_true', help="Creates a manifest file " +
         "for every genome to upload")
-    parser.add_argument("--upload", action='store_true', help="Uploads genomes to ENA")
-    parser.add_argument("--post_upload", action='store_true', help="Checks the success of " +
-        "already launched uploads")
-
+    
     parser.add_argument('--force', action='store_true', help="Forces reset of sample xml's backups")
     parser.add_argument('--live', action='store_true', help="Uploads on ENA. Omitting this " +
         "option allows to validate samples beforehand")
@@ -200,16 +198,16 @@ def parse_args(argv):
 
     args = parser.parse_args(argv)
 
-    if not args.xmls and not args.manifests and not args.upload and not args.post_upload:
-        print("Select at least one action among --xmls, --manifests, --upload, and --post_upload")
+    if not args.xmls and not args.manifests:
+        print("Select at least one action between --xmls and --manifests")
         sys.exit(1)
 
-    if not args.post_upload and not args.upload_study:
-        print("No project selected for MAG upload [-u, --upload_study].")
+    if args.manifests:
+        print("No project selected for genome upload [-u, --upload_study].")
         sys.exit(1)
     
     if not os.path.exists(args.genome_info):
-        print('MAG folder "{}" does not exist'.format(args.genome_info))
+        print('Genome metadata file "{}" does not exist'.format(args.genome_info))
         sys.exit(1)
 
     return args
@@ -289,7 +287,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
         raise ValueError("The following mandatory fields have missing values in " +
             "the input file: {}".format(", ".join(missingValues)))
 
-    # check whether run_accessions are in the right format
+    # check whether run_accessions follow the right format
     run_id_reg_exp = re.compile("([E|S|D]R[R|S]\d{6,})")
 
     accessionComparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", 
@@ -309,7 +307,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
 
     mismatchingAccessions = accessionComparison[accessionComparison["mismatching"]]["genome_name"]
     if not mismatchingAccessions.empty:
-        print("\nERROR: Run accessions are not correctly formatted for the following genomes: ") 
+        print(error + "run accessions are not correctly formatted for the following genomes: ") 
         print(mismatchingAccessions)
         sys.exit(1)
 
@@ -327,7 +325,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
         ((accessionComparison["correct"] > 1) & (~accessionComparison["co-assembly"])
         )]["genome_name"]
     if not coassemblyDiscrepancy.empty:
-        print("\nERROR: The following genomes show discrepancy between number of runs " +
+        print(error + "the following genomes show discrepancy between number of runs " +
             "involved and co-assembly status:")
         print(coassemblyDiscrepancy)
         sys.exit(1)
@@ -336,7 +334,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
     if False in metadata.apply(lambda row: 
         True if row["metagenome"] in metagenomes 
         else False, axis=1).unique():
-        print("\nERROR: Metagenomes associated with each genome need to belong to ENA's " +
+        print(error + "metagenomes associated with each genome need to belong to ENA's " +
             "approved metagenomes list.")
         sys.exit(1)
 
@@ -344,11 +342,10 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
     if False in metadata.apply(lambda row: 
         True if os.path.exists(row["genome_path"]) 
         else False, axis =1).unique():
-        print("\nERROR: some genome paths do not exist.")
+        print(error + "some genome paths do not exist.")
         sys.exit(1)
 
     # TODO:
-    # write ERROR variable
     # check genome name lengths
 
     genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
@@ -387,15 +384,13 @@ def extract_genomes_info(inputFile, genomeType):
 # TODO: organise this into a class
 
 #TODO: filter only fields we are interested in
-RUN_DEFAULT_FIELDS = 'study_accession,secondary_study_accession,run_accession,library_source,library_strategy,' \
-                     'library_layout,fastq_ftp,fastq_md5,fastq_bytes,base_count,read_count,instrument_platform,instrument_model,' \
-                     'secondary_sample_accession,library_name,sample_alias,sample_title,sample_description,first_public'
+RUN_DEFAULT_FIELDS = 'study_accession,secondary_study_accession,instrument_model,' \
+                     'run_accession,sample_accession'
 
 SAMPLE_DEFAULT_FIELDS = 'sample_accession,secondary_sample_accession,' \
                         'collection_date,country,location'
 
-STUDY_DEFAULT_FIELDS = 'study_accession,secondary_study_accession,description,study_alias,study_title,' \
-                       'tax_id,scientific_name,center_name,first_public'
+STUDY_DEFAULT_FIELDS = 'study_accession,secondary_study_accession,description,study_title,'
 
 def get_default_params():
     return {
@@ -404,38 +399,23 @@ def get_default_params():
         'dataPortal': 'ena'
     }
 
-def get_default_connection_headers():
-    return {
-        "headers": {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "*/*"
-        }
-    }
-
 def post_request(data, webin, password):
     url = "https://www.ebi.ac.uk/ena/portal/api/search"
     auth = (webin, password)
-    response = requests.post(url, data=data, auth=auth, **get_default_connection_headers())
+    default_connection_headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "*/*"
+    }
+    response = requests.post(url, data=data, auth=auth, headers=default_connection_headers)
     
     return response
 
-def get_run_raw_size(run, field='fastq_ftp'):
-    """Sum the values of fastq_bytes or submitted_bytes.
-    """
-    if 'fastq_bytes' in run:
-        return sum([int(s) for s in run['fastq_bytes'].split(';')])
-    if 'submitted_bytes' in run:
-        return sum([int(s) for s in run['submitted_bytes'].split(';')])
-    logging.warning("Cannot get the RAW read file size.")
-    return 0
-
-# TODO: test with public=False
 # TODO: remove warnings
 # TODO: filter unused parameters and fields
-def get_run(run_accession, webin, password, fields=None, public=True, attempt=0, search_params=None):
+def get_run(run_accession, webin, password, attempt=0, search_params=None):
     data = get_default_params()
     data['result'] = 'read_run'
-    data['fields'] = fields or RUN_DEFAULT_FIELDS
+    data['fields'] = RUN_DEFAULT_FIELDS
     data['query'] = 'run_accession=\"{}\"'.format(run_accession)
 
     if search_params:
@@ -450,8 +430,7 @@ def get_run(run_accession, webin, password, fields=None, public=True, attempt=0,
         if attempt < 2:
             attempt += 1
             sleep(1)
-            return get_run(run_accession, webin, password, fields=fields, public=public, 
-                            attempt=attempt, search_params=None)
+            return get_run(run_accession, webin, password, attempt)
         else:
             raise ValueError('Could not find run {} in ENA after {} attempts'.format(run_accession, RETRY_COUNT))
     try:
@@ -459,28 +438,12 @@ def get_run(run_accession, webin, password, fields=None, public=True, attempt=0,
     except (IndexError, TypeError, ValueError):
         raise ValueError('Could not find run {} in ENA.'.format(run_accession))
 
-    if fields is None or 'raw_data_size' in fields:
-        if public and 'fastq_ftp' in run and len(run['fastq_ftp']):
-            run['raw_data_size'] = get_run_raw_size(run)
-        elif public and 'submitted_ftp' in run and len(run['submitted_ftp']) > 0:
-            run['raw_data_size'] = get_run_raw_size(run, 'submitted_ftp')
-        else:
-            run['raw_data_size'] = None
-
-    for int_param in ('read_count', 'base_count'):
-        if int_param in run:
-            try:
-                run[int_param] = int(run[int_param])
-            except ValueError as e:
-                if not public:
-                    raise e
-                run[int_param] = -1
     return run
 
 def get_study(webin, password, primary_accession=None, secondary_accession=None, fields=None, attempt=0):
     data = get_default_params()
     data['result'] = 'read_study'
-    data['fields'] = fields or STUDY_DEFAULT_FIELDS
+    data['fields'] = STUDY_DEFAULT_FIELDS
 
     if primary_accession and not secondary_accession:
         data['query'] = 'study_accession="{}"'.format(primary_accession)
@@ -505,7 +468,19 @@ def get_study(webin, password, primary_accession=None, secondary_accession=None,
 
     for param in query_params:
         try:
-            return _get_study(param, webin, password)
+            response = post_request(data, webin, password)
+            if response.status_code == 204:
+                raise NoDataException()
+            try:
+                study = json.loads(response.text)[0]
+            except (IndexError, TypeError, ValueError, KeyError) as e:
+                raise e
+            if data['result'] == 'study':
+                if 'study_description' in study:
+                    study['description'] = study.pop('study_description')
+                if 'study_name' in study:
+                    study['study_alias'] = study.pop('study_name')
+            return study
         except NoDataException:
             logging.info('No info found to fetch study with params {}'.format(param))
             pass
@@ -514,30 +489,7 @@ def get_study(webin, password, primary_accession=None, secondary_accession=None,
 
     raise ValueError('Could not find study {} {} in ENA.'.format(primary_accession, secondary_accession))
 
-def remap_study_fields(data):
-    if 'study_description' in data:
-        data['description'] = data.pop('study_description')
-    if 'study_name' in data:
-        data['study_alias'] = data.pop('study_name')
-    return data
-
-def _get_study(data, webin, password):
-    response = post_request(data, webin, password)
-    if response.status_code == 204:
-        raise NoDataException()
-    try:
-        study = json.loads(response.text)[0]
-    except (IndexError, TypeError, ValueError, KeyError) as e:
-        raise e
-    if data['result'] == 'study':
-        study = remap_study_fields(study)
-    return study
-
-def run_filter(d):
-    return d['library_strategy'] != 'AMPLICON'
-
-def get_study_runs(study_acc, webin, password, fields=None, filter_assembly_runs=True, 
-                        filter_accessions=None, search_params=None):
+def get_study_runs(study_acc, webin, password, fields=None, search_params=None):
     data = get_default_params()
     data['result'] = 'read_run'
     data['fields'] = fields or RUN_DEFAULT_FIELDS
@@ -553,26 +505,7 @@ def get_study_runs(study_acc, webin, password, fields=None, filter_assembly_runs
     elif response.status_code == 204:
         return []
     runs = json.loads(response.text)
-    if filter_assembly_runs:
-        runs = list(filter(run_filter, runs))
-    if filter_accessions:
-        runs = list(filter(lambda r: r['run_accession'] in filter_accessions, runs))
 
-    for run in runs:
-        private = run['first_public'] == ''
-        if not private and 'fastq_ftp' in run and len(run['fastq_ftp']) > 0:
-            run['raw_data_size'] = get_run_raw_size(run)
-        elif not private and 'submitted_ftp' in run and len(run['submitted_ftp']) > 0:
-            run['raw_data_size'] = get_run_raw_size(run, field='submitted_ftp')
-        else:
-            run['raw_data_size'] = None
-
-        for int_param in ('read_count', 'base_count'):
-            if int_param in run:
-                try:
-                    run[int_param] = int(run[int_param])
-                except ValueError:
-                    run[int_param] = None
     return runs
 
 def get_sample(sample_accession, webin, password, fields=None, search_params=None, attempt=0):
@@ -632,7 +565,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, forceBackupReset):
         try:
             backupDict = json.load(file)
             tempDict = dict(backupDict)
-            tqdm.write("\tA backup file has been found")
+            tqdm.write("\tA backup file has been found. ")
         except json.decoder.JSONDecodeError:
             backupDict = {}
         for s in studySet:
@@ -1016,16 +949,6 @@ def create_manifest_dictionary(run, alias, assemblySoftware, sequencingMethod,
 
     return manifestDict
 
-def retrieve_manifests(pathFinder, uploadDir, study):
-    manifests = []
-
-    manifestPaths = pathFinder.get_MAG_manifests(uploadDir, study)
-    for p in manifestPaths:
-        MAGname = p.split('/')[-1][:-9]
-        manifests.append((p, MAGname))
-            
-    return manifests
-
 def compute_manifests(ENA_uploader, genomes, samplesXmlPath):
     manifestInfo = {}
     if genomes:
@@ -1055,7 +978,7 @@ def get_study_from_xml(sample):
 def get_info_for_manifest(ENA_uploader, registrationXml):
     tqdm.write("Retrieving data for MAG submission...")
 
-    genomeDict = read_metadata_tsv(ENA_uploader.magDir, ENA_uploader.genomeType)
+    genomeDict = read_and_cleanse_metadata_tsv(ENA_uploader.magDir, ENA_uploader.genomeType)
     # extract list of genomes (samples) to be registered
     samples = registrationXml.getElementsByTagName("SAMPLE")
 
@@ -1092,11 +1015,6 @@ def get_info_for_manifest(ENA_uploader, registrationXml):
                 break
 
     return manifestInfo
-
-def check_if_already_submitted(genomeName, uploadDir, uploadLog):
-    query = "{}\t{}\n".format(genomeName, uploadDir)
-    
-    return query in uploadLog
 
 def create_sample_attribute(sample_attributes, data_list, mag_data=None):
     tag = data_list[0]
@@ -1255,7 +1173,7 @@ def choose_methods():
     webinUser, webinPassword = ENA_uploader.username, ENA_uploader.password
     genomeType, centre_name = ENA_uploader.genomeType, ENA_uploader.centre_name
     
-    if not live and (ENA_uploader.upload or ENA_uploader.manifests):
+    if not live and ENA_uploader.manifests:
         tqdm.write("Warning: genome submission is not in live mode, " +
             "files will be validated, but not uploaded.")
 
@@ -1315,153 +1233,13 @@ def choose_methods():
             generate_genome_manifest(manifestInfo[m], ENA_uploader.upStudy,  
                 manifestDir, aliasToNewSampleAccession, genomeType)
 
-    # Genomes upload
-    if ENA_uploader.upload:
-        tqdm.write("Uploading MAGs...")
-        manifests, uploadedMAGs, toOmit = [], [], []
-        # ONEDAY update this with backlog
-        uploadLog = os.path.join(uploadDir, "MAG_successful_uploads.txt")
-        if os.path.exists(uploadLog):
-            with open (uploadLog, "r+") as f:
-                for line in f:
-                    uploadedMAGs.append(line)
-
-        if not os.path.exists(samples_xml):
-            print("\tNo registration xml found. Please run the script with the " +
-                "--xmls and --manifests options before upload.")
-            sys.exit(1)
-
-        samples_xml = minidom.parse(samples_xml)
-        # extract list of MAGs (samples) to be registered
-        samples = samples_xml.getElementsByTagName("SAMPLE")
-        studies = set()
-        for sample in samples:
-            study = get_study_from_xml(sample)
-            studies.add(study)
-        
-        for s in studies:
-            manifests.extend(retrieve_manifests(pathFinder, uploadDir, s))
-        if not manifests:
-            print("\tNo manifests found. Please run the script with the " +
-            "--manifests option before upload.")
-            sys.exit(1)
-
-        manifestNum, sampleNum = len(manifests), len(samples)
-        if manifestNum > sampleNum:
-            print("\tSome manifests do not have a corresponding registered "
-                "sample. Please filter extra manifests or register missing "
-                "samples accordingly.")
-            sys.exit(1)
-        elif manifestNum < sampleNum:
-            print("\tSome registered samples do not have a corresponding "
-                "manifest. Please create missing manifests accordingly.")
-            sys.exit(1)
-
-        tqdm.write("\tFound {} manifest files ready for upload.".format(manifestNum))
-        for m in manifests:
-            path = m[0]
-            MAGname = m[1]
-            if live:
-                if check_if_already_submitted(MAGname, uploadDir, uploadedMAGs):
-                    toOmit.append(MAGname)
-                else:
-                    uploader.submit_assembly_manifest(path, uploadDir, MAGname, live, 
-                        webinUser, webinPassword, MAG=True)
-            else:
-                uploader.submit_assembly_manifest(path, uploadDir, MAGname, live, 
-                    webinUser, webinPassword, MAG=True)
-        
-        length = len(manifests)
-
-        if toOmit:
-            print("\t{} MAGs out of {} from folder {} ".format(len(toOmit), length, uploadDir) +
-                "had already been uploaded: {}".format(','.join(toOmit)))
-
-        successes = length - len(toOmit)
-        tqdm.write("\tInitial manifests: {}\n".format(length) +
-            "\tSuccessfully uploaded: {}\n".format(successes))
-    
-    # post-upload success check
-    if ENA_uploader.check:
-        tqdm.write("Checking MAG upload success...")
-        uploadedMAGs, failedMAGs = [], []
-
-        uploadLog = os.path.join(uploadDir, "MAG_successful_uploads.txt")
-        if not os.path.exists(uploadLog):
-            with open(uploadLog, 'w') as f:
-                pass
-        else:
-            with open(uploadLog, "r+") as f:
-                for line in f:
-                    uploadedMAGs.append(line.rstrip('\n'))
-
-        failLog = os.path.join(uploadDir, "MAG_failed_uploads.txt")
-        if not os.path.exists(failLog):
-            with open(failLog, 'w') as f:
-                pass
-        else:
-            with open (failLog, "r+") as f:
-                for line in f:
-                    failedMAGs.append(line.rstrip('\n'))
-        
-        errorCounter, successCounter, testCounter = 0, 0, 0
-        errorLog, successLog = [], []
-        dateOfAttempt = ""
-        submitFiles = glob.glob(os.path.join(uploadDir, "*", "submit.out"))
-        for submitFile in submitFiles:
-            success, test = False, False
-            MAGname = submitFile.split('/')[-2].replace("_output", "")
-            log = MAGname + '\t' + uploadDir
-            if not log in uploadedMAGs:
-                with open(submitFile, 'r') as f:
-                    for line in f:
-                        if "Terminated at" in line:
-                            dateOfAttempt = line.rstrip('\n')
-                        if "The submission has been completed successfully." in line:
-                            success = True
-                        if "The TEST submission has been completed successfully" in line:
-                            test = True
-
-                if success:
-                    successLog.append(log)
-                    successCounter += 1
-                else:
-                    if not test:
-                        extLog = log + '\t' + dateOfAttempt
-                        if not extLog in failedMAGs:
-                            errorLog.append(extLog)
-                            errorCounter += 1
-                    else:
-                        testCounter += 1
-        
-        with open (uploadLog, "a+") as f:
-            for elem in successLog:
-                f.write("{}\n".format(elem))
-        with open (failLog, "a+") as f:
-            for elem in errorLog:
-                f.write("{}\n".format(elem))
-
-        tqdm.write("\tFound {} submit.out files. ".format(len(submitFiles)))
-        tqdm.write("\tNewly registered successes: {}, new failures: {}.".format(successCounter, errorCounter)) 
-        tqdm.write("\tTest submissions (not registered in final logs): {}".format(testCounter))
-        tqdm.write("\tList of failed uploads can be found at {}".format(failLog))
-        tqdm.write("\tList of successful uploads can be found at {}".format(uploadLog))
-
-def generate_genomes_upload_dir(dir, genomeType):
-    uploadDir = "MAG_upload"
-    if genomeType == "bin":
-        uploadDir.replace("MAG", "bin")
-    upload_dir = os.path.join(dir, uploadDir)
-    os.makedirs(upload_dir, exist_ok=True)
-    return upload_dir
-
 class GenomeUpload:
     def __init__(self, argv=sys.argv[1:]):
         self.args = parse_args(argv)
         self.upStudy = self.args.upload_study
         self.genomeMetadata = self.args.genome_info
         self.genomeType = "bins" if self.args.bins else "MAGs"
-        self.upload_dir = generate_genomes_upload_dir(os.getcwd(), self.genomeType)
+        self.upload_dir = self.generate_genomes_upload_dir(os.getcwd(), self.genomeType)
         self.live = True if self.args.live else False
         self.username = self.args.webin
         self.password = self.args.password
@@ -1470,9 +1248,15 @@ class GenomeUpload:
         self.xmls = True if self.args.xmls else False
         self.force = True if self.args.force else False
         self.manifests = True if self.args.manifests else False
-        self.upload = True if self.args.upload else False
-        self.check = True if self.args.post_upload else False
     
+    def generate_genomes_upload_dir(self, dir, genomeType):
+        uploadDir = "MAG_upload"
+        if genomeType == "bin":
+            uploadDir.replace("MAG", "bin")
+        upload_dir = os.path.join(dir, uploadDir)
+        os.makedirs(upload_dir, exist_ok=True)
+        return upload_dir
+
     def create_genome_dictionary(self):
         tqdm.write('Retrieving data for MAG submission...')
 
