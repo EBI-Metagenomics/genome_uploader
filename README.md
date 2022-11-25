@@ -25,17 +25,19 @@ According to ENA checklist's guidelines, 'broad_environment' describes the broad
 ## How to execute
 The script needs python to run.
 
+```bash
 python genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --xmls --manifests --webin --password \[--force\] \[--live\]
+```
 
 where
 
-  *`-u UPLOAD_STUDY`: Study accession for genomes upload
-  *`---genome_info METADATA_FILE` : Genomes metadata  in tsv format
-  *`-m, --mags, --b, --bins`: Select for bin or MAG upload
-  *`--xmls`: Creates submission and genome registration xmls
-  *`--manifests`: Creates a manifest file for every genome to upload
-  *`--force`: Forces reset of sample xml's backups
-  *`--live`: Registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand
-  *`--webin WEBIN`: Webin id
-  *`--password PASSWORD`: Webin password
-  *`--centre_name CENTRE_NAME`: Name of the centre uploading genomes
+  * `-u UPLOAD_STUDY`: Study accession for genomes upload
+  * `---genome_info METADATA_FILE` : Genomes metadata  in tsv format
+  * `-m, --mags, --b, --bins`: Select for bin or MAG upload
+  * `--xmls`: Creates submission and genome registration xmls
+  * `--manifests`: Creates a manifest file for every genome to upload
+  * `--force`: Forces reset of sample xml's backups
+  * `--live`: Registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand
+  * `--webin WEBIN`: Webin id
+  * `--password PASSWORD`: Webin password
+  * `--centre_name CENTRE_NAME`: Name of the centre uploading genomes
