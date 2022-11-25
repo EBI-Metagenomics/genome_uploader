@@ -23,21 +23,21 @@ It takes as input one tsv (tab-separated values) table expecting the following c
 According to ENA checklist's guidelines, 'broad_environment' describes the broad ecological context of a sample - desert, taiga, coral reef, ... 'local_environment' is more local - lake, harbour, cliff, ... 'environmental_medium' is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ... For host-associated metagenomic samples, variables can be defined based on our biome tree. For example, for chicken gut metagenome: 'Biome: chicken digestive system, Feature: digestive tube, Material: caecum. More information can be found at <https://www.ebi.ac.uk/ena/browser/view/ERC000050> for bins and [ERC000047](<https://www.ebi.ac.uk/ena/browser/view/ERC000047) for MAGs under field names "broad-scale environmental context", "local environmental context", "environmental medium"
 
 ## How to execute
-The script needs python to run.
+The script needs `python` to run.
 
 ```bash
-python genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --xmls --manifests --webin --password \[--force\] \[--live\]
+python genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --xmls --manifests --webin --password [--force] [--live]
 ```
 
 where
 
-  * `-u UPLOAD_STUDY`: Study accession for genomes upload
-  * `---genome_info METADATA_FILE` : Genomes metadata  in tsv format
-  * `-m, --mags, --b, --bins`: Select for bin or MAG upload
-  * `--xmls`: Creates submission and genome registration xmls
-  * `--manifests`: Creates a manifest file for every genome to upload
-  * `--force`: Forces reset of sample xml's backups
-  * `--live`: Registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand
-  * `--webin WEBIN`: Webin id
-  * `--password PASSWORD`: Webin password
-  * `--centre_name CENTRE_NAME`: Name of the centre uploading genomes
+  * `-u UPLOAD_STUDY`: study accession for genomes upload
+  * `---genome_info METADATA_FILE` : genomes metadata  in tsv format
+  * `-m, --mags, --b, --bins`: select for bin or MAG upload
+  * `--xmls`: creates submission and genome registration xmls
+  * `--manifests`: creates a manifest file for every genome to upload
+  * `--force`: forces reset of sample xml's backups
+  * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand
+  * `--webin WEBIN`: webin id
+  * `--password PASSWORD`: webin password
+  * `--centre_name CENTRE_NAME`: name of the centre uploading genomes
