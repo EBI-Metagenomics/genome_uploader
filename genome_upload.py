@@ -2,7 +2,6 @@ import os
 import sys
 import logging
 import argparse
-import glob
 import re
 import json
 import pandas as pd
@@ -157,7 +156,7 @@ geographicLocations = ["Afghanistan", "Albania", "Algeria", "American Samoa", "A
     "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "Uruguay", 
     "USA", "Uzbekistan", "Vanuatu", "Venezuela", "Viet Nam", "Virgin Islands", "Wake Island", 
     "Wallis and Futuna", "West Bank", "Western Sahara", "Yemen", "Zambia", "Zimbabwe"]
-TAX_ID_UNCULTURED_EUK = "2759"
+
 RETRY_COUNT = 5
 error = "\nERROR: "
 HQ = ("Multiple fragments where gaps span repetitive regions. Presence of the "
@@ -167,7 +166,7 @@ MQ = ("Many fragments with little to no review of assembly other than reporting 
 
 class NoDataException(ValueError):
     pass
-# TODO: add -out parameter for upload directory (default: pwd)
+
 def parse_args(argv):
     parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
         description="Allows to create xmls and manifest files for genome upload to ENA. " +
@@ -188,6 +187,7 @@ def parse_args(argv):
     parser.add_argument("--manifests", action='store_true', help="Creates a manifest file " +
         "for every genome to upload")
     
+    parser.add_argument('--out', type=str, help="Output folder. Default: working directory")
     parser.add_argument('--force', action='store_true', help="Forces reset of sample xml's backups")
     parser.add_argument('--live', action='store_true', help="Uploads on ENA. Omitting this " +
         "option allows to validate samples beforehand")
@@ -211,37 +211,6 @@ def parse_args(argv):
         sys.exit(1)
 
     return args
-
-def roundStats(stats):
-    newStat = round(float(stats), 2)
-    if newStat == 100.0:
-        newStat = 100
-
-    return newStat
-
-def compute_MAG_quality(completeness, contamination, RNApresence):
-    RNApresent = False
-    if str(RNApresence).lower() in ["true", "yes", "y"]:
-        RNApresent = True
-    quality = MQ
-    if completeness >= 90 and contamination <= 5 and RNApresent:
-        quality = HQ
-    
-    completeness = str(roundStats(completeness))
-    contamination = str(roundStats(contamination))
-
-    return quality, completeness, contamination
-
-def extract_tax_info(taxInfo):
-    lineage = taxInfo.split(';')
-    if "Archaea" in lineage:
-        scientificName, taxid = extract_Archaea_lineage(lineage)
-    elif "Bacteria" in lineage:
-        scientificName, taxid = extract_Bacteria_lineage(lineage)
-    else: # "Eukaryota" in lineage:
-        scientificName, taxid = extract_Eukaryotes_lineage(lineage)
-
-    return taxid, scientificName
 
 '''
 Input table: expects the following parameters:
@@ -352,6 +321,179 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
 
     return genomeInfo
 
+def round_stats(stats):
+    newStat = round(float(stats), 2)
+    if newStat == 100.0:
+        newStat = 100
+
+    return newStat
+
+def compute_MAG_quality(completeness, contamination, RNApresence):
+    RNApresent = False
+    if str(RNApresence).lower() in ["true", "yes", "y"]:
+        RNApresent = True
+    quality = MQ
+    if completeness >= 90 and contamination <= 5 and RNApresent:
+        quality = HQ
+    
+    completeness = str(round_stats(completeness))
+    contamination = str(round_stats(contamination))
+
+    return quality, completeness, contamination
+
+def extract_tax_info(taxInfo):
+    kingdoms = ["Archaea", "Bacteria", "Eukaryota"]
+    kingdomTaxa = ["2157", "2", "2759"]
+    lineage, position, digitAnnotation = taxInfo.split(';'), 0, False
+
+    selectedKingdom, finalKingdom = kingdoms, ""
+    if lineage[-1].isdigit():
+        selectedKingdom = kingdomTaxa
+        position = 2
+        digitAnnotation = True
+    for index, k in enumerate(selectedKingdom):
+        if k == lineage[position]:
+            finalKingdom = kingdoms[index]
+    
+    iterator = len(lineage)-1
+    submittable = False
+    while iterator != 0 and not submittable:
+        scientificName = lineage[iterator].strip()
+        if digitAnnotation:
+            scientificName = query_taxid(scientificName)
+        elif "__" in scientificName:
+            scientificName = scientificName.split("__")[1]
+        submittable, taxid, rank = query_scientific_name(scientificName, searchRank=True)
+        
+        if not submittable:
+            if finalKingdom == "Archaea":
+                submittable, scientificName, taxid = extract_Archaea_info(scientificName, rank)
+            elif finalKingdom == "Bacteria":
+                submittable, scientificName, taxid = extract_Bacteria_info(scientificName, rank)
+            elif finalKingdom == "Eukaryota":
+                submittable, scientificName, taxid = extract_Eukaryota_info(scientificName, rank)
+        iterator -= 1
+
+    return taxid, scientificName
+
+def query_taxid(taxid):
+    url = "https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{}".format(taxid)
+    response = requests.get(url)
+
+    try:
+        # Will raise exception if response status code is non-200 
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        tqdm.write(f"Request failed {url} with error {e}")
+        return False
+    
+    res = json.loads(response.text)
+    
+    return res.get("scientificName", "")
+
+def query_scientific_name(scientificName, searchRank=False):
+    url = "https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{}".format(scientificName)
+    response = requests.get(url)
+    
+    try:
+        # Will raise exception if response status code is non-200 
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        tqdm.write(f"Request failed {url} with error {e}")
+        return False, ""
+    
+    try:
+        res = json.loads(response.text)[0]
+    except IndexError:
+        return False, ""
+
+    submittable = res.get("submittable", "").lower() == "true"
+    taxid = res.get("taxId", "")
+    rank = res.get("rank", "")
+
+    if searchRank:
+        return submittable, taxid, rank
+    else:
+        return submittable, taxid
+
+def extract_Eukaryota_info(name, rank):
+    nonSubmittable = (False, "", 0)
+
+    # Asterisks in given taxonomy suggest the classification might be not confident enough.
+    if '*' in name:
+        return nonSubmittable
+
+    if rank == "super kingdom":
+        name = "uncultured eukaryote"
+        submittable, taxid = query_scientific_name(name)
+        return submittable, name, taxid
+    else:
+        name = name.capitalize() + " sp."
+        submittable, taxid = query_scientific_name(name)
+        if submittable:
+            return submittable, name, taxid
+        else:
+            name = "uncultured " + name
+            submittable, taxid = query_scientific_name(name)
+            if submittable:
+                return submittable, name, taxid
+            else:
+                name = name.replace(" sp.", '')
+                submittable, taxid = query_scientific_name(name)
+                if submittable:
+                    return submittable, name, taxid
+                else:
+                    return nonSubmittable
+
+def extract_Bacteria_info(name, rank):
+    if rank == "species":
+        name = name
+    elif rank == "superkingdom":
+        name = "uncultured bacterium".format(name)
+    elif rank in ["family", "order", "class", "phylum"]:
+        name = "uncultured {} bacterium".format(name)
+    elif rank == "genus":
+        name = "uncultured {} sp.".format(name)
+    
+    submittable, taxid, rank = query_scientific_name(name, searchRank=True)
+    if not submittable:
+        if rank in ["species", "genus"] and name.lower().endswith("bacteria"):
+            name = "uncultured {}".format(name.lower().replace("bacteria", "bacterium"))
+        elif rank == "family":
+            if name.lower() == "deltaproteobacteria":
+                name = "uncultured delta proteobacterium"
+        submittable, taxid = query_scientific_name(name)
+
+    return submittable, name, taxid
+
+def extract_Archaea_info(name, rank):
+    if rank == "species":
+        name = name
+    elif rank == "superkingdom":
+        name = "uncultured archaeon"
+    elif rank == "phylum":
+        if "Euryarchaeota" in name:
+            name = "uncultured euryarchaeote"
+        elif "Candidatus" in name:
+            name = "{} archaeon".format(name)
+        else:
+            name = "uncultured {} archaeon".format(name)
+    elif rank in ["family", "order", "class"]:
+        name = "uncultured {} archaeon".format(name)
+    elif rank == "genus":
+        name = "uncultured {} sp.".format(name)
+    
+    submittable, taxid, rank = query_scientific_name(name, searchRank=True)
+    if not submittable:
+        if "Candidatus" in name:
+            if rank == "phylum":
+                name = name.replace("Candidatus ", '')
+            elif rank == "family":
+                name = name.replace("uncultured ", '')
+            submittable, taxid = query_scientific_name(name)
+                            
+    return submittable, name, taxid
+
 def extract_genomes_info(inputFile, genomeType):
     genomeInfo = read_and_cleanse_metadata_tsv(inputFile, genomeType)
     for gen in genomeInfo:
@@ -440,7 +582,7 @@ def get_run(run_accession, webin, password, attempt=0, search_params=None):
 
     return run
 
-def get_study(webin, password, primary_accession=None, secondary_accession=None, fields=None, attempt=0):
+def get_study(webin, password, primary_accession=None, secondary_accession=None):
     data = get_default_params()
     data['result'] = 'read_study'
     data['fields'] = STUDY_DEFAULT_FIELDS
@@ -695,177 +837,6 @@ def combine_ENA_info(genomeInfo, ENADict):
             genomeInfo[g]["latitude"] = ENADict[run]["latitude"]
         
         genomeInfo[g]["run_accessions"] = ','.join(genomeInfo[g]["run_accessions"])
-
-# TODO: restructure tax identification:
-# first distinguish integers from strings
-# then further divide arch, bac and euks
-def query_taxid(taxid, searchName=False):
-    url = "https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{}".format(taxid)
-    response = requests.get(url)
-
-    try:
-        # Will raise exception if response status code is non-200 
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        tqdm.write(f"Request failed {url} with error {e}")
-        return False
-    
-    res = json.loads(response.text)
-
-    submittable = res.get("submittable", "").lower() == "true"
-    scientificName = res.get("scientificName", "")
-    
-    if searchName:
-        return submittable, scientificName
-    else:
-        return submittable
-
-def query_scientific_name(scientificName, searchRank=False):
-    url = "https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{}".format(scientificName)
-    response = requests.get(url)
-    
-    try:
-        # Will raise exception if response status code is non-200 
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        tqdm.write(f"Request failed {url} with error {e}")
-        return False, ""
-    
-    try:
-        res = json.loads(response.text)[0]
-    except IndexError:
-        return False, ""
-
-    submittable = res.get("submittable", "").lower() == "true"
-    taxid = res.get("taxId", "")
-    rank = res.get("rank", "")
-
-    if searchRank:
-        return submittable, taxid, rank
-    else:
-        return submittable, taxid
-
-def extract_Eukaryotes_lineage(lineage):
-    '''
-    Asterisks in given taxonomy suggest the classification might be 
-    not confident enough.
-    '''
-    asterisk = True
-    taxid = ""
-    iterator = len(lineage)-1
-    while asterisk:
-        if '*' in lineage[iterator]:
-            iterator -= 1
-        else:
-            taxid = lineage[iterator]
-            asterisk = False
-
-    submittable, scientificName = query_taxid(taxid, searchName=True)
-    
-    if not submittable:
-        while iterator != 0:
-            if taxid == TAX_ID_UNCULTURED_EUK:
-                scientificName = "uncultured eukaryote"
-                submittable, taxid = query_scientific_name(scientificName)
-                iterator = 0
-            else:
-                try:
-                    scientificName = scientificName[:1].upper() + scientificName[1:] + " sp."
-                    submittable, taxid = query_scientific_name(scientificName)
-                    if submittable:
-                        iterator = 0
-                    else:
-                        raise KeyError
-                except KeyError:
-                    try:
-                        scientificName = "uncultured " + scientificName
-                        submittable, taxid = query_scientific_name(scientificName)
-                        if submittable:
-                            iterator = 0
-                        else:
-                            raise KeyError
-                    except KeyError:
-                        try:
-                            scientificName = scientificName.replace(" sp.", '')
-                            submittable, taxid = query_scientific_name(scientificName)
-                            if submittable:
-                                iterator = 0
-                            else:
-                                raise KeyError
-                        except KeyError:
-                            iterator -= 1
-                            taxid = lineage[iterator]
-                            submittable, scientificName = query_taxid(taxid, searchName=True)
-                            if submittable:
-                                iterator = 0
-
-    return scientificName, taxid
-
-def extract_Bacteria_lineage(levels):
-    submittable = False
-    for i in reversed(range(len(levels))):
-        while not submittable:
-            name = levels[i].strip()
-            if "__" in name:
-                name = name.split("__")[1]
-            if not name == "":
-                submittable, taxid, rank = query_scientific_name(name, searchRank=True)
-                if not submittable:
-                    if rank == "species":
-                        scientificName = name
-                    elif rank == "superkingdom":
-                        scientificName = "uncultured {}".format(name)
-                    elif rank in ["family", "order", "class", "phylum"]:
-                        scientificName = "uncultured {} bacterium".format(name)
-                    elif i == "genus":
-                        scientificName = "uncultured {} sp.".format(name)
-                    submittable, taxid, rank = query_scientific_name(name, searchRank=True)
-                    if not submittable:
-                        if rank in ["species", "genus"] and name.lower().endswith("bacteria"):
-                            scientificName = "uncultured {}".format(name.lower().replace("bacteria", "bacterium"))
-                        elif rank == "family":
-                            if name.lower() == "deltaproteobacteria":
-                                scientificName = "uncultured delta proteobacterium"
-                        submittable, taxid = query_scientific_name(scientificName)
-
-    return scientificName, taxid
-
-def extract_Archaea_lineage(levels):
-    submittable = False
-    for i in reversed(range(len(levels))):
-        while not submittable:
-            name = levels[i].strip()
-            if "__" in name:
-                name = name.split("__")[1]
-            if not name == "":
-                submittable, taxid, rank = query_scientific_name(name, searchRank=True)
-                if not submittable:
-                    if rank == "species":
-                        scientificName = name
-                    elif rank == "superkingdom":
-                        scientificName = "uncultured archaeon"
-                    elif rank == "phylum":
-                        if "Euryarchaeota" in name:
-                            scientificName = "uncultured euryarchaeote"
-                        elif "Candidatus" in name:
-                            scientificName = "{} archaeon".format(name)
-                        else:
-                            scientificName = "uncultured {} archaeon".format(name)
-                    elif rank in ["family", "order", "class"]:
-                        scientificName = "uncultured {} archaeon".format(name)
-                    elif rank == "genus":
-                        scientificName = "uncultured {} sp.".format(name)
-                    submittable, taxid, rank = query_scientific_name(scientificName, searchRank=True)
-                    if not submittable:
-                        if "Candidatus" in scientificName:
-                            if rank == "phylum":
-                                scientificName = scientificName.replace("Candidatus ", '')
-                            elif rank == "family":
-                                scientificName = scientificName.replace("uncultured ", '')
-                            submittable, taxid = query_scientific_name(scientificName)
-                            
-    return scientificName, taxid
-
 
 def handle_genomes_registration(sample_xml, submission_xml, webin, password, live=False):
     liveSub, mode = "", "live"
@@ -1239,7 +1210,6 @@ class GenomeUpload:
         self.upStudy = self.args.upload_study
         self.genomeMetadata = self.args.genome_info
         self.genomeType = "bins" if self.args.bins else "MAGs"
-        self.upload_dir = self.generate_genomes_upload_dir(os.getcwd(), self.genomeType)
         self.live = True if self.args.live else False
         self.username = self.args.webin
         self.password = self.args.password
@@ -1248,12 +1218,15 @@ class GenomeUpload:
         self.xmls = True if self.args.xmls else False
         self.force = True if self.args.force else False
         self.manifests = True if self.args.manifests else False
+
+        workDir = self.args.out if self.args.out else os.getcwd()
+        self.upload_dir = self.generate_genomes_upload_dir(workDir, self.genomeType)
     
     def generate_genomes_upload_dir(self, dir, genomeType):
-        uploadDir = "MAG_upload"
-        if genomeType == "bin":
-            uploadDir.replace("MAG", "bin")
-        upload_dir = os.path.join(dir, uploadDir)
+        uploadName = "MAG_upload"
+        if genomeType == "bins":
+            uploadName = uploadName.replace("MAG", "bin")
+        upload_dir = os.path.join(dir, uploadName)
         os.makedirs(upload_dir, exist_ok=True)
         return upload_dir
 

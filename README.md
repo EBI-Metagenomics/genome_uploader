@@ -26,7 +26,7 @@ According to ENA checklist's guidelines, 'broad_environment' describes the broad
 The script needs `python` to run.
 
 ```bash
-python genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --xmls --manifests --webin --password [--force] [--live]
+python genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --xmls --manifests --webin --password [--out] [--force] [--live]
 ```
 
 where
@@ -36,6 +36,7 @@ where
   * `-m, --mags, --b, --bins`: select for bin or MAG upload
   * `--xmls`: creates submission and genome registration xmls
   * `--manifests`: creates a manifest file for every genome to upload
+  * `--out`: output folder (default: working directory)
   * `--force`: forces reset of sample xml's backups
   * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand
   * `--webin WEBIN`: webin id
