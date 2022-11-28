@@ -9,7 +9,6 @@ from datetime import date, datetime as dt
 from time import sleep
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
-from tqdm import tqdm
 import requests
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -233,8 +232,8 @@ Input table: expects the following parameters:
     genome_path: path to genome to upload
 '''
 def read_and_cleanse_metadata_tsv(inputFile, genomeType):
-    tqdm.write('\tRetrieving info for genomes to submit...')
-
+    logging.info('\tRetrieving info for genomes to submit...')
+    
     binMandatoryFields = ["genome_name", "run_accessions",
         "assembly_software", "binning_software", 
         "binning_parameters", "stats_generation_software", "NCBI_lineage",
@@ -384,7 +383,7 @@ def query_taxid(taxid):
         # Will raise exception if response status code is non-200 
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        tqdm.write(f"Request failed {url} with error {e}")
+        logging.info("Request failed {} with error {}".format(url, e))
         return False
     
     res = json.loads(response.text)
@@ -399,7 +398,7 @@ def query_scientific_name(scientificName, searchRank=False):
         # Will raise exception if response status code is non-200 
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        tqdm.write(f"Request failed {url} with error {e}")
+        logging.info("Request failed {} with error {}".format(url, e))
         return False, ""
     
     try:
@@ -682,7 +681,7 @@ def get_sample(sample_accession, webin, password, fields=None, search_params=Non
 # -------------------------------------------------------
 
 def extract_ENA_info(genomeInfo, uploadDir, webin, password, forceBackupReset):
-    tqdm.write('\tRetrieving project and run info from ENA (this might take a while)...')
+    logging.info('\tRetrieving project and run info from ENA (this might take a while)...')
     
     # retrieving metadata from runs
     allRuns = []
@@ -707,7 +706,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, forceBackupReset):
         try:
             backupDict = json.load(file)
             tempDict = dict(backupDict)
-            tqdm.write("\tA backup file has been found. ")
+            logging.info("\tA backup file has been found.")
         except json.decoder.JSONDecodeError:
             backupDict = {}
         for s in studySet:
@@ -845,7 +844,7 @@ def handle_genomes_registration(sample_xml, submission_xml, webin, password, liv
         mode = "test"
     url = "https://www{}.ebi.ac.uk/ena/submit/drop-box/submit/".format(liveSub)
 
-    tqdm.write('\tRegistering sample xml in {} mode.'.format(mode))
+    logging.info('\tRegistering sample xml in {} mode.'.format(mode))
 
     f = {
         'SUBMISSION': open(submission_xml, 'r'),
@@ -880,7 +879,7 @@ def handle_genomes_registration(sample_xml, submission_xml, webin, password, liv
                 print("\t" + error.firstChild.data)
             sys.exit(1)
         
-        tqdm.write('\t{} genome samples successfully registered.'.format(str(len(aliasDict))))
+        logging.info('\t{} genome samples successfully registered.'.format(str(len(aliasDict))))
 
         return aliasDict
 
@@ -947,7 +946,7 @@ def get_study_from_xml(sample):
     return study
 
 def get_info_for_manifest(ENA_uploader, registrationXml):
-    tqdm.write("Retrieving data for MAG submission...")
+    logging.info("Retrieving data for MAG submission...")
 
     genomeDict = read_and_cleanse_metadata_tsv(ENA_uploader.magDir, ENA_uploader.genomeType)
     # extract list of genomes (samples) to be registered
@@ -1145,7 +1144,7 @@ def choose_methods():
     genomeType, centre_name = ENA_uploader.genomeType, ENA_uploader.centre_name
     
     if not live and ENA_uploader.manifests:
-        tqdm.write("Warning: genome submission is not in live mode, " +
+        logging.info("Warning: genome submission is not in live mode, " +
             "files will be validated, but not uploaded.")
 
     xmlGenomeFile, xmlSubFile = "genome_samples.xml", "submission.xml"
@@ -1161,9 +1160,9 @@ def choose_methods():
             submission_xml = write_submission_xml(uploadDir, centre_name, False)
 
         genomes = ENA_uploader.create_genome_dictionary()
-        tqdm.write("\tWriting genome registration XML...")
+        logging.info("\tWriting genome registration XML...")
         samples_xml = write_genomes_xml(genomes, samples_xml, genomeType, centre_name)
-        tqdm.write("\tAll files have been written in " + uploadDir)
+        logging.info("\tAll files have been written in " + uploadDir)
         
     # manifest creation
     if ENA_uploader.manifests:
@@ -1189,14 +1188,14 @@ def choose_methods():
             save = True
             
         if save:
-            tqdm.write("Registering genome samples XMLs...")
+            logging.info("Registering genome samples XMLs...")
             aliasToNewSampleAccession = handle_genomes_registration(samples_xml, 
                 submission_xml, webinUser, webinPassword, live)
             saveAccessions(aliasToNewSampleAccession, accessionsFile)
         else:
-            tqdm.write("Genome samples already registered, reading ERS accessions...")
+            logging.info("Genome samples already registered, reading ERS accessions...")
 
-        tqdm.write("Generating manifest files...")
+        logging.info("Generating manifest files...")
         
         manifestInfo = compute_manifests(ENA_uploader, genomes, samples_xml)
 
@@ -1231,7 +1230,7 @@ class GenomeUpload:
         return upload_dir
 
     def create_genome_dictionary(self):
-        tqdm.write('Retrieving data for MAG submission...')
+        logging.info('Retrieving data for MAG submission...')
 
         genomeInfo = extract_genomes_info(self.genomeMetadata, self.genomeType)
         extract_ENA_info(genomeInfo, self.upload_dir, self.username, self.password, self.force)
@@ -1240,4 +1239,4 @@ class GenomeUpload:
 
 if __name__ == "__main__":
     choose_methods()
-    tqdm.write('Completed')
+    logging.info('Completed')
