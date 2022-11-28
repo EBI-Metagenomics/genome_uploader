@@ -45,8 +45,9 @@ where
   * `--password PASSWORD`: webin password
   * `--centre_name CENTRE_NAME`: name of the centre uploading genomes
 
+### Produced files:
 The script produces the following files and folders:
-  * `bin_upload` or `MAG_upload` folder (according to the upload type)
+  * `bin_upload` or `MAG_upload` folder (according to the upload type) containing:
      - `manifests` folder: contains all generated manifests
      - `genome_samples.xml`: xml generated to register samples on ENA before the upload
      - `ENA_backup.json`: backup file to prevent re-download of metadata from ENA. Deletion can be forced with the `--force` option
