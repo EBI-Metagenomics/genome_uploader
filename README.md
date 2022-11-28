@@ -47,11 +47,11 @@ where
 
 The script produces the following files and folders:
   * `bin_upload` or `MAG_upload` folder (according to the upload type)
-   - `manifests` folder: contains all generated manifests
-   - `genome_samples.xml`: xml generated to register samples on ENA before the upload
-   - `bin_backup.json` or `MAGbackup.json`: backup file to prevent re-download of metadata from ENA. Deletion can be force with the `--force` option
-   - `registered_bins\MAGs.tsv`: contains a list of genomes registered on ENA. This file is needed for manifest generation - do not delete it. If the submission hasn't been launched in `--live` mode, a `test` file with test accessions will be generated. 
-   - `submission.xml`: xml needed for genome registration on ENA
+     - `manifests` folder: contains all generated manifests
+     - `genome_samples.xml`: xml generated to register samples on ENA before the upload
+     - `ENA_backup.json`: backup file to prevent re-download of metadata from ENA. Deletion can be forced with the `--force` option
+     - `registered_bins\MAGs.tsv`: contains a list of genomes registered on ENA. This file is needed for manifest generation - do not delete it. If the submission hasn't been launched in `--live` mode, a `test` file with test accessions will be generated. 
+     - `submission.xml`: xml needed for genome registration on ENA
 
 ## What to do next
 Once manifest files are generated, it will be necessary to use ENA's webin-cli resource to upload genomes. More information can be found [here](<https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html>). 
