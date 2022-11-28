@@ -698,7 +698,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, forceBackupReset):
     if not studySet:
         raise ValueError("No study corresponding to runs found.")
 
-    backupFile = os.path.join(uploadDir, "MAGbackup.json")
+    backupFile = os.path.join(uploadDir, "ENA_backup.json")
     counter = 0
     if not os.path.exists(backupFile) or forceBackupReset:
         with open(backupFile, 'w') as file:
@@ -1164,6 +1164,7 @@ def choose_methods():
         samples_xml = write_genomes_xml(genomes, samples_xml, genomeType, centre_name)
         print("\tAll files have been written in " + uploadDir)
         
+    # TODO: remove project separation folders
     # manifest creation
     if ENA_uploader.manifests:
         manifestDir = os.path.join(uploadDir, "manifests")
