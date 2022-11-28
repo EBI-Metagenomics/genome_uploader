@@ -26,19 +26,22 @@ According to ENA checklist's guidelines, 'broad_environment' describes the broad
 The script needs `python` and `pandas` to run.
 
 ```bash
-python genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --xmls --manifests --webin --password [--out] [--force] [--live]
+python genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --xmls --manifests --webin WEBIN_ID --password PASSWORD [--out] [--force] [--live]
 ```
 
 where
 
-  * `-u UPLOAD_STUDY`: study accession for genomes upload
-  * `---genome_info METADATA_FILE` : genomes metadata  in tsv format
+  * `-u UPLOAD_STUDY`: study accession for genomes upload to ENA (in format ERPxxxxxx or PRJEBxxxxxx)
+  * `---genome_info METADATA_FILE` : genomes metadata file in tsv format
   * `-m, --mags, --b, --bins`: select for bin or MAG upload
   * `--xmls`: creates submission and genome registration xmls
   * `--manifests`: creates a manifest file for every genome to upload
   * `--out`: output folder (default: working directory)
   * `--force`: forces reset of sample xml's backups
   * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand
-  * `--webin WEBIN`: webin id
+  * `--webin WEBIN_ID`: webin id (format: Webin_XXXXX)
   * `--password PASSWORD`: webin password
   * `--centre_name CENTRE_NAME`: name of the centre uploading genomes
+
+  ## What to do next
+  Once manifest files are generated, it will be necessary to use ENA's webin-cli resource to upload genomes. More information can be found [here](<https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html>). 
