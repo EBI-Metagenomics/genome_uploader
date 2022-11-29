@@ -25,7 +25,7 @@ According to ENA checklist's guidelines, 'broad_environment' describes the broad
 Files to be uploaded will need to be compressed (e.g. already in .gz format). 
 
 ## How to run
-The script needs `python`, `pandas`, and ``requests` to run. A quick way of creating an environment is via [venv](<https://virtualenv.pypa.io/en/latest/installation//>) - e.g. via `apt install python3-virtualenv`:
+The script needs `python`, `pandas`, and `requests` to run. A quick way of creating an environment is via [`venv`](<https://virtualenv.pypa.io/en/latest/installation//>) (e.g. via `apt install python3-virtualenv`):
 ```bash
 # Create python environment
 virtualenv -p python3 venv
