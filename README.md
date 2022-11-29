@@ -25,7 +25,16 @@ According to ENA checklist's guidelines, 'broad_environment' describes the broad
 Files to be uploaded will need to be compressed (e.g. already in .gz format). 
 
 ## How to run
-The script needs `python` and `pandas` to run.
+The script needs `python`, `pandas`, and ``requests` to run. A quick way of creating an environment is via [`venv`](<https://virtualenv.pypa.io/en/latest/installation//>) (e.g. via `apt install python3-virtualenv`):
+```bash
+# Create python environment
+virtualenv -p python3 venv
+
+# Source environment and install requirements
+source venv/bin/activate && pip install -r requirements.txt
+```
+
+After this, you just need to run the script as follows:
 
 ```bash
 python genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --xmls --manifests --webin WEBIN_ID --password PASSWORD [--out] [--force] [--live]
