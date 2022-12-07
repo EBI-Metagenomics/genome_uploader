@@ -1125,7 +1125,7 @@ def generate_genome_manifest(genomeInfo, study, manifestsRootFolder, aliasToSamp
         ('MOLECULETYPE', "genomic DNA"),
         ('DESCRIPTION', ("This is a bin derived from the primary whole genome "
             "shotgun (WGS) data set {}. This sample represents a {} from the metagenomic "
-            "run{} {}.".format(study, assemblyType, multipleRuns, genomeInfo["run_accessions"]))),
+            "run{} {}.".format(genomeInfo["study"], assemblyType, multipleRuns, genomeInfo["run_accessions"]))),
         ('RUN_REF', genomeInfo["run_accessions"]),
         ('FASTA', os.path.abspath(genomeInfo["genome_path"]))
     )
