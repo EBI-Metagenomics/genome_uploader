@@ -12,7 +12,7 @@ It takes as input one tsv (tab-separated values) table expecting the following c
   * _contamination_: `float`
   * _rRNA_presence_: `True/False` if 5S, 16S, and 23S genes have been detected in the genome
   * _NCBI_lineage_: full NCBI lineage, either in tax ids (`integers`) or `strings`. Format: x;y;z;...
-  * _metagenome_: needs to be listed in the taxonomy tree at <https://www.ebi.ac.uk/ena/browser/view/408169?show=tax-tree>
+  * _metagenome_: needs to be listed in the taxonomy tree [here](<https://www.ebi.ac.uk/ena/browser/view/408169?show=tax-tree>) (you might need to press "Tax tree - Show" in the right most section of the page)
   * _co_-assembly: `True/False`, whether the genome was generated from a co-assembly
   * _genome_coverage_ : genome coverage
   * _genome_path_: path to genome to upload (already compressed)
@@ -46,7 +46,7 @@ where
   * `---genome_info METADATA_FILE` : genomes metadata file in tsv format
   * `-m, --mags, --b, --bins`: select for bin or MAG upload
   * `--xmls`: creates submission and genome registration xmls
-  * `--manifests`: creates a manifest file for every genome to upload
+  * `--manifests`: creates a manifest file for every genome to upload (if xmls have already been generated and do not need to be updated, `--manifests` can be used without `--xmls`)
   * `--out`: output folder (default: working directory)
   * `--force`: forces reset of sample xml's backups
   * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand

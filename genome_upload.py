@@ -349,7 +349,7 @@ def extract_tax_info(taxInfo):
     selectedKingdom, finalKingdom = kingdoms, ""
     if lineage[-1].isdigit():
         selectedKingdom = kingdomTaxa
-        position = 2
+        position = 1
         digitAnnotation = True
     for index, k in enumerate(selectedKingdom):
         if k == lineage[position]:
@@ -364,7 +364,7 @@ def extract_tax_info(taxInfo):
         elif "__" in scientificName:
             scientificName = scientificName.split("__")[1]
         submittable, taxid, rank = query_scientific_name(scientificName, searchRank=True)
-        
+
         if not submittable:
             if finalKingdom == "Archaea":
                 submittable, scientificName, taxid = extract_Archaea_info(scientificName, rank)
@@ -400,12 +400,18 @@ def query_scientific_name(scientificName, searchRank=False):
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         print("Request failed {} with error {}".format(url, e))
-        return False, ""
+        if searchRank:
+            return False, "", ""
+        else:
+            return False, ""
     
     try:
         res = json.loads(response.text)[0]
     except IndexError:
-        return False, ""
+        if searchRank:
+            return False, "", ""
+        else:
+            return False, ""
 
     submittable = res.get("submittable", "").lower() == "true"
     taxid = res.get("taxId", "")
@@ -925,9 +931,9 @@ def compute_manifests(ENA_uploader, genomes, samplesXmlPath):
     if genomes:
         for g in genomes:
             manifestInfo[g] = create_manifest_dictionary(genomes[g]["run_accessions"],
-                genomes[g]["alias"], genomes[g]["assembler"], genomes[g]["sequencingMethod"], 
-                genomes[g]["genome_path"], g, genomes[g]["study"], 
-                genomes[g]["genome_coverage"], genomes[g]["coassembly"])
+                genomes[g]["alias"], genomes[g]["assembly_software"], 
+                genomes[g]["sequencingMethod"], genomes[g]["genome_path"], g, 
+                genomes[g]["study"], genomes[g]["genome_coverage"], genomes[g]["co-assembly"])
     else:
         try:
             registrationXml = minidom.parse(samplesXmlPath)
@@ -1180,10 +1186,7 @@ def choose_methods():
         save = False
         if os.path.exists(accessionsFile):
             if not live:
-                yesterday = dt.now() - datetime.timedelta(days = 1)
-                fileCreationTime = dt.fromtimestamp(os.path.getctime(accessionsFile))
-                if fileCreationTime < yesterday:
-                    save = True
+                save = True
             if not save:
                 aliasToNewSampleAccession = getAccessions(accessionsFile)
         else:
