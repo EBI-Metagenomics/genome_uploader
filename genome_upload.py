@@ -317,14 +317,19 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
     # TODO:
     # check genome name lengths
 
-    genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
-
-    return genomeInfo
+    try:
+        genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
+        return genomeInfo
+    except:
+        print("Duplicate genome names were found in the input table.")
+        sys.exit(1)
 
 def round_stats(stats):
     newStat = round(float(stats), 2)
     if newStat == 100.0:
         newStat = 100
+    if newStat == 0:
+        newStat = 0.0
 
     return newStat
 
@@ -399,7 +404,6 @@ def query_scientific_name(scientificName, searchRank=False):
         # Will raise exception if response status code is non-200 
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        print("Request failed {} with error {}".format(url, e))
         if searchRank:
             return False, "", ""
         else:
@@ -531,7 +535,6 @@ def extract_genomes_info(inputFile, genomeType):
 # ------------------- ENA API HANDLER -------------------
 # TODO: organise this into a class
 
-#TODO: filter only fields we are interested in
 RUN_DEFAULT_FIELDS = 'study_accession,secondary_study_accession,instrument_model,' \
                      'run_accession,sample_accession'
 
@@ -558,8 +561,6 @@ def post_request(data, webin, password):
     
     return response
 
-# TODO: remove warnings
-# TODO: filter unused parameters and fields
 def get_run(run_accession, webin, password, attempt=0, search_params=None):
     data = get_default_params()
     data['result'] = 'read_run'
@@ -571,7 +572,7 @@ def get_run(run_accession, webin, password, attempt=0, search_params=None):
 
     response = post_request(data, webin, password)
 
-    if str(response.status_code)[0] != '2':
+    if str(response.status_code)[0] != '2' and attempt > 2:
         raise ValueError("Could not retrieve run with accession {}, response code: "
             "{}".format(run_accession, response.status_code))
     elif response.status_code == 204:
@@ -1109,9 +1110,7 @@ def write_submission_xml(upload_dir, centre_name, study=True):
     return sub_xml
 
 def generate_genome_manifest(genomeInfo, study, manifestsRootFolder, aliasToSample, genomeType):
-    manifestFolder = os.path.join(manifestsRootFolder, genomeInfo["study"])
-    os.makedirs(manifestFolder, exist_ok=True)
-    manifest_path = os.path.join(manifestFolder, f'{genomeInfo["genome_name"]}.manifest')
+    manifest_path = os.path.join(manifestsRootFolder, f'{genomeInfo["genome_name"]}.manifest')
     
     multipleRuns = ""
     if genomeInfo["co-assembly"]:
@@ -1168,9 +1167,8 @@ def choose_methods():
         genomes = ENA_uploader.create_genome_dictionary()
         print("\tWriting genome registration XML...")
         samples_xml = write_genomes_xml(genomes, samples_xml, genomeType, centre_name)
-        print("\tAll files have been written in " + uploadDir)
+        print("\tAll files have been written to " + uploadDir)
         
-    # TODO: remove project separation folders
     # manifest creation
     if ENA_uploader.manifests:
         manifestDir = os.path.join(uploadDir, "manifests")
@@ -1181,7 +1179,7 @@ def choose_methods():
             accessionsgen = accessionsgen.replace("MAG", "bin")
         if not live:
             accessionsgen = accessionsgen.replace(".tsv", "_test.tsv")
-        print(accessionsgen)
+        
         accessionsFile = os.path.join(uploadDir, accessionsgen)
         save = False
         if os.path.exists(accessionsFile):
