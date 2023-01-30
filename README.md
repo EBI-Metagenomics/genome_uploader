@@ -20,7 +20,10 @@ It takes as input one tsv (tab-separated values) table expecting the following c
   * _local_environment_: `string` (explanation following)
   * _environmental_medium_: `string` (explanation following)
 
-According to ENA checklist's guidelines, 'broad_environment' describes the broad ecological context of a sample - desert, taiga, coral reef, ... 'local_environment' is more local - lake, harbour, cliff, ... 'environmental_medium' is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ... For host-associated metagenomic samples, variables can be defined based on our biome tree. For example, for chicken gut metagenome: 'Biome: chicken digestive system, Feature: digestive tube, Material: caecum. More information can be found at <https://www.ebi.ac.uk/ena/browser/view/ERC000050> for bins and [ERC000047](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>) for MAGs under field names "broad-scale environmental context", "local environmental context", "environmental medium"
+According to ENA checklist's guidelines, 'broad_environment' describes the broad ecological context of a sample - desert, taiga, coral reef, ... 'local_environment' is more local - lake, harbour, cliff, ... 'environmental_medium' is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ... 
+For host-associated metagenomic samples, variables can be defined similarly to the following example for the chicken gut metagenome: 'Biome: chicken digestive system, Feature: digestive tube, Material: caecum. More information can be found at <https://www.ebi.ac.uk/ena/browser/view/ERC000050> for bins and [ERC000047](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>) for MAGs under field names "broad-scale environmental context", "local environmental context", "environmental medium"
+
+For the script to work, raw-read runs should already be available on the INSDC (ENA, NCBI, or DDBJ), hence at least one DRR|ERR|SRR accession should be available for every genome to be uploaded. 
 
 Files to be uploaded will need to be compressed (e.g. already in .gz format). 
 
