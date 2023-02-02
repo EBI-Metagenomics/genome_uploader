@@ -157,7 +157,6 @@ geographicLocations = ["Afghanistan", "Albania", "Algeria", "American Samoa", "A
     "Wallis and Futuna", "West Bank", "Western Sahara", "Yemen", "Zambia", "Zimbabwe"]
 
 RETRY_COUNT = 5
-error = "\nERROR: "
 HQ = ("Multiple fragments where gaps span repetitive regions. Presence of the "
     "23S, 16S, and 5S rRNA genes and at least 18 tRNAs.")
 MQ = ("Many fragments with little to no review of assembly other than reporting "
@@ -193,12 +192,10 @@ def parse_args(argv):
     args = parser.parse_args(argv)
 
     if not args.upload_study:
-        print("No project selected for genome upload [-u, --upload_study].")
-        sys.exit(1)
+        raise ValueError("No project selected for genome upload [-u, --upload_study].")
     
     if not os.path.exists(args.genome_info):
-        print('Genome metadata file "{}" does not exist'.format(args.genome_info))
-        sys.exit(1)
+        raise FileNotFoundError('Genome metadata file "{}" does not exist'.format(args.genome_info))
 
     return args
 
@@ -248,8 +245,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
 
     # check amount of genomes to register at the same time
     if len(metadata) >= 5000:
-        print("Genomes need to be registered in batches of 5000 genomes or smaller.")
-        sys.exit(1)
+        raise ValueError("Genomes need to be registered in batches of 5000 genomes or smaller.")
 
     # check whether run_accessions follow the right format
     run_id_reg_exp = re.compile("([E|S|D]R[R|S]\d{6,})")
@@ -271,9 +267,8 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
 
     mismatchingAccessions = accessionComparison[accessionComparison["mismatching"]]["genome_name"]
     if not mismatchingAccessions.empty:
-        print(error + "run accessions are not correctly formatted for the following genomes: ") 
-        print(mismatchingAccessions)
-        sys.exit(1)
+        raise ValueError("Run accessions are not correctly formatted for the following " + 
+            "genomes: " + ','.join(mismatchingAccessions.values))
 
     # check whether completeness and contamination are floats
     try:
@@ -289,38 +284,32 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
         ((accessionComparison["correct"] > 1) & (~accessionComparison["co-assembly"])
         )]["genome_name"]
     if not coassemblyDiscrepancy.empty:
-        print(error + "the following genomes show discrepancy between number of runs " +
-            "involved and co-assembly status:")
-        print(coassemblyDiscrepancy)
-        sys.exit(1)
+        raise ValueError("The following genomes show discrepancy between number of runs "
+            "involved and co-assembly status: " + ','.join(coassemblyDiscrepancy.values))
 
     # are provided metagenomes part of the accepted metagenome list?
     if False in metadata.apply(lambda row: 
         True if row["metagenome"] in metagenomes 
         else False, axis=1).unique():
-        print(error + "metagenomes associated with each genome need to belong to ENA's " +
+        raise ValueError("Metagenomes associated with each genome need to belong to ENA's " +
             "approved metagenomes list.")
-        sys.exit(1)
 
     # do provided file paths exist?
     if False in metadata.apply(lambda row: 
         True if os.path.exists(row["genome_path"]) 
         else False, axis =1).unique():
-        print(error + "some genome paths do not exist.")
-        sys.exit(1)
+        raise FileNotFoundError("Some genome paths do not exist.")
 
     # check genome name lengths
     if not (metadata["genome_name"].map(lambda a: len(a) < 20).all()):
-        print("Genome names must be shorter than 20 characters.")
-        sys.exit(1)
+        raise ValueError("Genome names must be shorter than 20 characters.")
 
     # create dictionary while checking genome name uniqueness
     try:
         genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
         return genomeInfo
     except:
-        print("Duplicate genome names were found in the input table.")
-        sys.exit(1)
+        raise IndexError("Duplicate genome names were found in the input table.")
 
 def round_stats(stats):
     newStat = round(float(stats), 2)
@@ -889,9 +878,8 @@ def handle_genomes_registration(sample_xml, submission_xml, webin, password, liv
 
         return aliasDict
 
-    except Exception as e:
-        logging.exception("Genomes could not be submitted to ENA.")
-        sys.exit(1)
+    except:
+        raise ConnectionError("Genomes could not be registered to ENA.")
 
 def getAccessions(accessionsFile):
     accessionDict = {}
