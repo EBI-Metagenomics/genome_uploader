@@ -50,7 +50,7 @@ python genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --
 where
   * `-u UPLOAD_STUDY`: study accession for genomes upload to ENA (in format ERPxxxxxx or PRJEBxxxxxx)
   * `---genome_info METADATA_FILE` : genomes metadata file in tsv format
-  * `-m, --mags, --b, --bins`: select for bin or MAG upload
+  * `-m, --mags, --b, --bins`: select for bin or MAG upload. If in doubt, look at [their definition according to ENA](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome.html>)
   * `--out`: output folder (default: working directory)
   * `--force`: forces reset of sample xmls generation
   * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand
