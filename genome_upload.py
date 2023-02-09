@@ -573,7 +573,9 @@ def get_run(run_accession, webin, password, attempt=0, search_params=None):
         run = json.loads(response.text)[0]
     except (IndexError, TypeError, ValueError):
         raise ValueError('Could not find run {} in ENA.'.format(run_accession))
-
+    except KeyError:
+        raise Exception("Response not understood: {}".format(response.text))
+        
     return run
 
 def get_study(webin, password, primary_accession=None, secondary_accession=None):
