@@ -251,7 +251,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
     run_id_reg_exp = re.compile("([E|S|D]R[R|S]\d{6,})")
 
     accessionComparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", 
-        "correct","mismatching", "co-assembly"])
+        "correct", "mismatching", "co-assembly"])
     accessionComparison["genome_name"] = metadata["genome_name"]
     accessionComparison["co-assembly"] = metadata["co-assembly"]
 
@@ -349,12 +349,14 @@ def extract_tax_info(taxInfo):
     
     iterator = len(lineage)-1
     submittable = False
-    while iterator != 0 and not submittable:
+    while iterator != -1 and not submittable:
         scientificName = lineage[iterator].strip()
         if digitAnnotation:
             scientificName = query_taxid(scientificName)
         elif "__" in scientificName:
             scientificName = scientificName.split("__")[1]
+        else:
+            raise ValueError("Unrecognised taxonomy format.")
         submittable, taxid, rank = query_scientific_name(scientificName, searchRank=True)
 
         if not submittable:
@@ -784,8 +786,7 @@ def combine_ENA_info(genomeInfo, ENADict):
             
             if multipleElementSet(studyList):
                 print("The co-assembly your MAG has been generated from comes from " +
-                "different studies. This is not recommended, as contamination can be " +
-                "easily introduced in this way. Check whether your tsv file is correct.")
+                "different studies.")
                 sys.exit(1)
             genomeInfo[g]["study"] = studyList[0] 
             genomeInfo[g]["description"] = descriptionList[0]

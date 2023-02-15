@@ -13,7 +13,7 @@ It takes as input one tsv (tab-separated values) table expecting the following c
   * _rRNA_presence_: `True/False` if 5S, 16S, and 23S genes, and at least 18 tRNA genes, have been detected in the genome
   * _NCBI_lineage_: full NCBI lineage, either in tax ids (`integers`) or `strings`. Format: x;y;z;...
   * _metagenome_: needs to be listed in the taxonomy tree [here](<https://www.ebi.ac.uk/ena/browser/view/408169?show=tax-tree>) (you might need to press "Tax tree - Show" in the right most section of the page)
-  * _co-assembly_: `True/False`, whether the genome was generated from a co-assembly
+  * _co-assembly_: `True/False`, whether the genome was generated from a co-assembly. N.B. the script only supports co-assemblies generated from the same project.
   * _genome_coverage_ : genome coverage against raw reads
   * _genome_path_: path to genome to upload (already compressed)
   * _broad_environment_: `string` (explanation following)
