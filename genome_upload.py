@@ -585,7 +585,7 @@ def get_run(run_accession, webin, password, attempt=0, search_params=None):
         run = json.loads(response.text)[0]
     except (IndexError, TypeError, ValueError):
         raise ValueError("Could not find run {} in ENA.".format(run_accession))
-    except KeyError:
+    except:
         raise Exception("Could not query ENA API: {}".format(response.text))
 
     return run
@@ -662,7 +662,7 @@ def get_study_runs(study_acc, webin, password, fields=None, search_params=None):
 
     try:
         runs = json.loads(response.text)
-    except (IndexError, TypeError, ValueError):
+    except:
         raise ValueError("Query against ENA API did not work. Returned "
             "message: {}".format(response.text))
 
