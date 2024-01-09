@@ -26,10 +26,10 @@ With columns indicating:
   * _local_environment_: `string` (explanation following)
   * _environmental_medium_: `string` (explanation following)
 
-Another example can be found [here](examples/input_example.tsv)
-
 According to ENA checklist's guidelines, 'broad_environment' describes the broad ecological context of a sample - desert, taiga, coral reef, ... 'local_environment' is more local - lake, harbour, cliff, ... 'environmental_medium' is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ... 
 For host-associated metagenomic samples, the three variables can be defined similarly to the following example for the chicken gut metagenome: "chicken digestive system", "digestive tube", "caecum". More information can be found at [ERC000050](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) for bins and [ERC000047](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>) for MAGs under field names "broad-scale environmental context", "local environmental context", "environmental medium"
+
+Another example can be found [here](examples/input_example.tsv)
 
 ### Warnings
 
@@ -86,7 +86,7 @@ Once manifest files are generated, it is necessary to use ENA's webin-cli resour
 
 An execution example within this repo is the following:
 ```bash
-ena-webin-cli "-context=genome -manifest=ERR123456_bin.1.manifest" -userName="Webin-XXX" -test -password="YYY" -submit
+ena-webin-cli -context=genome -manifest=ERR123456_bin.1.manifest -userName="Webin-XXX" -test -password="YYY" -submit
 ```
 
 More information on ENA's webin-cli can be found [here](<https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html>).
