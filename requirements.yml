@@ -1,0 +1,9 @@
+name: genomeUploader
+channels:
+  - bioconda
+  - defaults
+dependencies:
+  - requests=2.26.0
+  - pandas=1.4.1
+  - ena-webin-cli
+
