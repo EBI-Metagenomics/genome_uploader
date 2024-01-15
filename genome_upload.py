@@ -251,7 +251,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
         raise ValueError("Genomes need to be registered in batches of 5000 genomes or smaller.")
 
     # check whether accessions follow the right format
-    accessions_regExp = re.compile("([E|S|D]R[R|Z]\d{6,})")
+    accessions_regExp = re.compile(r"([E|S|D]R[R|Z]\d{6,})")
 
     accessionComparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", 
         "correct", "mismatching", "co-assembly"])
@@ -501,7 +501,7 @@ def extract_genomes_info(inputFile, genomeType):
     for gen in genomeInfo:
         genomeInfo[gen]["accessions"] = genomeInfo[gen]["accessions"].split(',')
         accessionType = "run"
-        assembly_regExp = re.compile("([E|S|D]RZ\d{6,})")
+        assembly_regExp = re.compile(r"([E|S|D]RZ\d{6,})")
         if assembly_regExp.findall(genomeInfo[gen]["accessions"][0]):
             accessionType = "assembly"
         genomeInfo[gen]["accessionType"] = accessionType
