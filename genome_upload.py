@@ -304,8 +304,8 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
         raise FileNotFoundError("Some genome paths do not exist.")
 
     # check genome name lengths
-    if not (metadata["genome_name"].map(lambda a: len(a) < 20).all()):
-        raise ValueError("Genome names must be shorter than 20 characters.")
+    #if not (metadata["genome_name"].map(lambda a: len(a) < 20).all()):
+    #    raise ValueError("Genome names must be shorter than 20 characters.")
 
     # create dictionary while checking genome name uniqueness
     try:
