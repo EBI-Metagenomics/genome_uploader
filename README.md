@@ -84,9 +84,16 @@ bin_upload/MAG_upload
 ## Upload genomes
 Once manifest files are generated, it is necessary to use ENA's webin-cli resource to upload genomes.
 
-An execution example within this repo is the following:
+It is recommended to test your submission adding `-test` argument.
+
+A live execution example within this repo is the following:
 ```bash
-ena-webin-cli -context=genome -manifest=ERR123456_bin.1.manifest -userName="Webin-XXX" -test -password="YYY" -submit
+ena-webin-cli \
+  -context=genome \
+  -manifest=ERR123456_bin.1.manifest \
+  -userName="Webin-XXX" \
+  -password="YYY" \
+  -submit
 ```
 
 More information on ENA's webin-cli can be found [here](<https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html>).
