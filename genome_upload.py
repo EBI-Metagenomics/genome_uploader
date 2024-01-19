@@ -1202,10 +1202,6 @@ def file_generator():
 
     # sample xml generation or recovery
     genomes = ENA_uploader.create_genome_dictionary(samples_xml)
-    '''if not os.path.exists(samples_xml) or ENA_uploader.force:
-        print("\tWriting genome registration XML...")
-        write_genomes_xml(genomes, samples_xml, genomeType, centre_name, tpa)
-        print("\tAll files have been written to " + uploadDir)'''
         
     # manifests creation
     manifestDir = os.path.join(uploadDir, "manifests")
