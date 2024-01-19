@@ -33,7 +33,7 @@ Another example can be found [here](examples/input_example.tsv)
 
 ### Warnings
 
-Raw-read runs from which genomes were generated should already be available on the INSDC (ENA, NCBI, or DDBJ), hence at least one DRR|ERR|SRR accession should be available for every genome to be uploaded. Assembly accessions (ERZ|SRZ|DRZ) are also supported. 
+Raw-read runs from which genomes were generated should already be available on the INSDC (ENA by EBI, GenBank by NCBI, or DDBJ), hence at least one DRR|ERR|SRR accession should be available for every genome to be uploaded. Assembly accessions (ERZ|SRZ|DRZ) are also supported. 
 
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes. 
 
@@ -67,6 +67,10 @@ where
   * `--password PASSWORD`: webin password
   * `--centre_name CENTRE_NAME`: name of the centre uploading genomes
   * `--tpa`: if uploading TPA (Third PArty) generated genomes
+
+It is recommended to validate your genomes in test mode (i.e. without `--live` in the registration step and with `-test` during the upload) before attempting the final upload. Launching the registration in test mode will add a timestamp to the genome name to allow multiple executions of the test process. 
+
+Sample xmls won't be regenerated automatically if a previous xml already exists. If any metadata or value in the tsv table changes, `--force` will allow xml regeneration. 
 
 ### Produced files:
 The script produces the following files and folders:
