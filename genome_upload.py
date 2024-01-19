@@ -222,7 +222,7 @@ Input table: expects the following parameters:
     genome_coverage : genome coverage
     genome_path: path to genome to upload
 '''
-def read_and_cleanse_metadata_tsv(inputFile, genomeType):
+def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
     print('\tRetrieving info for genomes to submit...')
     
     binMandatoryFields = ["genome_name", "accessions",
@@ -308,11 +308,19 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType):
     #    raise ValueError("Genome names must be shorter than 20 characters.")
 
     # create dictionary while checking genome name uniqueness
-    try:
-        genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
-        return genomeInfo
-    except:
-        raise IndexError("Duplicate genome names were found in the input table.")
+    uniqueness = metadata["genome_name"].nunique() == metadata["genome_name"].size
+    if uniqueness:
+        if not live:
+            timestamp = str(int(dt.timestamp(dt.now())))
+            timestamp_names = [row["genome_name"] + '_' + timestamp for index, row in metadata.iterrows()]
+            metadata["unique_genome_name"] = timestamp_names
+            genomeInfo = metadata.set_index("unique_genome_name").transpose().to_dict()
+        else:
+            genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
+    else:
+        raise ValueError("Duplicate names found in genome names")
+
+    return genomeInfo
 
 def round_stats(stats):
     newStat = round(float(stats), 2)
@@ -496,8 +504,8 @@ def extract_Archaea_info(name, rank):
                             
     return submittable, name, taxid
 
-def extract_genomes_info(inputFile, genomeType):
-    genomeInfo = read_and_cleanse_metadata_tsv(inputFile, genomeType)
+def extract_genomes_info(inputFile, genomeType, live):
+    genomeInfo = read_and_cleanse_metadata_tsv(inputFile, genomeType, live)
     for gen in genomeInfo:
         genomeInfo[gen]["accessions"] = genomeInfo[gen]["accessions"].split(',')
         accessionType = "run"
@@ -522,7 +530,7 @@ def extract_genomes_info(inputFile, genomeType):
         else:
             genomeInfo[gen]["co-assembly"] = False
         
-        genomeInfo[gen]["alias"] = gen + '_' + str(int(dt.timestamp(dt.now())))
+        genomeInfo[gen]["alias"] = gen
 
         taxID, scientificName = extract_tax_info(genomeInfo[gen]["NCBI_lineage"])
         genomeInfo[gen]["taxID"] = taxID
@@ -876,40 +884,38 @@ def handle_genomes_registration(sample_xml, submission_xml, webin, password, liv
         'SAMPLE': open(sample_xml, 'r')
     }
 
-    try:
-        submissionResponse = requests.post(url, files = f, auth = (webin, password))
+    submissionResponse = requests.post(url, files = f, auth = (webin, password))
 
-        if submissionResponse.status_code != 200:
-            if str(submissionResponse.status_code).startswith('5'):
-                raise Exception("Genomes could not be submitted to ENA as the server " +
-                    "does not respond. Please again try later.")
-            else:
-                raise Exception("Genomes could not be submitted to ENA. HTTP response: " +
-                    submissionResponse.reason)
+    if submissionResponse.status_code != 200:
+        if str(submissionResponse.status_code).startswith('5'):
+            raise Exception("Genomes could not be submitted to ENA as the server " +
+                "does not respond. Please again try later.")
+        else:
+            raise Exception("Genomes could not be submitted to ENA. HTTP response: " +
+                submissionResponse.reason)
 
-        receiptXml = minidom.parseString((submissionResponse.content).decode("utf-8"))
-        receipt = receiptXml.getElementsByTagName("RECEIPT")
-        success = receipt[0].attributes["success"].value
-        if success == "true":
-            aliasDict = {}
-            samples = receiptXml.getElementsByTagName("SAMPLE")
-            for s in samples:
-                sraAcc = s.attributes["accession"].value
-                alias = s.attributes["alias"].value
-                aliasDict[alias] = sraAcc
-        elif success == "false":
-            errors = receiptXml.getElementsByTagName("ERROR")
-            print("\tGenomes could not be submitted to ENA. Please, check the errors below.")
-            for error in errors:
-                print("\t" + error.firstChild.data)
-            sys.exit(1)
-        
-        print('\t{} genome samples successfully registered.'.format(str(len(aliasDict))))
+    receiptXml = minidom.parseString((submissionResponse.content).decode("utf-8"))
+    receipt = receiptXml.getElementsByTagName("RECEIPT")
+    success = receipt[0].attributes["success"].value
+    if success == "true":
+        aliasDict = {}
+        samples = receiptXml.getElementsByTagName("SAMPLE")
+        for s in samples:
+            sraAcc = s.attributes["accession"].value
+            alias = s.attributes["alias"].value
+            aliasDict[alias] = sraAcc
+    elif success == "false":
+        errors = receiptXml.getElementsByTagName("ERROR")
+        finalError = "\tSome genomes could not be submitted to ENA. Please, check the errors below."
+        for error in errors:
+            finalError += "\n\t" + error.firstChild.data
+        finalError += "\n\tIf you wish to validate again your data and metadata, "
+        finalError += "please use the --force option."
+        raise Exception(finalError)
+    
+    print('\t{} genome samples successfully registered.'.format(str(len(aliasDict))))
 
-        return aliasDict
-
-    except:
-        raise ConnectionError("Genomes could not be registered to ENA.")
+    return aliasDict
 
 def getAccessions(accessionsFile):
     accessionDict = {}
@@ -922,8 +928,8 @@ def getAccessions(accessionsFile):
 
     return accessionDict
 
-def saveAccessions(aliasAccessionDict, accessionsFile):
-    with open(accessionsFile, 'a') as f:
+def saveAccessions(aliasAccessionDict, accessionsFile, writeMode):
+    with open(accessionsFile, writeMode) as f:
         for elem in aliasAccessionDict:
             f.write("{}\t{}\n".format(elem, aliasAccessionDict[elem]))
 
@@ -1196,10 +1202,10 @@ def file_generator():
 
     # sample xml generation or recovery
     genomes = ENA_uploader.create_genome_dictionary(samples_xml)
-    if not os.path.exists(samples_xml) or ENA_uploader.force:
+    '''if not os.path.exists(samples_xml) or ENA_uploader.force:
         print("\tWriting genome registration XML...")
         write_genomes_xml(genomes, samples_xml, genomeType, centre_name, tpa)
-        print("\tAll files have been written to " + uploadDir)
+        print("\tAll files have been written to " + uploadDir)'''
         
     # manifests creation
     manifestDir = os.path.join(uploadDir, "manifests")
@@ -1213,10 +1219,14 @@ def file_generator():
     
     accessionsFile = os.path.join(uploadDir, accessionsgen)
     save = False
+    writeMode = 'a'
     if os.path.exists(accessionsFile):
         if not live:
             save = True
+            if ENA_uploader.force:
+                writeMode = 'w'
         if not save:
+            print("Genome samples already registered, reading ERS accessions...")
             aliasToNewSampleAccession = getAccessions(accessionsFile)
     else:
         save = True
@@ -1225,9 +1235,7 @@ def file_generator():
         print("Registering genome samples XMLs...")
         aliasToNewSampleAccession = handle_genomes_registration(samples_xml, 
             submission_xml, webinUser, webinPassword, live)
-        saveAccessions(aliasToNewSampleAccession, accessionsFile)
-    else:
-        print("Genome samples already registered, reading ERS accessions...")
+        saveAccessions(aliasToNewSampleAccession, accessionsFile, writeMode)
 
     print("Generating manifest files...")
     
@@ -1264,9 +1272,13 @@ class GenomeUpload:
     def create_genome_dictionary(self, samples_xml):
         print('Retrieving data for MAG submission...')
 
-        genomeInfo = extract_genomes_info(self.genomeMetadata, self.genomeType)
+        genomeInfo = extract_genomes_info(self.genomeMetadata, self.genomeType, self.live)
         if not os.path.exists(samples_xml) or self.force:
             extract_ENA_info(genomeInfo, self.upload_dir, self.username, self.password)
+            print("\tWriting genome registration XML...")
+            write_genomes_xml(genomeInfo, samples_xml, self.genomeType, 
+                              self.centre_name, self.tpa)
+            print("\tAll files have been written to " + self.upload_dir)
         else:
             recover_info_from_xml(genomeInfo, samples_xml, self.live)
 
