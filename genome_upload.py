@@ -362,7 +362,7 @@ def extract_tax_info(taxInfo):
     submittable, searchRankActive = False, True
     while iterator != -1 and not submittable:
         scientificName = lineage[iterator].strip()
-        if "Unclassied" in scientificName:
+        if "Unclassified" in scientificName:
             if finalKingdom == "Archaea":
                 scientificName = "unclassified archaeon"
             elif finalKingdom == "Bacteria":
