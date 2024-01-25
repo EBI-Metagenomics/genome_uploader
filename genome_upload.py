@@ -762,6 +762,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                 runAccession = ENA_info[run]["run_accession"]
                 if runAccession not in backupDict:
                     if runAccession in runsSet:
+                        provided = True
                         sampleAccession = ENA_info[run]["sample_accession"]
                         sampleInfo = get_sample(sampleAccession, webin, password)
                         
@@ -775,12 +776,19 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                         else:
                             latitude = "not provided"
                             longitude = "not provided"
-                        
+                            provided = False
+
                         if 'W' in longitude:
                             longitude = '-' + str(float(longitude.split('W')[0].strip()))
                         elif longitude.endswith('E'):
                             longitude = str(float(longitude.split('E')[0].strip()))
-                        
+
+                        if provided:
+                            if len(latitude) > 11:
+                                latitude = latitude[:11]
+                            if len(longitude) > 11:
+                                longitude = longitude[:11]
+
                         country = sampleInfo["country"].split(':')[0]
                         if not country in geographicLocations:
                             country = "not provided"
