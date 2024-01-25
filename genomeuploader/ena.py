@@ -28,6 +28,9 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
+class NoDataException(ValueError):
+    pass
+
 
 RUN_DEFAULT_FIELDS = ','.join([
     'study_accession',

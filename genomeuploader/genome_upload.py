@@ -25,7 +25,6 @@ from datetime import date, datetime as dt
 
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
-import requests
 
 from .ena import ENA
 
@@ -36,9 +35,6 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 ena = ENA()
-
-class NoDataException(ValueError):
-    pass
 
 
 
@@ -838,7 +834,7 @@ class GenomeUpload:
         workDir = self.args.out if self.args.out else os.getcwd()
         self.upload_dir = self.generate_genomes_upload_dir(workDir, self.genomeType)
     
-    def parse_args(argv):
+    def parse_args(self, argv):
         parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
             description="Allows to create xmls and manifest files for genome upload to ENA. " +
             "--xmls and --manifests are needed to determine the action the script " +
