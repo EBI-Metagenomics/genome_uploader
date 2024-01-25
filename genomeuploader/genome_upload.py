@@ -1,4 +1,18 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# Copyright 2017-2024 EMBL - European Bioinformatics Institute
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import os
 import sys
@@ -8,199 +22,25 @@ import re
 import json
 import pandas as pd
 from datetime import date, datetime as dt
-from time import sleep
+
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 import requests
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from .ena import ENA
 
-metagenomes = ["activated carbon metagenome", "activated sludge metagenome", 
-    "aerosol metagenome", "air metagenome", "algae metagenome", "alkali sediment metagenome", 
-    "amphibian metagenome", "anaerobic digester metagenome", "anchialine metagenome", 
-    "annelid metagenome", "ant fungus garden metagenome", "ant metagenome", 
-    "aquaculture metagenome", "aquatic eukaryotic metagenome", "aquatic metagenome", 
-    "aquatic viral metagenome", "aquifer metagenome", "ballast water metagenome", 
-    "bat gut metagenome", "bat metagenome", "beach sand metagenome", "beetle metagenome", 
-    "bentonite metagenome", "bioanode metagenome", "biocathode metagenome", 
-    "biofilm metagenome", "biofilter metagenome", "biofloc metagenome", 
-    "biogas fermenter metagenome", "bioleaching metagenome", "bioreactor metagenome", 
-    "bioreactor sludge metagenome", "bioretention column metagenome", "biosolids metagenome", 
-    "bird metagenome", "blood metagenome", "bog metagenome", "book metagenome", 
-    "bovine gut metagenome", "bovine metagenome", "brine metagenome", "canine metagenome", 
-    "cave metagenome", "cetacean metagenome", "chemical production metagenome", 
-    "chicken gut metagenome", "ciliate metagenome", "clay metagenome", "clinical metagenome", 
-    "cloud metagenome", "coal metagenome", "cold seep metagenome", "cold spring metagenome", 
-    "compost metagenome", "concrete metagenome", "coral metagenome", "coral reef metagenome", 
-    "cow dung metagenome", "crab metagenome", "crude oil metagenome", 
-    "Crustacea gut metagenome", "crustacean metagenome", "ctenophore metagenome", 
-    "decomposition metagenome", "desalination cell metagenome", "dietary supplements metagenome", 
-    "dinoflagellate metagenome", "drinking water metagenome", "dust metagenome", 
-    "ear metagenome", "echinoderm metagenome", "egg metagenome", "electrolysis cell metagenome", 
-    "endophyte metagenome", "epibiont metagenome", "estuary metagenome", "eukaryotic metagenome", 
-    "eukaryotic plankton metagenome", "eye metagenome", "factory metagenome", "feces metagenome", 
-    "feline metagenome", "fermentation metagenome", "fertilizer metagenome", 
-    "fish gut metagenome", "fishing equipment metagenome", "fish metagenome", 
-    "floral nectar metagenome", "flotsam metagenome", "flower metagenome", 
-    "food contamination metagenome", "food fermentation metagenome", "food metagenome", 
-    "food production metagenome", "fossil metagenome", "freshwater metagenome", 
-    "freshwater sediment metagenome", "frog metagenome", "fuel tank metagenome", 
-    "fungus metagenome", "gas well metagenome", "gill metagenome", "glacier lake metagenome", 
-    "glacier metagenome", "gonad metagenome", "grain metagenome", "granuloma metagenome", 
-    "groundwater metagenome", "gut metagenome", "halite metagenome", 
-    "herbal medicine metagenome", "honeybee metagenome", "honey metagenome", "horse metagenome", 
-    "hospital metagenome", "hot springs metagenome", "human bile metagenome", 
-    "human blood metagenome", "human brain metagenome", "human eye metagenome", 
-    "human feces metagenome", "human gut metagenome", "human hair metagenome", 
-    "human lung metagenome", "human metagenome", "human milk metagenome", 
-    "human nasopharyngeal metagenome", "human oral metagenome", 
-    "human reproductive system metagenome", "human saliva metagenome", 
-    "human semen metagenome", "human skeleton metagenome", "human skin metagenome", 
-    "human sputum metagenome", "human tracheal metagenome", "human urinary tract metagenome", 
-    "human vaginal metagenome", "human viral metagenome", "HVAC metagenome", 
-    "hydrocarbon metagenome", "hydrothermal vent metagenome", "hydrozoan metagenome", 
-    "hypersaline lake metagenome", "hyphosphere metagenome", "hypolithon metagenome", 
-    "ice metagenome", "indoor metagenome", "industrial waste metagenome", 
-    "insect gut metagenome", "insect metagenome", "insect nest metagenome", 
-    "internal organ metagenome", "interstitial water metagenome", "invertebrate gut metagenome", 
-    "invertebrate metagenome", "jellyfish metagenome", "karst metagenome", "koala metagenome", 
-    "lagoon metagenome", "lake water metagenome", "landfill metagenome", "leaf litter metagenome", 
-    "leaf metagenome", "lichen crust metagenome", "lichen metagenome", "liver metagenome", 
-    "lung metagenome", "macroalgae metagenome", "mangrove metagenome", "manure metagenome", 
-    "marine metagenome", "marine plankton metagenome", "marine sediment metagenome", 
-    "marsh metagenome", "marsupial metagenome", "medical device metagenome", "metagenome", 
-    "microbial eukaryotic metagenome", "microbial fuel cell metagenome", 
-    "microbial mat metagenome", "microeukaryotic metagenome", "milk metagenome", 
-    "mine drainage metagenome", "mine metagenome", "mine tailings metagenome", 
-    "mite metagenome", "mixed culture metagenome", "mollusc metagenome", "money metagenome", 
-    "moonmilk metagenome", "mosquito metagenome", "moss metagenome", "mouse gut metagenome", 
-    "mouse metagenome", "mouse skin metagenome", "mud metagenome", "museum specimen metagenome", 
-    "musk metagenome", "nematode metagenome", "neuston metagenome", "nutrient bag metagenome", 
-    "oasis metagenome", "oil field metagenome", "oil metagenome", 
-    "oil production facility metagenome", "oil sands metagenome", "oral metagenome", 
-    "oral-nasopharyngeal metagenome", "oral viral metagenome", "outdoor metagenome", 
-    "ovine metagenome", "oyster metagenome", "painting metagenome", "paper pulp metagenome", 
-    "parasite metagenome", "parchment metagenome", "peat metagenome", "periphyton metagenome", 
-    "permafrost metagenome", "photosynthetic picoeukaryotic metagenome", "phycosphere metagenome", 
-    "phyllosphere metagenome", "phytotelma metagenome", "pig gut metagenome", "pig metagenome", 
-    "pipeline metagenome", "pitcher plant inquiline metagenome", "placenta metagenome", 
-    "plant metagenome", "plastic metagenome", "plastisphere metagenome", "pollen metagenome", 
-    "pond metagenome", "poultry litter metagenome", "power plant metagenome", "primate metagenome", 
-    "probiotic metagenome", "protist metagenome", "psyllid metagenome", "rat gut metagenome", 
-    "rat metagenome", "reproductive system metagenome", "respiratory tract metagenome", 
-    "retting metagenome", "rhizoplane metagenome", "rhizosphere metagenome", 
-    "rice paddy metagenome", "riverine metagenome", "rock metagenome", 
-    "rock porewater metagenome", "rodent metagenome", "root associated fungus metagenome", 
-    "root metagenome", "runoff metagenome", "saline spring metagenome", "saltern metagenome", 
-    "salt lake metagenome", "salt marsh metagenome", "salt mine metagenome", 
-    "salt pan metagenome", "sand metagenome", "scorpion gut metagenome", 
-    "sea anemone metagenome", "seagrass metagenome", "sea squirt metagenome", 
-    "sea urchin metagenome", "seawater metagenome", "sediment metagenome", "seed metagenome", 
-    "semen metagenome", "shale gas metagenome", "sheep gut metagenome", "sheep metagenome", 
-    "shoot metagenome", "shrew metagenome", "shrimp gut metagenome", "silage metagenome", 
-    "skin metagenome", "slag metagenome", "sludge metagenome", "snake metagenome", 
-    "snow metagenome", "soda lake metagenome", "soda lime metagenome", "soil crust metagenome", 
-    "soil metagenome", "solid waste metagenome", "spider metagenome", "sponge metagenome", 
-    "starfish metagenome", "steel metagenome", "stomach metagenome", "stromatolite metagenome", 
-    "subsurface metagenome", "surface metagenome", "symbiont metagenome", "synthetic metagenome", 
-    "tannin metagenome", "tar pit metagenome", "termitarium metagenome", 
-    "termite fungus garden metagenome", "termite gut metagenome", "termite metagenome", 
-    "terrestrial metagenome", "tick metagenome", "tidal flat metagenome", "tin mine metagenome", 
-    "tobacco metagenome", "tomb wall metagenome", "tree metagenome", 
-    "upper respiratory tract metagenome", "urban metagenome", "urinary tract metagenome", 
-    "urine metagenome", "urogenital metagenome", "vaginal metagenome", "viral metagenome", 
-    "volcano metagenome", "wallaby gut metagenome", "wasp metagenome", "wastewater metagenome", 
-    "wetland metagenome", "whale fall metagenome", "whole organism metagenome", "wine metagenome", 
-    "Winogradsky column metagenome", "wood decay metagenome", "zebrafish metagenome"]
-geographicLocations = ["Afghanistan", "Albania", "Algeria", "American Samoa", "Andorra", 
-    "Angola", "Anguilla", "Antarctica", "Antigua and Barbuda", "Arctic Ocean", "Argentina", 
-    "Armenia", "Aruba", "Ashmore and Cartier Islands", "Atlantic Ocean", "Australia", "Austria", 
-    "Azerbaijan", "Bahamas", "Bahrain", "Baker Island", "Baltic Sea", "Bangladesh", 
-    "Barbados", "Bassas da India", "Belarus", "Belgium", "Belize", "Benin", "Bermuda", 
-    "Bhutan", "Bolivia", "Borneo", "Bosnia and Herzegovina", "Botswana", "Bouvet Island", 
-    "Brazil", "British Virgin Islands", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", 
-    "Cambodia", "Cameroon", "Canada", "Cape Verde", "Cayman Islands", "Central African Republic", 
-    "Chad", "Chile", "China", "Christmas Island", "Clipperton Island", "Cocos Islands", 
-    "Colombia", "Comoros", "Cook Islands", "Coral Sea Islands", "Costa Rica", "Cote d'Ivoire", 
-    "Croatia", "Cuba", "Curacao", "Cyprus", "Czech Republic", "Democratic Republic of the Congo", 
-    "Denmark", "Djibouti", "Dominica", "Dominican Republic", "East Timor", "Ecuador", "Egypt", 
-    "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Ethiopia", "Europa Island", 
-    "Falkland Islands (Islas Malvinas)", "Faroe Islands", "Fiji", "Finland", "France", 
-    "French Guiana", "French Polynesia", "French Southern and Antarctic Lands", "Gabon", 
-    "Gambia", "Gaza Strip", "Georgia", "Germany", "Ghana", "Gibraltar", "Glorioso Islands", 
-    "Greece", "Greenland", "GrENAda", "Guadeloupe", "Guam", "Guatemala", "Guernsey", "Guinea", 
-    "Guinea-Bissau", "Guyana", "Haiti", "Heard Island and McDonald Islands", "Honduras", 
-    "Hong Kong", "Howland Island", "Hungary", "Iceland", "India", "Indian Ocean", "Indonesia", 
-    "Iran", "Iraq", "Ireland", "Isle of Man", "Israel", "Italy", "Jamaica", "Jan Mayen", "Japan", 
-    "Jarvis Island", "Jersey", "Johnston Atoll", "Jordan", "Juan de Nova Island", "Kazakhstan", 
-    "Kenya", "Kerguelen Archipelago", "Kingman Reef", "Kiribati", "Kosovo", "Kuwait", "Kyrgyzstan", 
-    "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", 
-    "Luxembourg", "Macau", "Macedonia", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", 
-    "Malta", "Marshall Islands", "Martinique", "Mauritania", "Mauritius", "Mayotte", 
-    "Mediterranean Sea", "Mexico", "Micronesia", "Midway Islands", "Moldova", "Monaco", 
-    "Mongolia", "Montenegro", "Montserrat", "Morocco", "Mozambique", "Myanmar", "Namibia", 
-    "Nauru", "Navassa Island", "Nepal", "Netherlands", "New Caledonia", "New Zealand", 
-    "Nicaragua", "Niger", "Nigeria", "Niue", "Norfolk Island", "Northern Mariana Islands", 
-    "North Korea", "North Sea", "Norway", "not applicable", "not collected", "not provided", 
-    "Oman", "Pacific Ocean", "Pakistan", "Palau", "Palmyra Atoll", "Panama", "Papua New Guinea", 
-    "Paracel Islands", "Paraguay", "Peru", "Philippines", "Pitcairn Islands", "Poland", 
-    "Portugal", "Puerto Rico", "Qatar", "Republic of the Congo", "restricted access", "Reunion", 
-    "Romania", "Ross Sea", "Russia", "Rwanda", "Saint HelENA", "Saint Kitts and Nevis", 
-    "Saint Lucia", "Saint Pierre and Miquelon", "Saint Vincent and the GrENAdines", "Samoa", 
-    "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", 
-    "Sierra Leone", "Singapore", "Sint Maarten", "Slovakia", "Slovenia", "Solomon Islands", 
-    "Somalia", "South Africa", "Southern Ocean", "South Georgia and the South Sandwich Islands", 
-    "South Korea", "Spain", "Spratly Islands", "Sri Lanka", "Sudan", "Suriname", "Svalbard", 
-    "Swaziland", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", 
-    "Tasman Sea", "Thailand", "Togo", "Tokelau", "Tonga", "Trinidad and Tobago", 
-    "Tromelin Island", "Tunisia", "Turkey", "Turkmenistan", "Turks and Caicos Islands", 
-    "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "Uruguay", 
-    "USA", "Uzbekistan", "Vanuatu", "Venezuela", "Viet Nam", "Virgin Islands", "Wake Island", 
-    "Wallis and Futuna", "West Bank", "Western Sahara", "Yemen", "Zambia", "Zimbabwe"]
+from .constants import METAGENOMES, GEOGRAPHIC_LOCATIONS, MQ, HQ
 
-RETRY_COUNT = 5
-HQ = ("Multiple fragments where gaps span repetitive regions. Presence of the "
-    "23S, 16S, and 5S rRNA genes and at least 18 tRNAs.")
-MQ = ("Many fragments with little to no review of assembly other than reporting "
-    "of standard assembly statistics.")
+logging.basicConfig(level=logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+
+ena = ENA()
 
 class NoDataException(ValueError):
     pass
 
-def parse_args(argv):
-    parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
-        description="Allows to create xmls and manifest files for genome upload to ENA. " +
-        "--xmls and --manifests are needed to determine the action the script " +
-        "should perform. The use of more than one option is encouraged. To spare time, " +
-        "-xmls and -manifests should be called only if respective xml or manifest files " +
-        "do not already exist.")
-    
-    parser.add_argument('-u', '--upload_study', type=str, help="Study accession for genomes upload")
-    parser.add_argument('--genome_info', type=str, required=True, help="Genomes metadata file")
 
-    genomeType = parser.add_mutually_exclusive_group(required=True)
-    genomeType.add_argument('-m', '--mags', action='store_true', help="Select for MAG upload")
-    genomeType.add_argument('-b', '--bins', action='store_true', help="Select for bin upload")
-    
-    parser.add_argument('--out', type=str, help="Output folder. Default: working directory")
-    parser.add_argument('--force', action='store_true', help="Forces reset of sample xml's backups")
-    parser.add_argument('--live', action='store_true', help="Uploads on ENA. Omitting this " +
-        "option allows to validate samples beforehand")
-    parser.add_argument('--tpa', action='store_true', help="Select if uploading TPA-generated genomes")
-    
-    parser.add_argument('--webin', required=True, help="Webin id")
-    parser.add_argument('--password', required=True, help="Webin password")
-    parser.add_argument('--centre_name', required=True, help="Name of the centre uploading genomes")
-
-    args = parser.parse_args(argv)
-
-    if not args.upload_study:
-        raise ValueError("No project selected for genome upload [-u, --upload_study].")
-    
-    if not os.path.exists(args.genome_info):
-        raise FileNotFoundError('Genome metadata file "{}" does not exist'.format(args.genome_info))
-
-    return args
 
 '''
 Input table: expects the following parameters:
@@ -223,7 +63,7 @@ Input table: expects the following parameters:
     genome_path: path to genome to upload
 '''
 def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
-    print('\tRetrieving info for genomes to submit...')
+    logger.info('Retrieving info for genomes to submit...')
     
     binMandatoryFields = ["genome_name", "accessions",
         "assembly_software", "binning_software", 
@@ -292,7 +132,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
 
     # are provided metagenomes part of the accepted metagenome list?
     if False in metadata.apply(lambda row: 
-        True if row["metagenome"] in metagenomes 
+        True if row["metagenome"] in METAGENOMES 
         else False, axis=1).unique():
         raise ValueError("Metagenomes associated with each genome need to belong to ENA's " +
             "approved metagenomes list.")
@@ -332,9 +172,7 @@ def round_stats(stats):
     return newStat
 
 def compute_MAG_quality(completeness, contamination, RNApresence):
-    RNApresent = False
-    if str(RNApresence).lower() in ["true", "yes", "y"]:
-        RNApresent = True
+    RNApresent = str(RNApresence).lower() in ["true", "yes", "y"]
     quality = MQ
     if completeness >= 90 and contamination <= 5 and RNApresent:
         quality = HQ
@@ -371,12 +209,12 @@ def extract_tax_info(taxInfo):
             elif finalKingdom == "Eukaryota":
                 scientificName = "uncultured eukaryote"
         elif digitAnnotation:
-            scientificName = query_taxid(scientificName)
+            scientificName = ena.query_taxid(scientificName)
         elif "__" in scientificName:
             scientificName = scientificName.split("__")[1]
         else:
             raise ValueError("Unrecognised taxonomy format: " + scientificName)
-        submittable, taxid, rank = query_scientific_name(scientificName, searchRank=True)
+        submittable, taxid, rank = ena.query_scientific_name(scientificName, searchRank=True)
 
         if not submittable:
             if finalKingdom == "Archaea":
@@ -389,51 +227,6 @@ def extract_tax_info(taxInfo):
 
     return taxid, scientificName
 
-def query_taxid(taxid):
-    url = "https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{}".format(taxid)
-    response = requests.get(url)
-
-    try:
-        # Will raise exception if response status code is non-200 
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        print("Request failed {} with error {}".format(url, e))
-        return False
-    
-    res = json.loads(response.text)
-    
-    return res.get("scientificName", "")
-
-def query_scientific_name(scientificName, searchRank=False):
-    url = "https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{}".format(scientificName)
-    response = requests.get(url)
-    
-    try:
-        # Will raise exception if response status code is non-200 
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        if searchRank:
-            return False, "", ""
-        else:
-            return False, ""
-    
-    try:
-        res = json.loads(response.text)[0]
-    except IndexError:
-        if searchRank:
-            return False, "", ""
-        else:
-            return False, ""
-
-    submittable = res.get("submittable", "").lower() == "true"
-    taxid = res.get("taxId", "")
-    rank = res.get("rank", "")
-
-    if searchRank:
-        return submittable, taxid, rank
-    else:
-        return submittable, taxid
-
 def extract_Eukaryota_info(name, rank):
     nonSubmittable = (False, "", 0)
 
@@ -443,21 +236,21 @@ def extract_Eukaryota_info(name, rank):
 
     if rank == "super kingdom":
         name = "uncultured eukaryote"
-        submittable, taxid = query_scientific_name(name)
+        submittable, taxid = ena.query_scientific_name(name)
         return submittable, name, taxid
     else:
         name = name.capitalize() + " sp."
-        submittable, taxid = query_scientific_name(name)
+        submittable, taxid = ena.query_scientific_name(name)
         if submittable:
             return submittable, name, taxid
         else:
             name = "uncultured " + name
-            submittable, taxid = query_scientific_name(name)
+            submittable, taxid = ena.query_scientific_name(name)
             if submittable:
                 return submittable, name, taxid
             else:
                 name = name.replace(" sp.", '')
-                submittable, taxid = query_scientific_name(name)
+                submittable, taxid = ena.query_scientific_name(name)
                 if submittable:
                     return submittable, name, taxid
                 else:
@@ -473,14 +266,14 @@ def extract_Bacteria_info(name, rank):
     elif rank == "genus":
         name = "uncultured {} sp.".format(name)
     
-    submittable, taxid, rank = query_scientific_name(name, searchRank=True)
+    submittable, taxid, rank = ena.query_scientific_name(name, searchRank=True)
     if not submittable:
         if rank in ["species", "genus"] and name.lower().endswith("bacteria"):
             name = "uncultured {}".format(name.lower().replace("bacteria", "bacterium"))
         elif rank == "family":
             if name.lower() == "deltaproteobacteria":
                 name = "uncultured delta proteobacterium"
-        submittable, taxid = query_scientific_name(name)
+        submittable, taxid = ena.query_scientific_name(name)
 
     return submittable, name, taxid
 
@@ -501,14 +294,14 @@ def extract_Archaea_info(name, rank):
     elif rank == "genus":
         name = "uncultured {} sp.".format(name)
     
-    submittable, taxid, rank = query_scientific_name(name, searchRank=True)
+    submittable, taxid, rank = ena.query_scientific_name(name, searchRank=True)
     if not submittable:
         if "Candidatus" in name:
             if rank == "phylum":
                 name = name.replace("Candidatus ", '')
             elif rank == "family":
                 name = name.replace("uncultured ", '')
-            submittable, taxid = query_scientific_name(name)
+            submittable, taxid = ena.query_scientific_name(name)
                             
     return submittable, name, taxid
 
@@ -546,178 +339,8 @@ def extract_genomes_info(inputFile, genomeType, live):
 
     return genomeInfo
 
-# ------------------- ENA API HANDLER -------------------
-# TODO: organise this into a class
-
-RUN_DEFAULT_FIELDS = 'study_accession,secondary_study_accession,instrument_model,' \
-                     'run_accession,sample_accession'
-
-ASSEMBLY_DEFAULT_FIELDS = 'sample_accession'
-
-SAMPLE_DEFAULT_FIELDS = 'sample_accession,secondary_sample_accession,' \
-                        'collection_date,country,location'
-
-STUDY_DEFAULT_FIELDS = 'study_accession,secondary_study_accession,description,study_title'
-
-def get_default_params():
-    return {
-        'format': 'json',
-        'includeMetagenomes': True,
-        'dataPortal': 'ena'
-    }
-
-def post_request(data, webin, password):
-    url = "https://www.ebi.ac.uk/ena/portal/api/search"
-    auth = (webin, password)
-    default_connection_headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "*/*"
-    }
-    response = requests.post(url, data=data, auth=auth, headers=default_connection_headers)
-    
-    return response
-
-def get_run(run_accession, webin, password, attempt=0, search_params=None):
-    data = get_default_params()
-    data['result'] = 'read_run'
-    data['fields'] = RUN_DEFAULT_FIELDS
-    data['query'] = 'run_accession=\"{}\"'.format(run_accession)
-
-    if search_params:
-        data.update(search_params)
-
-    response = post_request(data, webin, password)
-    
-    if str(response.status_code)[0] != '2' and attempt > 2:
-        raise ValueError("Could not retrieve run with accession {}, returned "
-            "message: {}".format(run_accession, response.text))
-    elif response.status_code == 204:
-        if attempt < 2:
-            attempt += 1
-            sleep(1)
-            return get_run(run_accession, webin, password, attempt)
-        else:
-            raise ValueError("Could not find run {} in ENA after {}"
-                " attempts".format(run_accession, RETRY_COUNT))
-    try:
-        run = json.loads(response.text)[0]
-    except (IndexError, TypeError, ValueError):
-        raise ValueError("Could not find run {} in ENA.".format(run_accession))
-    except:
-        raise Exception("Could not query ENA API: {}".format(response.text))
-
-    return run
-
-def get_run_from_assembly(assembly_name):
-    manifestXml = minidom.parseString(requests.get("https://www.ebi.ac.uk" +
-        "/ena/browser/api/xml/" + assembly_name).text)
-
-    run_ref = manifestXml.getElementsByTagName("RUN_REF")
-    run = run_ref[0].attributes["accession"].value
-     
-    return run
-
-def get_study(webin, password, primary_accession=None, secondary_accession=None):
-    data = get_default_params()
-    data['result'] = 'read_study'
-    data['fields'] = STUDY_DEFAULT_FIELDS
-
-    if primary_accession and not secondary_accession:
-        data['query'] = 'study_accession="{}"'.format(primary_accession)
-    elif not primary_accession and secondary_accession:
-        data['query'] = 'secondary_study_accession="{}"'.format(secondary_accession)
-    else:
-        data['query'] = 'study_accession="{}" AND secondary_study_accession="{}"' \
-            .format(primary_accession, secondary_accession)
-
-    query_params = []
-    for result_type in ['study', 'read_study', 'analysis_study']:
-        for data_portal in ['ena', 'metagenome']:
-            param = data.copy()
-            param['result'] = result_type
-            param['dataPortal'] = data_portal
-            if result_type == 'study':
-                if 'description' in param['fields']:
-                    param['fields'] = param['fields'].replace('description', 'study_description')
-            query_params.append(param)
-
-    for param in query_params:
-        try:
-            response = post_request(data, webin, password)
-            if response.status_code == 204:
-                raise NoDataException()
-            try:
-                study = json.loads(response.text)[0]
-            except (IndexError, TypeError, ValueError, KeyError) as e:
-                raise e
-            if data['result'] == 'study':
-                if 'study_description' in study:
-                    study['description'] = study.pop('study_description')
-            return study
-        except NoDataException:
-            print("No info found to fetch study with params {}".format(param))
-            pass
-        except (IndexError, TypeError, ValueError, KeyError):
-            print("Failed to fetch study with params {}, returned error: {}".format(param, response.text))
-
-    raise ValueError('Could not find study {} {} in ENA.'.format(primary_accession, secondary_accession))
-
-def get_study_runs(study_acc, webin, password, fields=None, search_params=None):
-    data = get_default_params()
-    data['result'] = 'read_run'
-    data['fields'] = fields or RUN_DEFAULT_FIELDS
-    data['query'] = '(study_accession=\"{}\" OR secondary_study_accession=\"{}\")'.format(study_acc, study_acc)
-
-    if search_params:
-        data.update(search_params)
-
-    response = post_request(data, webin, password)
-    
-    if str(response.status_code)[0] != '2':
-        raise ValueError("Could not retrieve runs for study %s.", study_acc)
-    elif response.status_code == 204:
-        return []
-
-    try:
-        runs = json.loads(response.text)
-    except:
-        raise ValueError("Query against ENA API did not work. Returned "
-            "message: {}".format(response.text))
-
-    return runs
-
-def get_sample(sample_accession, webin, password, fields=None, search_params=None, attempt=0):
-    data = get_default_params()
-    data['result'] = 'sample'
-    data['fields'] = fields or SAMPLE_DEFAULT_FIELDS
-    data['query'] = ('(sample_accession=\"{acc}\" OR secondary_sample_accession'
-        '=\"{acc}\") ').format(acc=sample_accession)
-
-    if search_params:
-        data.update(search_params)
-
-    response = post_request(data, webin, password)
-    
-    if response.status_code == 200:
-        return json.loads(response.text)[0]
-    else:
-        if str(response.status_code)[0] != '2':
-            raise ValueError("Could not retrieve sample with accession {}. "
-                "Returned message: {}".format(sample_accession, response.text))
-        elif response.status_code == 204:
-            if attempt < 2:
-                new_params = {'dataPortal': 'metagenome' if data['dataPortal'] == 'ena' else 'ena'}
-                attempt += 1
-                return get_sample(sample_accession, webin, password, fields=fields, 
-                    search_params=new_params, attempt=attempt)
-            else:
-                raise ValueError("Could not find sample {} in ENA after "
-                    "{} attempts.".format(sample_accession, RETRY_COUNT))
-
-# -------------------------------------------------------
-
 def extract_ENA_info(genomeInfo, uploadDir, webin, password):
-    print('\tRetrieving project and run info from ENA (this might take a while)...')
+    logger.info('Retrieving project and run info from ENA (this might take a while)...')
     
     # retrieving metadata from runs (and runs from assembly accessions if provided)
     allRuns = []
@@ -725,13 +348,13 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
         if genomeInfo[g]["accessionType"] == "assembly":
             derivedRuns = []
             for acc in genomeInfo[g]["accessions"]:
-                derivedRuns.append(get_run_from_assembly(acc))
+                derivedRuns.append(ena.get_run_from_assembly(acc))
             genomeInfo[g]["accessions"] = derivedRuns
         allRuns.extend(genomeInfo[g]["accessions"])
 
     runsSet, studySet, samplesDict, tempDict = set(allRuns), set(), {}, {}
     for r in runsSet:
-        run_info = get_run(r, webin, password)
+        run_info = ena.get_run(r, webin, password)
         studySet.add(run_info["secondary_study_accession"])
         samplesDict[r] = run_info["sample_accession"]
     
@@ -747,15 +370,15 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
         try:
             backupDict = json.load(file)
             tempDict = dict(backupDict)
-            print("\tA backup file for ENA sample metadata has been found.")
+            logger.info("A backup file for ENA sample metadata has been found.")
         except json.decoder.JSONDecodeError:
             backupDict = {}
         for s in studySet:
-            studyInfo = get_study(webin, password, "", s)
+            studyInfo = ena.get_study(webin, password, "", s)
 
             projectDescription = studyInfo["description"]
 
-            ENA_info = get_study_runs(s, webin, password)
+            ENA_info = ena.get_study_runs(s, webin, password)
             if ENA_info == []:
                 raise IOError("No runs found on ENA for project {}.".format(s))
             for run, item in enumerate(ENA_info):
@@ -763,7 +386,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                 if runAccession not in backupDict:
                     if runAccession in runsSet:
                         sampleAccession = ENA_info[run]["sample_accession"]
-                        sampleInfo = get_sample(sampleAccession, webin, password)
+                        sampleInfo = ena.get_sample(sampleAccession, webin, password)
                         
                         location = sampleInfo["location"]
                         if 'N' in location:
@@ -782,7 +405,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                             longitude = str(float(longitude.split('E')[0].strip()))
                         
                         country = sampleInfo["country"].split(':')[0]
-                        if not country in geographicLocations:
+                        if not country in GEOGRAPHIC_LOCATIONS:
                             country = "not provided"
                         
                         collectionDate = sampleInfo["collection_date"]
@@ -830,9 +453,10 @@ def combine_ENA_info(genomeInfo, ENADict):
                 latitList.append(ENADict[run]["latitude"])
             
             if multipleElementSet(studyList):
-                print("The co-assembly your MAG has been generated from comes from " +
+                logger.error("The co-assembly your MAG has been generated from comes from " +
                 "different studies.")
                 sys.exit(1)
+
             genomeInfo[g]["study"] = studyList[0] 
             genomeInfo[g]["description"] = descriptionList[0]
             
@@ -878,52 +502,7 @@ def combine_ENA_info(genomeInfo, ENADict):
         
         genomeInfo[g]["accessions"] = ','.join(genomeInfo[g]["accessions"])
 
-def handle_genomes_registration(sample_xml, submission_xml, webin, password, live=False):
-    liveSub, mode = "", "live"
-    if not live:
-        liveSub = "dev"
-        mode = "test"
-    url = "https://www{}.ebi.ac.uk/ena/submit/drop-box/submit/".format(liveSub)
 
-    print('\tRegistering sample xml in {} mode.'.format(mode))
-
-    f = {
-        'SUBMISSION': open(submission_xml, 'r'),
-        'SAMPLE': open(sample_xml, 'r')
-    }
-
-    submissionResponse = requests.post(url, files = f, auth = (webin, password))
-
-    if submissionResponse.status_code != 200:
-        if str(submissionResponse.status_code).startswith('5'):
-            raise Exception("Genomes could not be submitted to ENA as the server " +
-                "does not respond. Please again try later.")
-        else:
-            raise Exception("Genomes could not be submitted to ENA. HTTP response: " +
-                submissionResponse.reason)
-
-    receiptXml = minidom.parseString((submissionResponse.content).decode("utf-8"))
-    receipt = receiptXml.getElementsByTagName("RECEIPT")
-    success = receipt[0].attributes["success"].value
-    if success == "true":
-        aliasDict = {}
-        samples = receiptXml.getElementsByTagName("SAMPLE")
-        for s in samples:
-            sraAcc = s.attributes["accession"].value
-            alias = s.attributes["alias"].value
-            aliasDict[alias] = sraAcc
-    elif success == "false":
-        errors = receiptXml.getElementsByTagName("ERROR")
-        finalError = "\tSome genomes could not be submitted to ENA. Please, check the errors below."
-        for error in errors:
-            finalError += "\n\t" + error.firstChild.data
-        finalError += "\n\tIf you wish to validate again your data and metadata, "
-        finalError += "please use the --force option."
-        raise Exception(finalError)
-    
-    print('\t{} genome samples successfully registered.'.format(str(len(aliasDict))))
-
-    return aliasDict
 
 def getAccessions(accessionsFile):
     accessionDict = {}
@@ -974,7 +553,7 @@ def get_study_from_xml(sample):
     return study
 
 def recover_info_from_xml(genomeDict, sample_xml, live_mode):
-    print("Retrieving data for genome submission...")
+    logger.info("Retrieving data for genome submission...")
 
     # extract list of genomes (samples) to be registered
     xml_structure = minidom.parse(sample_xml)
@@ -1177,7 +756,7 @@ def generate_genome_manifest(genomeInfo, study, manifestsRoot, aliasToSample, ge
         ('RUN_REF', genomeInfo["accessions"]),
         ('FASTA', os.path.abspath(genomeInfo["genome_path"]))
     )
-    print("Writing manifest file (.manifest) for {}.".format(genomeInfo["alias"]))
+    logger.info("Writing manifest file (.manifest) for {}.".format(genomeInfo["alias"]))
     with open(manifest_path, "w") as outfile:
         for (k, v) in values:
             manifest = f'{k}\t{v}\n'
@@ -1185,73 +764,67 @@ def generate_genome_manifest(genomeInfo, study, manifestsRoot, aliasToSample, ge
         if tpa:
             outfile.write("TPA\ttrue\n")
 
-def file_generator():
+def main():
     ENA_uploader = GenomeUpload()
-
-    uploadDir = ENA_uploader.upload_dir
-    live = ENA_uploader.live
-    tpa = ENA_uploader.tpa
-    webinUser, webinPassword = ENA_uploader.username, ENA_uploader.password
-    genomeType, centre_name = ENA_uploader.genomeType, ENA_uploader.centre_name
     
-    if not live:
-        print("Warning: genome submission is not in live mode, " +
+    if not ENA_uploader.live:
+        logger.warn("Warning: genome submission is not in live mode, " +
             "files will be validated, but not uploaded.")
 
     xmlGenomeFile, xmlSubFile = "genome_samples.xml", "submission.xml"
-    samples_xml = os.path.join(uploadDir, xmlGenomeFile)
-    submissionXmlPath = os.path.join(uploadDir, xmlSubFile)
+    samples_xml = os.path.join(ENA_uploader.upload_dir, xmlGenomeFile)
+    submissionXmlPath = os.path.join(ENA_uploader.upload_dir, xmlSubFile)
     submission_xml = submissionXmlPath
     genomes, manifestInfo = {}, {}
 
     # submission xml existence
     if not os.path.exists(submissionXmlPath):
-        submission_xml = write_submission_xml(uploadDir, centre_name, False)
+        submission_xml = write_submission_xml(ENA_uploader.upload_dir, ENA_uploader.centre_name, False)
 
     # sample xml generation or recovery
     genomes = ENA_uploader.create_genome_dictionary(samples_xml)
         
     # manifests creation
-    manifestDir = os.path.join(uploadDir, "manifests")
+    manifestDir = os.path.join(ENA_uploader.upload_dir, "manifests")
     os.makedirs(manifestDir, exist_ok=True)
     
     accessionsgen = "registered_MAGs.tsv"
-    if genomeType == "bins":
+    if ENA_uploader.genomeType == "bins":
         accessionsgen = accessionsgen.replace("MAG", "bin")
-    if not live:
+    if not ENA_uploader.live:
         accessionsgen = accessionsgen.replace(".tsv", "_test.tsv")
     
-    accessionsFile = os.path.join(uploadDir, accessionsgen)
+    accessionsFile = os.path.join(ENA_uploader.upload_dir, accessionsgen)
     save = False
     writeMode = 'a'
     if os.path.exists(accessionsFile):
-        if not live:
+        if not ENA_uploader.live:
             save = True
             if ENA_uploader.force:
                 writeMode = 'w'
         if not save:
-            print("Genome samples already registered, reading ERS accessions...")
+            logger.info("Genome samples already registered, reading ERS accessions...")
             aliasToNewSampleAccession = getAccessions(accessionsFile)
     else:
         save = True
         
     if save:
-        print("Registering genome samples XMLs...")
-        aliasToNewSampleAccession = handle_genomes_registration(samples_xml, 
-            submission_xml, webinUser, webinPassword, live)
+        logger.info("Registering genome samples XMLs...")
+        aliasToNewSampleAccession = ena.handle_genomes_registration(samples_xml, 
+            submission_xml, ENA_uploader.username, ENA_uploader.password, ENA_uploader.live)
         saveAccessions(aliasToNewSampleAccession, accessionsFile, writeMode)
 
-    print("Generating manifest files...")
+    logger.info("Generating manifest files...")
     
     manifestInfo = compute_manifests(genomes)
 
     for m in manifestInfo:
         generate_genome_manifest(manifestInfo[m], ENA_uploader.upStudy,  
-            manifestDir, aliasToNewSampleAccession, genomeType, tpa)
+            manifestDir, aliasToNewSampleAccession, ENA_uploader.genomeType, ENA_uploader.tpa)
 
 class GenomeUpload:
     def __init__(self, argv=sys.argv[1:]):
-        self.args = parse_args(argv)
+        self.args = self.parse_args(argv)
         self.upStudy = self.args.upload_study
         self.genomeMetadata = self.args.genome_info
         self.genomeType = "bins" if self.args.bins else "MAGs"
@@ -1265,6 +838,41 @@ class GenomeUpload:
         workDir = self.args.out if self.args.out else os.getcwd()
         self.upload_dir = self.generate_genomes_upload_dir(workDir, self.genomeType)
     
+    def parse_args(argv):
+        parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+            description="Allows to create xmls and manifest files for genome upload to ENA. " +
+            "--xmls and --manifests are needed to determine the action the script " +
+            "should perform. The use of more than one option is encouraged. To spare time, " +
+            "-xmls and -manifests should be called only if respective xml or manifest files " +
+            "do not already exist.")
+        
+        parser.add_argument('-u', '--upload_study', type=str, help="Study accession for genomes upload")
+        parser.add_argument('--genome_info', type=str, required=True, help="Genomes metadata file")
+
+        genomeType = parser.add_mutually_exclusive_group(required=True)
+        genomeType.add_argument('-m', '--mags', action='store_true', help="Select for MAG upload")
+        genomeType.add_argument('-b', '--bins', action='store_true', help="Select for bin upload")
+        
+        parser.add_argument('--out', type=str, help="Output folder. Default: working directory")
+        parser.add_argument('--force', action='store_true', help="Forces reset of sample xml's backups")
+        parser.add_argument('--live', action='store_true', help="Uploads on ENA. Omitting this " +
+            "option allows to validate samples beforehand")
+        parser.add_argument('--tpa', action='store_true', help="Select if uploading TPA-generated genomes")
+        
+        parser.add_argument('--webin', required=True, help="Webin id")
+        parser.add_argument('--password', required=True, help="Webin password")
+        parser.add_argument('--centre_name', required=True, help="Name of the centre uploading genomes")
+
+        args = parser.parse_args(argv)
+
+        if not args.upload_study:
+            raise ValueError("No project selected for genome upload [-u, --upload_study].")
+        
+        if not os.path.exists(args.genome_info):
+            raise FileNotFoundError('Genome metadata file "{}" does not exist'.format(args.genome_info))
+
+        return args
+
     def generate_genomes_upload_dir(self, dir, genomeType):
         uploadName = "MAG_upload"
         if genomeType == "bins":
@@ -1274,20 +882,20 @@ class GenomeUpload:
         return upload_dir
 
     def create_genome_dictionary(self, samples_xml):
-        print('Retrieving data for MAG submission...')
+        logger.info('Retrieving data for MAG submission...')
 
         genomeInfo = extract_genomes_info(self.genomeMetadata, self.genomeType, self.live)
         if not os.path.exists(samples_xml) or self.force:
             extract_ENA_info(genomeInfo, self.upload_dir, self.username, self.password)
-            print("\tWriting genome registration XML...")
+            logger.info("Writing genome registration XML...")
             write_genomes_xml(genomeInfo, samples_xml, self.genomeType, 
                               self.centre_name, self.tpa)
-            print("\tAll files have been written to " + self.upload_dir)
+            logger.info("All files have been written to " + self.upload_dir)
         else:
             recover_info_from_xml(genomeInfo, samples_xml, self.live)
 
         return genomeInfo
 
 if __name__ == "__main__":
-    file_generator()
-    print('Completed')
+    main()
+    logger.info('Completed')

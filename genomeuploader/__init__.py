@@ -1,0 +1,1 @@
+__version__ = "0.0.1" # TODO: pin the correct version
