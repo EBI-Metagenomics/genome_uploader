@@ -359,24 +359,24 @@ def extract_tax_info(taxInfo):
             finalKingdom = kingdoms[index]
     
     iterator = len(lineage)-1
-    submittable, searchRankActive = False, True
+    submittable = False
+    rank = ""
     while iterator != -1 and not submittable:
         scientificName = lineage[iterator].strip()
-        if "Unclassified" in scientificName:
+        if "Unclassified " in scientificName:
             if finalKingdom == "Archaea":
-                scientificName = "unclassified archaeon"
+                scientificName = "uncultured archaeon"
             elif finalKingdom == "Bacteria":
-                scientificName = "unclassified bacterium"
+                scientificName = "uncultured bacterium"
             elif finalKingdom == "Eukaryota":
-                scientificName = "unclassified eukaryote"
-            searchRankActive = False
+                scientificName = "uncultured eukaryote"
         elif digitAnnotation:
             scientificName = query_taxid(scientificName)
         elif "__" in scientificName:
             scientificName = scientificName.split("__")[1]
         else:
-            raise ValueError("Unrecognised taxonomy format.")
-        submittable, taxid, rank = query_scientific_name(scientificName, searchRank=searchRankActive)
+            raise ValueError("Unrecognised taxonomy format: " + scientificName)
+        submittable, taxid, rank = query_scientific_name(scientificName, searchRank=True)
 
         if not submittable:
             if finalKingdom == "Archaea":
