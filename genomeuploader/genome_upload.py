@@ -840,7 +840,7 @@ class GenomeUpload:
                 load_dotenv(str(user_config))
             else:
                 cwd_config = Path.cwd() / ".genome_uploader.config"
-                if not cwd_config.exists():
+                if cwd_config.exists():
                     logger.debug(f"Loading the variables from the current directory {Path.cwd()}.genome_uploader.config")
                     load_dotenv(str(cwd_config))
                 else:
