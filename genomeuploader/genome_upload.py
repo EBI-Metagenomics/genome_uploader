@@ -836,7 +836,7 @@ class GenomeUpload:
             # Config file #
             user_config = Path.home() / ".genome_uploader.config"
             if user_config.exists():
-                logger.debug("Loading the env variables from {user_config}")
+                logger.debug(f"Loading the env variables from {user_config}")
                 load_dotenv(str(user_config))
             else:
                 cwd_config = Path.cwd() / ".genome_uploader.config"
