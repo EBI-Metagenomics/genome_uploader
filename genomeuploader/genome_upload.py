@@ -20,8 +20,11 @@ import logging
 import argparse
 import re
 import json
-import pandas as pd
+from pathlib import Path
 from datetime import date, datetime as dt
+
+import pandas as pd
+from dotenv import load_dotenv
 
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
@@ -825,8 +828,33 @@ class GenomeUpload:
         self.genomeMetadata = self.args.genome_info
         self.genomeType = "bins" if self.args.bins else "MAGs"
         self.live = True if self.args.live else False
-        self.username = self.args.webin
-        self.password = self.args.password
+        
+        if self.args.webin and self.args.password:
+            self.username = self.args.webin
+            self.password = self.args.password
+        else:
+            # Config file #
+            user_config = Path.home() / ".genome_uploader.config"
+            if user_config.exists():
+                logger.debug("Loading the env variables from {user_config}")
+                load_dotenv(str(user_config))
+            else:
+                cwd_config = Path.cwd() / ".genome_uploader.config"
+                if not cwd_config.exists():
+                    logger.debug(f"Loading the variables from the current directory {Path.cwd()}.genome_uploader.config")
+                    load_dotenv(str(cwd_config))
+                else:
+                    logger.debug("Trying to load env variables from the .env file")
+                    # from a local .env file
+                    load_dotenv()
+
+            self.username = os.getenv("ENA_WEBIN")
+            self.password = os.getenv("ENA_WEBIN_PASSWORD")
+        
+        if not self.username or not self.password:
+            logger.error("ENA Webin username or password are empty")
+            sys.exit(1)
+
         self.tpa = True if self.args.tpa else False
         self.centre_name = self.args.centre_name
         self.force = True if self.args.force else False
@@ -855,9 +883,10 @@ class GenomeUpload:
             "option allows to validate samples beforehand")
         parser.add_argument('--tpa', action='store_true', help="Select if uploading TPA-generated genomes")
         
-        parser.add_argument('--webin', required=True, help="Webin id")
-        parser.add_argument('--password', required=True, help="Webin password")
-        parser.add_argument('--centre_name', required=True, help="Name of the centre uploading genomes")
+        # Users can provide their credentials and centre name manually or using a config file
+        parser.add_argument('--webin', required=False, help="Webin id")
+        parser.add_argument('--password', required=False, help="Webin password")
+        parser.add_argument('--centre_name', required=False, help="Name of the centre uploading genomes")
 
         args = parser.parse_args(argv)
 
