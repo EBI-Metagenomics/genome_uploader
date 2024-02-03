@@ -29,17 +29,15 @@ from dotenv import load_dotenv
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 
-from .ena import ENA
+from ena import ENA
 
-from .constants import METAGENOMES, GEOGRAPHIC_LOCATIONS, MQ, HQ
+from constants import METAGENOMES, GEOGRAPHIC_LOCATIONS, MQ, HQ
 
 logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
 
 ena = ENA()
-
-
 
 '''
 Input table: expects the following parameters:
@@ -373,20 +371,20 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
         except json.decoder.JSONDecodeError:
             backupDict = {}
         for s in studySet:
-            studyInfo = ena.get_study(webin, password, "", s)
-
-            projectDescription = studyInfo["description"]
+            studyInfo = ena.get_study(webin, password, s)
+            projectDescription = studyInfo["study_description"]
 
             ENA_info = ena.get_study_runs(s, webin, password)
             if ENA_info == []:
                 raise IOError("No runs found on ENA for project {}.".format(s))
+            
             for run, item in enumerate(ENA_info):
                 runAccession = ENA_info[run]["run_accession"]
                 if runAccession not in backupDict:
                     if runAccession in runsSet:
                         sampleAccession = ENA_info[run]["sample_accession"]
                         sampleInfo = ena.get_sample(sampleAccession, webin, password)
-                        
+
                         location = sampleInfo["location"]
                         if 'N' in location:
                             latitude = str(float(location.split('N')[0].strip()))
@@ -450,11 +448,6 @@ def combine_ENA_info(genomeInfo, ENADict):
                 samplesList.append(ENADict[run]["sampleAccession"])
                 longList.append(ENADict[run]["longitude"])
                 latitList.append(ENADict[run]["latitude"])
-            
-            if multipleElementSet(studyList):
-                logger.error("The co-assembly your MAG has been generated from comes from " +
-                "different studies.")
-                sys.exit(1)
 
             genomeInfo[g]["study"] = studyList[0] 
             genomeInfo[g]["description"] = descriptionList[0]
@@ -767,7 +760,7 @@ def main():
     ENA_uploader = GenomeUpload()
     
     if not ENA_uploader.live:
-        logger.warn("Warning: genome submission is not in live mode, " +
+        logger.warning("Warning: genome submission is not in live mode, " +
             "files will be validated, but not uploaded.")
 
     xmlGenomeFile, xmlSubFile = "genome_samples.xml", "submission.xml"

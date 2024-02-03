@@ -23,7 +23,7 @@ from time import sleep
 
 import xml.dom.minidom as minidom
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ SAMPLE_DEFAULT_FIELDS = ','.join([
 STUDY_DEFAULT_FIELDS = ','.join([
     'study_accession',
     'secondary_study_accession',
-    'description',
+    'study_description',
     'study_title'
 ])
 
@@ -119,50 +119,32 @@ class ENA():
         
         return run
 
-    def get_study(self, webin, password, primary_accession=None, secondary_accession=None):
+    def get_study(self, webin, password, study_accession):
         data = self.get_default_params()
-        data['result'] = 'read_study'
+        data['result'] = "study"
         data['fields'] = STUDY_DEFAULT_FIELDS
+        data['query'] = 'study_accession="{}" OR secondary_study_accession="{}"' \
+            .format(study_accession, study_accession)
 
-        if primary_accession and not secondary_accession:
-            data['query'] = 'study_accession="{}"'.format(primary_accession)
-        elif not primary_accession and secondary_accession:
-            data['query'] = 'secondary_study_accession="{}"'.format(secondary_accession)
-        else:
-            data['query'] = 'study_accession="{}" AND secondary_study_accession="{}"' \
-                .format(primary_accession, secondary_accession)
+        data['dataPortal'] = "ena"
 
-        query_params = []
-        for result_type in ['study', 'read_study', 'analysis_study']:
-            for data_portal in ['ena', 'metagenome']:
-                param = data.copy()
-                param['result'] = result_type
-                param['dataPortal'] = data_portal
-                if result_type == 'study':
-                    if 'description' in param['fields']:
-                        param['fields'] = param['fields'].replace('description', 'study_description')
-                query_params.append(param)
-
-        for param in query_params:
+        try:
+            response = self.post_request(data, webin, password)
+            if response.status_code == 204:
+                raise NoDataException()
             try:
-                response = self.post_request(data, webin, password)
-                if response.status_code == 204:
-                    raise NoDataException()
-                try:
-                    study = json.loads(response.text)[0]
-                except (IndexError, TypeError, ValueError, KeyError) as e:
-                    raise e
-                if data['result'] == 'study':
-                    if 'study_description' in study:
-                        study['description'] = study.pop('study_description')
-                return study
-            except NoDataException:
-                print("No info found to fetch study with params {}".format(param))
-                pass
-            except (IndexError, TypeError, ValueError, KeyError):
-                print("Failed to fetch study with params {}, returned error: {}".format(param, response.text))
+                studyList = response.json()
+                assert len(studyList) == 1
+                study = studyList[0]
+            except (IndexError, TypeError, ValueError, KeyError) as e:
+                raise e
+            return study
+        except NoDataException:
+            print("No info found to fetch study {}".format(study_accession))
+        except (IndexError, TypeError, ValueError, KeyError):
+            print("Failed to fetch study {}, returned error: {}".format(study_accession, response.text))
 
-        raise ValueError('Could not find study {} {} in ENA.'.format(primary_accession, secondary_accession))
+        raise ValueError('Could not find study {} in ENA.'.format(study_accession))
 
     def get_study_runs(self, study_acc, webin, password, fields=None, search_params=None):
         data = self.get_default_params()
@@ -182,7 +164,7 @@ class ENA():
             return []
 
         try:
-            runs = json.loads(response.text)
+            runs = response.json()
         except:
             raise ValueError("Query against ENA API did not work. Returned "
                 "message: {}".format(response.text))
@@ -202,7 +184,9 @@ class ENA():
         response = self.post_request(data, webin, password)
         
         if response.status_code == 200:
-            return response.json()
+            sample = response.json()
+            assert len(sample) == 1 
+            return sample[0]
 
         if response.status_code == 204:
             if attempt < 2:
@@ -216,7 +200,6 @@ class ENA():
         else:
             raise ValueError("Could not retrieve sample with accession {}. "
                 "Returned message: {}".format(sample_accession, response.text))
-
 
     def query_taxid(self, taxid):
         url = "https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{}".format(taxid)
