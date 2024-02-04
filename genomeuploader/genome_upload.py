@@ -494,8 +494,6 @@ def combine_ENA_info(genomeInfo, ENADict):
         
         genomeInfo[g]["accessions"] = ','.join(genomeInfo[g]["accessions"])
 
-
-
 def getAccessions(accessionsFile):
     accessionDict = {}
     with open(accessionsFile, 'r') as f:
@@ -826,15 +824,15 @@ class GenomeUpload:
             self.username = self.args.webin
             self.password = self.args.password
         else:
-            # Config file #
-            user_config = Path.home() / ".genome_uploader.config"
+            # Config file
+            user_config = Path.home() / ".genome_uploader.config.env"
             if user_config.exists():
-                logger.debug(f"Loading the env variables from {user_config}")
+                logger.debug("Loading the env variables from ".format(user_config))
                 load_dotenv(str(user_config))
             else:
-                cwd_config = Path.cwd() / ".genome_uploader.config"
+                cwd_config = Path.cwd() / ".genome_uploader.config.env"
                 if cwd_config.exists():
-                    logger.debug(f"Loading the variables from the current directory {Path.cwd()}.genome_uploader.config")
+                    logger.debug("Loading the variables from the current directory.")
                     load_dotenv(str(cwd_config))
                 else:
                     logger.debug("Trying to load env variables from the .env file")
@@ -857,11 +855,7 @@ class GenomeUpload:
     
     def parse_args(self, argv):
         parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
-            description="Allows to create xmls and manifest files for genome upload to ENA. " +
-            "--xmls and --manifests are needed to determine the action the script " +
-            "should perform. The use of more than one option is encouraged. To spare time, " +
-            "-xmls and -manifests should be called only if respective xml or manifest files " +
-            "do not already exist.")
+            description="Create xmls and manifest files for genome upload to ENA. ")
         
         parser.add_argument('-u', '--upload_study', type=str, help="Study accession for genomes upload")
         parser.add_argument('--genome_info', type=str, required=True, help="Genomes metadata file")
