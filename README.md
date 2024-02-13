@@ -47,7 +47,7 @@ The script needs `python`, `pandas`, `requests`, and `ena-webin-cli` to run. We 
 ```bash
 # Create environment and install requirements
 conda env create -f requirements.yml
-conda activate genomeUploader
+conda activate genome_uploader
 ```
 
 You can generate pre-upload files with:

@@ -1,4 +1,4 @@
-name: genomeUploader
+name: genome_uploader
 channels:
   - bioconda
   - conda-forge
