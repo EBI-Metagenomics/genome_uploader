@@ -180,33 +180,48 @@ def compute_MAG_quality(completeness, contamination, RNApresence):
     return quality, completeness, contamination
 
 def extract_tax_info(taxInfo):
+    # if unclassified, block the execution
+    lineage, position, digitAnnotation = taxInfo.split(';'), 0, False
+    print(lineage)
+    lineageFirst = lineage[0]
+    if "Unclassified " in lineageFirst:
+        if "Archaea" in lineageFirst:
+            scientificName = "uncultured archaeon"
+        elif "Bacteria" in lineageFirst:
+            scientificName = "uncultured bacterium"
+        elif "Eukaryota" in lineageFirst:
+            scientificName = "uncultured eukaryote"
+        submittable, taxid, rank = ena.query_scientific_name(scientificName, searchRank=True)
+        return taxid, scientificName
+
     kingdoms = ["Archaea", "Bacteria", "Eukaryota"]
     kingdomTaxa = ["2157", "2", "2759"]
-    lineage, position, digitAnnotation = taxInfo.split(';'), 0, False
 
     selectedKingdom, finalKingdom = kingdoms, ""
-    if lineage[-1].isdigit():
+    if lineage[1].isdigit():
         selectedKingdom = kingdomTaxa
-        position = 1
+        position = 2
         digitAnnotation = True
     for index, k in enumerate(selectedKingdom):
-        if k in lineage[position]:
-            finalKingdom = kingdoms[index]
-    
+        if digitAnnotation:
+            if k == lineage[position]:
+                finalKingdom = kingdoms[index]
+                break
+        else:
+            if k in lineage[position]:
+                finalKingdom = kingdoms[index]
+                break
+
     iterator = len(lineage)-1
     submittable = False
     rank = ""
     while iterator != -1 and not submittable:
         scientificName = lineage[iterator].strip()
-        if "Unclassified " in scientificName:
-            if finalKingdom == "Archaea":
-                scientificName = "uncultured archaeon"
-            elif finalKingdom == "Bacteria":
-                scientificName = "uncultured bacterium"
-            elif finalKingdom == "Eukaryota":
-                scientificName = "uncultured eukaryote"
-        elif digitAnnotation:
-            scientificName = ena.query_taxid(scientificName)
+        if digitAnnotation:
+            if not '*' in scientificName:
+                scientificName = ena.query_taxid(scientificName)
+            else:
+                iterator -= 1
         elif "__" in scientificName:
             scientificName = scientificName.split("__")[1]
         else:
