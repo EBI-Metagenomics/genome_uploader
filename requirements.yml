@@ -4,6 +4,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
+  - python=3.10
   - requests=2.26.0
   - pandas=1.4.1
   - ena-webin-cli
