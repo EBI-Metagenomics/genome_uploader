@@ -367,7 +367,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
         try:
             backupDict = json.load(file)
             tempDict = dict(backupDict)
-            logger.info("A backup file for ENA sample metadata has been found.")
+            logger.info(f"A backup file {backupFile} for ENA sample metadata has been found.")
         except json.decoder.JSONDecodeError:
             backupDict = {}
         for s in studySet:
@@ -382,21 +382,32 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                 runAccession = ENA_info[run]["run_accession"]
                 if runAccession not in backupDict:
                     if runAccession in runsSet:
-                        provided = True
                         sampleAccession = ENA_info[run]["sample_accession"]
                         sampleInfo = ena.get_sample(sampleAccession, webin, password)
 
                         location = sampleInfo["location"]
+                        latitude, longitude = None, None
                         if 'N' in location:
-                            latitude = str(round(float(location.split('N')[0].strip()), GEOGRAPHY_DIGIT_COORDS))
-                            longitude = str(round(float(location.split('N')[1].strip()), GEOGRAPHY_DIGIT_COORDS))
+                            latitude = location.split('N')[0].strip()
+                            longitude = location.split('N')[1].strip()
                         elif 'S' in location:
-                            latitude = '-' + str(round(float(location.split('S')[0].strip()), GEOGRAPHY_DIGIT_COORDS))
-                            longitude = str(round(float(location.split('S')[1].strip()), GEOGRAPHY_DIGIT_COORDS))
+                            latitude = '-' + location.split('S')[0].strip()
+                            longitude = location.split('S')[1].strip()
+
+                        if 'W' in longitude:
+                            longitude = '-' + longitude.split('W')[0].strip()
+                        elif longitude.endswith('E'):
+                            longitude = longitude.split('E')[0].strip()
+
+                        if latitude:
+                            latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
                         else:
                             latitude = "not provided"
+
+                        if longitude:
+                            longitude = "{:.{}f}".format(round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
+                        else:
                             longitude = "not provided"
-                            provided = False
 
                         if 'W' in longitude:
                             longitude = '-' + str(round(float(longitude.split('W')[0].strip()), GEOGRAPHY_DIGIT_COORDS))
@@ -410,7 +421,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                         collectionDate = sampleInfo["collection_date"]
                         if collectionDate == "":
                             collectionDate = "not provided"
-                        
+
                         tempDict[runAccession] = {
                             "instrumentModel" : ENA_info[run]["instrument_model"],
                             "collectionDate" : collectionDate,
@@ -427,7 +438,6 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                             file.seek(0)
                             file.write(json.dumps(tempDict))
                             file.truncate()
-    
     tempDict = {**tempDict, **backupDict}
     combine_ENA_info(genomeInfo, tempDict)
 
@@ -472,12 +482,12 @@ def combine_ENA_info(genomeInfo, ENADict):
             latitude = latitList[0]
             if multipleElementSet(latitList):
                 latitude = "not provided"
-            genomeInfo[g]["latitude"] = latitude
+            genomeInfo[g]["latitude"] = str(round(float(latitude), GEOGRAPHY_DIGIT_COORDS))
 
             longitude = longList[0]
             if multipleElementSet(longList):
                 longitude = "not provided"
-            genomeInfo[g]["longitude"] = longitude
+            genomeInfo[g]["longitude"] = str(round(float(longitude), GEOGRAPHY_DIGIT_COORDS))
 
             samples = samplesList[0]
             if multipleElementSet(samplesList):
@@ -615,6 +625,7 @@ def create_sample_attribute(sample_attributes, data_list, mag_data=None):
     new_sample_attr = ET.SubElement(sample_attributes, "SAMPLE_ATTRIBUTE")
     ET.SubElement(new_sample_attr, 'TAG').text = tag
     ET.SubElement(new_sample_attr, 'VALUE').text = value
+
     if units:
         ET.SubElement(new_sample_attr, 'UNITS').text = units
 
@@ -879,9 +890,11 @@ class GenomeUpload:
         logger.info('Retrieving data for MAG submission...')
 
         genomeInfo = extract_genomes_info(self.genomeMetadata, self.genomeType, self.live)
+
         if not os.path.exists(samples_xml) or self.force:
             extract_ENA_info(genomeInfo, self.upload_dir, self.username, self.password)
             logger.info("Writing genome registration XML...")
+
             write_genomes_xml(genomeInfo, samples_xml, self.genomeType, 
                               self.centre_name, self.tpa)
             logger.info("All files have been written to " + self.upload_dir)
