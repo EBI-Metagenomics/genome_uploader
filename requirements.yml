@@ -9,4 +9,3 @@ dependencies:
   - pandas=1.4.1
   - ena-webin-cli
   - python-dotenv=1.0.1
-
