@@ -579,12 +579,13 @@ def recover_info_from_xml(genomeDict, sample_xml, live_mode):
 
         # extract alias from xml and find a match with genomes the user is uploading
         XMLalias = s.attributes["alias"].value
-        aliasSplit = XMLalias.split("_")
-        XMLgenomeName = '_'.join(aliasSplit[:-1])
+        if not live_mode:         # remove time stamp if test mode is selected
+            aliasSplit = XMLalias.split("_")
+            XMLalias = '_'.join(aliasSplit[:-1])
         for gen in genomeDict:
             # if match is found, associate attributes listed in the xml file
             # with genomes to upload
-            if XMLgenomeName == gen:
+            if XMLalias == gen:
                 if not live_mode:
                     currentTimestamp = str(int(dt.timestamp(dt.now())))
                     XMLalias = gen + '_' + currentTimestamp
