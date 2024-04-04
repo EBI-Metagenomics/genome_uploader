@@ -206,11 +206,11 @@ def extract_tax_info(taxInfo):
     for index, k in enumerate(selectedKingdom):
         if digitAnnotation:
             if k == lineage[position]:
-                finalKingdom = kingdoms[index]
+                finalKingdom = selectedKingdom[index]
                 break
         else:
             if k in lineage[position]:
-                finalKingdom = kingdoms[index]
+                finalKingdom = selectedKingdom[index]
                 break
 
     iterator = len(lineage)-1
@@ -223,6 +223,7 @@ def extract_tax_info(taxInfo):
                 scientificName = ena.query_taxid(scientificName)
             else:
                 iterator -= 1
+                continue
         elif "__" in scientificName:
             scientificName = scientificName.split("__")[1]
         else:
@@ -230,12 +231,13 @@ def extract_tax_info(taxInfo):
         submittable, taxid, rank = ena.query_scientific_name(scientificName, searchRank=True)
 
         if not submittable:
-            if finalKingdom == "Archaea":
+            if finalKingdom == "Archaea" or finalKingdom == "2157":
                 submittable, scientificName, taxid = extract_Archaea_info(scientificName, rank)
-            elif finalKingdom == "Bacteria":
+            elif finalKingdom == "Bacteria" or finalKingdom == "2":
                 submittable, scientificName, taxid = extract_Bacteria_info(scientificName, rank)
-            elif finalKingdom == "Eukaryota":
+            elif finalKingdom == "Eukaryota" or finalKingdom == "2759":
                 submittable, scientificName, taxid = extract_Eukaryota_info(scientificName, rank)
+
         iterator -= 1
 
     return taxid, scientificName
