@@ -95,7 +95,6 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
     accessionComparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", 
         "correct", "mismatching", "co-assembly"])
     accessionComparison["genome_name"] = metadata["genome_name"]
-    accessionComparison["co-assembly"] = metadata["co-assembly"]
 
     accessionComparison["attemptive_accessions"] = metadata["accessions"].map(
         lambda a: len(a.split(',')))
@@ -121,6 +120,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
         raise ValueError("Completeness, contamination or coverage values should be formatted as floats")
 
     # check whether all co-assemblies have more than one run associated and viceversa
+    accessionComparison["co-assembly"] = metadata["co-assembly"]
     coassemblyDiscrepancy = metadata[(
         (accessionComparison["correct"] < 2) & (accessionComparison["co-assembly"])) |
         ((accessionComparison["correct"] > 1) & (~accessionComparison["co-assembly"])
@@ -333,11 +333,12 @@ def extract_genomes_info(inputFile, genomeType, live):
         genomeInfo[gen]["isolationSource"] = genomeInfo[gen]["metagenome"]
         
         try:
-            quality, compl, cont = compute_MAG_quality(genomeInfo[gen]["completeness"],
-                genomeInfo[gen]["contamination"], genomeInfo[gen]["rRNA_presence"])
+            genomeInfo[gen]["completeness"] = str(round_stats(genomeInfo[gen]["completeness"]))
+            genomeInfo[gen]["contamination"] = str(round_stats(genomeInfo[gen]["contamination"]))
+
+            quality = compute_MAG_quality(genomeInfo[gen]["completeness"],
+                 genomeInfo[gen]["contamination"], genomeInfo[gen]["rRNA_presence"])
             genomeInfo[gen]["MAG_quality"] = quality
-            genomeInfo[gen]["completeness"] = compl
-            genomeInfo[gen]["contamination"] = cont
         except IndexError:
             pass
 
