@@ -1,9 +1,11 @@
-name: genomeUploader
+name: genome_uploader
 channels:
   - bioconda
+  - conda-forge
   - defaults
 dependencies:
+  - python=3.10
   - requests=2.26.0
   - pandas=1.4.1
   - ena-webin-cli
-
+  - python-dotenv=1.0.1
