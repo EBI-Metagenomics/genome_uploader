@@ -1,5 +1,6 @@
 [project]
 name = "genomeuploader"
+version = "2.0.0"
 readme = "README.md"
 authors = [
   {name = "MGnify team", email = "metagenomics-help@ebi.ac.uk"},
@@ -23,8 +24,13 @@ classifiers = [
 dependencies = [
     "requests==2.26.0",
     "pandas==1.4.1",
-    "python-dotenv==1.0.1"
+    "python-dotenv==1.0.1",
+    "ena-webin-cli"
 ]
+
+[project.urls]
+Homepage = "https://github.com/EBI-Metagenomics/genome_uploader"
+Issues = "https://github.com/EBI-Metagenomics/genome_uploader/issues"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
