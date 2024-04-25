@@ -1,0 +1,12 @@
+{
+    "ERR6769700": {
+        "instrumentModel": "DNBSEQ-G400", 
+        "collectionDate": "2019-10-15", 
+        "country": "Spain", 
+        "latitude": "41.170048", 
+        "longitude": "1.168491", 
+        "projectDescription": "Metagenomic raw reads, assemblies, and bins derived from HoloFood chicken ileum samples. Samples selected for this batch were deeply sequenced, and were randomised among trials (feed), age, and breed to overcome batch effect. The samples in this project contributed to the chicken ileum MAG catalogue (project: PRJEB55375 [ERP140264]).", 
+        "study": "ERP131894", 
+        "assembler": "not provided", 
+        "sampleAccession": "SAMEA10130103"}
+}

@@ -173,11 +173,8 @@ def round_stats(stats):
 def compute_MAG_quality(completeness, contamination, RNApresence):
     RNApresent = str(RNApresence).lower() in ["true", "yes", "y"]
     quality = MQ
-    if completeness >= 90 and contamination <= 5 and RNApresent:
+    if float(completeness) >= 90 and float(contamination) <= 5 and RNApresent:
         quality = HQ
-    
-    completeness = str(round_stats(completeness))
-    contamination = str(round_stats(contamination))
 
     return quality, completeness, contamination
 
@@ -333,12 +330,12 @@ def extract_genomes_info(inputFile, genomeType, live):
         genomeInfo[gen]["isolationSource"] = genomeInfo[gen]["metagenome"]
         
         try:
-            genomeInfo[gen]["completeness"] = str(round_stats(genomeInfo[gen]["completeness"]))
-            genomeInfo[gen]["contamination"] = str(round_stats(genomeInfo[gen]["contamination"]))
-
-            quality = compute_MAG_quality(genomeInfo[gen]["completeness"],
-                 genomeInfo[gen]["contamination"], genomeInfo[gen]["rRNA_presence"])
-            genomeInfo[gen]["MAG_quality"] = quality
+            (genomeInfo[gen]["MAG_quality"], 
+            genomeInfo[gen]["completeness"], 
+            genomeInfo[gen]["contamination"]) = compute_MAG_quality(
+                                    str(round_stats(genomeInfo[gen]["completeness"])),
+                                    str(round_stats(genomeInfo[gen]["contamination"])), 
+                                    genomeInfo[gen]["rRNA_presence"])
         except IndexError:
             pass
 

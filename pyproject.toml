@@ -26,6 +26,14 @@ dependencies = [
     "python-dotenv==1.0.1"
 ]
 
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+    "integration",
+]
+
 [project.optional-dependencies]
 dev = [
     "pre-commit==3.3.3",
@@ -59,9 +67,6 @@ ignore = [
     "S308", # flake8-bandit suspicious-mark-safe-usage
     "E501", # pycodestyle line-too-long
 ]
-line-length = 140
-src = ["fetchtool", "tests"]
-target-version = "py38"
 
 [tool.ruff.flake8-pytest-style]
 fixture-parentheses = false
@@ -83,5 +88,5 @@ current_version = "0.9.0"
 commit = true
 tag = true
 
-[[tool.bumpversion.files]]
+[tool.bumpversion.files]
 filename = "genomeuploader/__init__.py"
