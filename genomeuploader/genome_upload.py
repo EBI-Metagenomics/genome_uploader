@@ -22,6 +22,8 @@ import re
 import json
 import pandas as pd
 from datetime import date, datetime as dt
+from dotenv import load_dotenv
+from pathlib import Path
 
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
@@ -93,7 +95,6 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
     accessionComparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", 
         "correct", "mismatching", "co-assembly"])
     accessionComparison["genome_name"] = metadata["genome_name"]
-    accessionComparison["co-assembly"] = metadata["co-assembly"]
 
     accessionComparison["attemptive_accessions"] = metadata["accessions"].map(
         lambda a: len(a.split(',')))
@@ -119,6 +120,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
         raise ValueError("Completeness, contamination or coverage values should be formatted as floats")
 
     # check whether all co-assemblies have more than one run associated and viceversa
+    accessionComparison["co-assembly"] = metadata["co-assembly"]
     coassemblyDiscrepancy = metadata[(
         (accessionComparison["correct"] < 2) & (accessionComparison["co-assembly"])) |
         ((accessionComparison["correct"] > 1) & (~accessionComparison["co-assembly"])
@@ -171,42 +173,54 @@ def round_stats(stats):
 def compute_MAG_quality(completeness, contamination, RNApresence):
     RNApresent = str(RNApresence).lower() in ["true", "yes", "y"]
     quality = MQ
-    if completeness >= 90 and contamination <= 5 and RNApresent:
+    if float(completeness) >= 90 and float(contamination) <= 5 and RNApresent:
         quality = HQ
     
-    completeness = str(round_stats(completeness))
-    contamination = str(round_stats(contamination))
-
     return quality, completeness, contamination
 
 def extract_tax_info(taxInfo):
+    # if unclassified, block the execution
+    lineage, position, digitAnnotation = taxInfo.split(';'), 0, False
+    lineageFirst = lineage[0]
+    if "Unclassified " in lineageFirst:
+        if "Archaea" in lineageFirst:
+            scientificName = "uncultured archaeon"
+        elif "Bacteria" in lineageFirst:
+            scientificName = "uncultured bacterium"
+        elif "Eukaryota" in lineageFirst:
+            scientificName = "uncultured eukaryote"
+        submittable, taxid, rank = ena.query_scientific_name(scientificName, searchRank=True)
+        return taxid, scientificName
+
     kingdoms = ["Archaea", "Bacteria", "Eukaryota"]
     kingdomTaxa = ["2157", "2", "2759"]
-    lineage, position, digitAnnotation = taxInfo.split(';'), 0, False
 
     selectedKingdom, finalKingdom = kingdoms, ""
-    if lineage[-1].isdigit():
+    if lineage[1].isdigit():
         selectedKingdom = kingdomTaxa
-        position = 1
+        position = 2
         digitAnnotation = True
     for index, k in enumerate(selectedKingdom):
-        if k in lineage[position]:
-            finalKingdom = kingdoms[index]
+        if digitAnnotation:
+            if k == lineage[position]:
+                finalKingdom = selectedKingdom[index]
+                break
+        else:
+            if k in lineage[position]:
+                finalKingdom = selectedKingdom[index]
+                break
     
     iterator = len(lineage)-1
     submittable = False
     rank = ""
     while iterator != -1 and not submittable:
         scientificName = lineage[iterator].strip()
-        if "Unclassified " in scientificName:
-            if finalKingdom == "Archaea":
-                scientificName = "uncultured archaeon"
-            elif finalKingdom == "Bacteria":
-                scientificName = "uncultured bacterium"
-            elif finalKingdom == "Eukaryota":
-                scientificName = "uncultured eukaryote"
-        elif digitAnnotation:
-            scientificName = ena.query_taxid(scientificName)
+        if digitAnnotation:
+            if not '*' in scientificName:
+                scientificName = ena.query_taxid(scientificName)
+            else:
+                iterator -= 1
+                continue
         elif "__" in scientificName:
             scientificName = scientificName.split("__")[1]
         else:
@@ -214,11 +228,11 @@ def extract_tax_info(taxInfo):
         submittable, taxid, rank = ena.query_scientific_name(scientificName, searchRank=True)
 
         if not submittable:
-            if finalKingdom == "Archaea":
+            if finalKingdom == "Archaea" or finalKingdom == "2157":
                 submittable, scientificName, taxid = extract_Archaea_info(scientificName, rank)
-            elif finalKingdom == "Bacteria":
+            elif finalKingdom == "Bacteria" or finalKingdom == "2":
                 submittable, scientificName, taxid = extract_Bacteria_info(scientificName, rank)
-            elif finalKingdom == "Eukaryota":
+            elif finalKingdom == "Eukaryota" or finalKingdom == "2759":
                 submittable, scientificName, taxid = extract_Eukaryota_info(scientificName, rank)
         iterator -= 1
 
@@ -315,11 +329,12 @@ def extract_genomes_info(inputFile, genomeType, live):
         genomeInfo[gen]["isolationSource"] = genomeInfo[gen]["metagenome"]
         
         try:
-            quality, compl, cont = compute_MAG_quality(genomeInfo[gen]["completeness"],
-                genomeInfo[gen]["contamination"], genomeInfo[gen]["rRNA_presence"])
-            genomeInfo[gen]["MAG_quality"] = quality
-            genomeInfo[gen]["completeness"] = compl
-            genomeInfo[gen]["contamination"] = cont
+            (genomeInfo[gen]["MAG_quality"], 
+            genomeInfo[gen]["completeness"], 
+            genomeInfo[gen]["contamination"]) = compute_MAG_quality(
+                                    str(round_stats(genomeInfo[gen]["completeness"])),
+                                    str(round_stats(genomeInfo[gen]["contamination"])), 
+                                    genomeInfo[gen]["rRNA_presence"])
         except IndexError:
             pass
 
@@ -408,18 +423,13 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                             longitude = "{:.{}f}".format(round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
                         else:
                             longitude = "not provided"
-
-                        if 'W' in longitude:
-                            longitude = '-' + str(round(float(longitude.split('W')[0].strip()), GEOGRAPHY_DIGIT_COORDS))
-                        elif longitude.endswith('E'):
-                            longitude = str(round(float(longitude.split('E')[0].strip()), GEOGRAPHY_DIGIT_COORDS))
-                        
+ 
                         country = sampleInfo["country"].split(':')[0]
                         if not country in GEOGRAPHIC_LOCATIONS:
                             country = "not provided"
                         
                         collectionDate = sampleInfo["collection_date"]
-                        if collectionDate == "":
+                        if collectionDate == "" or collectionDate == "missing":
                             collectionDate = "not provided"
 
                         tempDict[runAccession] = {
@@ -568,12 +578,13 @@ def recover_info_from_xml(genomeDict, sample_xml, live_mode):
 
         # extract alias from xml and find a match with genomes the user is uploading
         XMLalias = s.attributes["alias"].value
-        aliasSplit = XMLalias.split("_")
-        XMLgenomeName = '_'.join(aliasSplit[:-1])
+        if not live_mode:         # remove time stamp if test mode is selected
+            aliasSplit = XMLalias.split("_")
+            XMLalias = '_'.join(aliasSplit[:-1])
         for gen in genomeDict:
             # if match is found, associate attributes listed in the xml file
             # with genomes to upload
-            if XMLgenomeName == gen:
+            if XMLalias == gen:
                 if not live_mode:
                     currentTimestamp = str(int(dt.timestamp(dt.now())))
                     XMLalias = gen + '_' + currentTimestamp
@@ -834,8 +845,33 @@ class GenomeUpload:
         self.genomeMetadata = self.args.genome_info
         self.genomeType = "bins" if self.args.bins else "MAGs"
         self.live = True if self.args.live else False
-        self.username = self.args.webin
-        self.password = self.args.password
+        
+        if self.args.webin and self.args.password:
+            self.username = self.args.webin
+            self.password = self.args.password
+        else:
+            # Config file
+            user_config = Path.home() / ".genome_uploader.config.env"
+            if user_config.exists():
+                logger.debug("Loading the env variables from ".format(user_config))
+                load_dotenv(str(user_config))
+            else:
+                cwd_config = Path.cwd() / ".genome_uploader.config.env"
+                if cwd_config.exists():
+                    logger.debug("Loading the variables from the current directory.")
+                    load_dotenv(str(cwd_config))
+                else:
+                    logger.debug("Trying to load env variables from the .env file")
+                    # from a local .env file
+                    load_dotenv()
+
+            self.username = os.getenv("ENA_WEBIN")
+            self.password = os.getenv("ENA_WEBIN_PASSWORD")
+        
+        if not self.username or not self.password:
+            logger.error("ENA Webin username or password are empty")
+            sys.exit(1)
+
         self.tpa = True if self.args.tpa else False
         self.centre_name = self.args.centre_name
         self.force = True if self.args.force else False
@@ -843,13 +879,9 @@ class GenomeUpload:
         workDir = self.args.out if self.args.out else os.getcwd()
         self.upload_dir = self.generate_genomes_upload_dir(workDir, self.genomeType)
     
-    def parse_args(argv):
+    def parse_args(self, argv):
         parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
-            description="Allows to create xmls and manifest files for genome upload to ENA. " +
-            "--xmls and --manifests are needed to determine the action the script " +
-            "should perform. The use of more than one option is encouraged. To spare time, " +
-            "-xmls and -manifests should be called only if respective xml or manifest files " +
-            "do not already exist.")
+            description="Create xmls and manifest files for genome upload to ENA")
         
         parser.add_argument('-u', '--upload_study', type=str, help="Study accession for genomes upload")
         parser.add_argument('--genome_info', type=str, required=True, help="Genomes metadata file")
@@ -864,9 +896,10 @@ class GenomeUpload:
             "option allows to validate samples beforehand")
         parser.add_argument('--tpa', action='store_true', help="Select if uploading TPA-generated genomes")
         
-        parser.add_argument('--webin', required=True, help="Webin id")
-        parser.add_argument('--password', required=True, help="Webin password")
-        parser.add_argument('--centre_name', required=True, help="Name of the centre uploading genomes")
+        # Users can provide their credentials and centre name manually or using a config file
+        parser.add_argument('--webin', required=False, help="Webin id")
+        parser.add_argument('--password', required=False, help="Webin password")
+        parser.add_argument('--centre_name', required=False, help="Name of the centre uploading genomes")
 
         args = parser.parse_args(argv)
 
