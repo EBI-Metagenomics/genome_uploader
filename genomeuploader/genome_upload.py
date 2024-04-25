@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 
 ena = ENA()
 
+GEOGRAPHY_DIGIT_COORDS = 8
+
 '''
 Input table: expects the following parameters:
     genome_name: genome file name
@@ -386,27 +388,21 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
 
                         location = sampleInfo["location"]
                         if 'N' in location:
-                            latitude = str(float(location.split('N')[0].strip()))
-                            longitude = location.split('N')[1].strip()
+                            latitude = str(round(float(location.split('N')[0].strip()), GEOGRAPHY_DIGIT_COORDS))
+                            longitude = str(round(float(location.split('N')[1].strip()), GEOGRAPHY_DIGIT_COORDS))
                         elif 'S' in location:
-                            latitude = '-' + str(float(location.split('S')[0].strip()))
-                            longitude = location.split('S')[1].strip()
+                            latitude = '-' + str(round(float(location.split('S')[0].strip()), GEOGRAPHY_DIGIT_COORDS))
+                            longitude = str(round(float(location.split('S')[1].strip()), GEOGRAPHY_DIGIT_COORDS))
                         else:
                             latitude = "not provided"
                             longitude = "not provided"
                             provided = False
 
                         if 'W' in longitude:
-                            longitude = '-' + str(float(longitude.split('W')[0].strip()))
+                            longitude = '-' + str(round(float(longitude.split('W')[0].strip()), GEOGRAPHY_DIGIT_COORDS))
                         elif longitude.endswith('E'):
-                            longitude = str(float(longitude.split('E')[0].strip()))
-
-                        if provided:
-                            if len(latitude) > 11:
-                                latitude = latitude[:11]
-                            if len(longitude) > 11:
-                                longitude = longitude[:11]
-
+                            longitude = str(round(float(longitude.split('E')[0].strip()), GEOGRAPHY_DIGIT_COORDS))
+                        
                         country = sampleInfo["country"].split(':')[0]
                         if not country in GEOGRAPHIC_LOCATIONS:
                             country = "not provided"
