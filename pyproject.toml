@@ -60,9 +60,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["genomeuploader"]
 
-[tool.setuptools.dynamic]
-version = {attr = "genomeuploader.__version__"}
-
 [project.scripts]
 genome_upload = "genomeuploader.genome_upload:main"
 
