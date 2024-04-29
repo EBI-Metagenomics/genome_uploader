@@ -23,8 +23,7 @@ classifiers = [
 dependencies = [
     "requests==2.26.0",
     "pandas==1.4.1",
-    "python-dotenv==1.0.1",
-    "ena-webin-cli>=7.0.0"
+    "python-dotenv==1.0.1"
 ]
 
 [project.urls]
