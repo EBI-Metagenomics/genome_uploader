@@ -1,13 +1,11 @@
 [project]
 name = "genomeuploader"
-version = "2.0.0"
 readme = "README.md"
 authors = [
   {name = "MGnify team", email = "metagenomics-help@ebi.ac.uk"},
 ]
 license = {text = "Apache Software License 2.0"}
 keywords = ["bioinformatics", "tool", "metagenomics"]
-dynamic = ["version"]
 description = "Python script to upload bins and MAGs in fasta format to ENA (European Nucleotide Archive). This script generates xmls and manifests necessary for submission with webin-cli."
 requires-python = ">=3.8"
 classifiers = [

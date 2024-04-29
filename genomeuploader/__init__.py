@@ -1,2 +1,1 @@
-from importlib.metadata import version
-__version__ = version("genomeuploader")
+__version__ = '2.0.0'
