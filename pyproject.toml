@@ -1,5 +1,5 @@
 [project]
-name = "genomeuploader"
+name = "genome_uploader"
 version = "2.0.0"
 readme = "README.md"
 authors = [
