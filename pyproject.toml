@@ -47,7 +47,9 @@ dev = [
     "bump-my-version==0.9.2",
 ]
 test = [
-    "pytest==7.1.2",
+    "pytest==7.4.0",
+    "pytest-md==0.2.0",
+    "pytest-workflow==2.0.1",
     "pytest-cov==3.0.0",
 ]
 
