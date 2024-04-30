@@ -2,7 +2,7 @@ name: Run pytest
 
 on:
   push:
-    branches: [main, feature/bioconda_package]
+    branches: [main]
   pull_request:
     branches: [main]
 
