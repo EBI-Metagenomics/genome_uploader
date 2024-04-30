@@ -20,5 +20,8 @@ jobs:
         run: |
           pip install .[test]
       - name: 🧪 - Testing
+        env:
+          ENA_WEBIN: ${{ secrets.ENA_WEBIN }}
+          ENA_WEBIN_PASSWORD: ${{ secrets.ENA_WEBIN_PASSWORD }}
         run: |
           pytest -v
