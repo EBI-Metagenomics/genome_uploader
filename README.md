@@ -16,7 +16,7 @@ With columns indicating:
   * _stats_generation_software_: software_vX.X
   * _completeness_: `float`
   * _contamination_: `float`
-  * _rRNA_presence_: `True/False` if 5S, 16S, and 23S genes, and at least 18 tRNA genes, have been detected in the genome
+  * _rRNA_presence_: `True/False` if all among 5S, 16S, and 23S genes, and at least 18 tRNA genes, have been detected in the genome
   * _NCBI_lineage_: full NCBI lineage, either in tax ids (`integers`) or `strings`. Format: x;y;z;...
   * _metagenome_: needs to be listed in the taxonomy tree [here](<https://www.ebi.ac.uk/ena/browser/view/408169?show=tax-tree>) (you might need to press "Tax tree - Show" in the right most section of the page)
   * _co-assembly_: `True/False`, whether the genome was generated from a co-assembly. N.B. the script only supports co-assemblies generated from the same project.
@@ -53,7 +53,7 @@ conda activate genome_uploader
 You can generate pre-upload files with:
 
 ```bash
-python genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --webin WEBIN_ID --password PASSWORD --centre_name CENTRE_NAME [--out] [--force] [--live] [--tpa]
+python genomeuploader/genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --webin WEBIN_ID --password PASSWORD --centre_name CENTRE_NAME [--out] [--force] [--live] [--tpa]
 ```
 
 where
