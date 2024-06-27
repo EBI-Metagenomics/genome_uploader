@@ -23,7 +23,7 @@ classifiers = [
 dependencies = [
     "requests==2.26.0",
     "pandas==1.4.1",
-    "python-dotenv==1.0.1"
+    "python-dotenv==1.0.1",
     "numpy==1.26.4"
 ]
 
