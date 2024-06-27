@@ -7,5 +7,6 @@ dependencies:
   - python=3.10
   - requests=2.26.0
   - pandas=1.4.1
+  - numpy=1.26.4
   - ena-webin-cli
   - python-dotenv=1.0.1
