@@ -65,7 +65,7 @@ where
   * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand (it will need the `-test` option in the upload command for the test submission to work)
   * `--webin WEBIN_ID`: webin id (format: Webin_XXXXX)
   * `--password PASSWORD`: webin password
-  * `--centre_name CENTRE_NAME`: name of the centre uploading genomes
+  * `--centre_name CENTRE_NAME`: name of the centre generating and uploading genomes
   * `--tpa`: if uploading TPA (Third PArty) generated genomes
 
 It is recommended to validate your genomes in test mode (i.e. without `--live` in the registration step and with `-test` during the upload) before attempting the final upload. Launching the registration in test mode will add a timestamp to the genome name to allow multiple executions of the test process. 
