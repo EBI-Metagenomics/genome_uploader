@@ -410,15 +410,17 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                         elif longitude.endswith('E'):
                             longitude = longitude.split('E')[0].strip()
 
-                        if latitude:
-                            latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
-                        else:
-                            raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(runAccession))
+                        if latitude != "not provided":
+                            try:
+                                latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
+                            except ValueError:
+                                raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(runAccession))
 
-                        if longitude:
-                            longitude = "{:.{}f}".format(round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
-                        else:
-                            raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(runAccession))
+                        if longitude != "not provided":
+                            try:
+                                longitude = "{:.{}f}".format(round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
+                            except ValueError:
+                                raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(runAccession))
 
                         country = sampleInfo["country"].split(':')[0]
                         if not country in GEOGRAPHIC_LOCATIONS:
