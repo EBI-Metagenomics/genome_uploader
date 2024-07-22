@@ -401,7 +401,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                         sampleInfo = ena.get_sample(sampleAccession, webin, password)
 
                         location = sampleInfo["location"]
-                        latitude, longitude = None, None
+                        latitude, longitude = "", ""
                         if 'N' in location:
                             latitude = location.split('N')[0].strip()
                             longitude = location.split('N')[1].strip()
