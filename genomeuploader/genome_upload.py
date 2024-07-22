@@ -63,24 +63,24 @@ Input table: expects the following parameters:
 '''
 def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
     logger.info('Retrieving info for genomes to submit...')
-    
+
     binMandatoryFields = ["genome_name", "accessions",
-        "assembly_software", "binning_software", 
+        "assembly_software", "binning_software",
         "binning_parameters", "stats_generation_software", "NCBI_lineage",
         "broad_environment", "local_environment", "environmental_medium", "metagenome",
         "co-assembly", "genome_coverage", "genome_path"]
     MAGMandatoryFields = ["rRNA_presence", "completeness", "contamination"]
-    
+
     allFields = MAGMandatoryFields + binMandatoryFields
     metadata = pd.read_csv(inputFile, sep='\t', usecols=allFields)
-    
+
     # make sure there are no empty cells
     cleanColumns = list(metadata.dropna(axis=1))
     if genomeType == "MAGs":
         missingValues = [item for item in allFields if item not in cleanColumns]
     else:
         missingValues = [item for item in binMandatoryFields if item not in cleanColumns]
-    
+
     if missingValues:
         raise ValueError("The following mandatory fields have missing values in " +
             "the input file: {}".format(", ".join(missingValues)))
@@ -92,7 +92,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
     # check whether accessions follow the right format
     accessions_regExp = re.compile(r"([E|S|D]R[R|Z]\d{6,})")
 
-    accessionComparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", 
+    accessionComparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions",
         "correct", "mismatching", "co-assembly"])
     accessionComparison["genome_name"] = metadata["genome_name"]
 
@@ -102,13 +102,13 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
     accessionComparison["correct"] = metadata["accessions"].map(
         lambda a: len(accessions_regExp.findall(a)))
 
-    accessionComparison["mismatching"] = accessionComparison.apply(lambda row: 
-        True if row["attemptive_accessions"] == row["correct"] 
+    accessionComparison["mismatching"] = accessionComparison.apply(lambda row:
+        True if row["attemptive_accessions"] == row["correct"]
         else None, axis=1).isna()
 
     mismatchingAccessions = accessionComparison[accessionComparison["mismatching"]]["genome_name"]
     if not mismatchingAccessions.empty:
-        raise ValueError("Run accessions are not correctly formatted for the following " + 
+        raise ValueError("Run accessions are not correctly formatted for the following " +
             "genomes: " + ','.join(mismatchingAccessions.values))
 
     # check whether completeness and contamination are floats
@@ -130,21 +130,17 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
             "involved and co-assembly status: " + ','.join(coassemblyDiscrepancy.values))
 
     # are provided metagenomes part of the accepted metagenome list?
-    if False in metadata.apply(lambda row: 
-        True if row["metagenome"] in METAGENOMES 
+    if False in metadata.apply(lambda row:
+        True if row["metagenome"] in METAGENOMES
         else False, axis=1).unique():
         raise ValueError("Metagenomes associated with each genome need to belong to ENA's " +
             "approved metagenomes list.")
 
     # do provided file paths exist?
-    if False in metadata.apply(lambda row: 
-        True if os.path.exists(row["genome_path"]) 
+    if False in metadata.apply(lambda row:
+        True if os.path.exists(row["genome_path"])
         else False, axis =1).unique():
         raise FileNotFoundError("Some genome paths do not exist.")
-
-    # check genome name lengths
-    #if not (metadata["genome_name"].map(lambda a: len(a) < 20).all()):
-    #    raise ValueError("Genome names must be shorter than 20 characters.")
 
     # create dictionary while checking genome name uniqueness
     uniqueness = metadata["genome_name"].nunique() == metadata["genome_name"].size
@@ -175,7 +171,7 @@ def compute_MAG_quality(completeness, contamination, RNApresence):
     quality = MQ
     if float(completeness) >= 90 and float(contamination) <= 5 and RNApresent:
         quality = HQ
-    
+
     return quality, completeness, contamination
 
 def extract_tax_info(taxInfo):
@@ -209,7 +205,7 @@ def extract_tax_info(taxInfo):
             if k in lineage[position]:
                 finalKingdom = selectedKingdom[index]
                 break
-    
+
     iterator = len(lineage)-1
     submittable = False
     rank = ""
@@ -276,7 +272,7 @@ def extract_Bacteria_info(name, rank):
         name = "uncultured {} bacterium".format(name)
     elif rank == "genus":
         name = "uncultured {} sp.".format(name)
-    
+
     submittable, taxid, rank = ena.query_scientific_name(name, searchRank=True)
     if not submittable:
         if rank in ["species", "genus"] and name.lower().endswith("bacteria"):
@@ -304,7 +300,7 @@ def extract_Archaea_info(name, rank):
         name = "uncultured {} archaeon".format(name)
     elif rank == "genus":
         name = "uncultured {} sp.".format(name)
-    
+
     submittable, taxid, rank = ena.query_scientific_name(name, searchRank=True)
     if not submittable:
         if "Candidatus" in name:
@@ -313,7 +309,7 @@ def extract_Archaea_info(name, rank):
             elif rank == "family":
                 name = name.replace("uncultured ", '')
             submittable, taxid = ena.query_scientific_name(name)
-                            
+
     return submittable, name, taxid
 
 def extract_genomes_info(inputFile, genomeType, live):
@@ -327,13 +323,13 @@ def extract_genomes_info(inputFile, genomeType, live):
         genomeInfo[gen]["accessionType"] = accessionType
 
         genomeInfo[gen]["isolationSource"] = genomeInfo[gen]["metagenome"]
-        
+
         try:
-            (genomeInfo[gen]["MAG_quality"], 
-            genomeInfo[gen]["completeness"], 
+            (genomeInfo[gen]["MAG_quality"],
+            genomeInfo[gen]["completeness"],
             genomeInfo[gen]["contamination"]) = compute_MAG_quality(
                                     str(round_stats(genomeInfo[gen]["completeness"])),
-                                    str(round_stats(genomeInfo[gen]["contamination"])), 
+                                    str(round_stats(genomeInfo[gen]["contamination"])),
                                     genomeInfo[gen]["rRNA_presence"])
         except IndexError:
             pass
@@ -342,7 +338,7 @@ def extract_genomes_info(inputFile, genomeType, live):
             genomeInfo[gen]["co-assembly"] = True
         else:
             genomeInfo[gen]["co-assembly"] = False
-        
+
         genomeInfo[gen]["alias"] = gen
 
         taxID, scientificName = extract_tax_info(genomeInfo[gen]["NCBI_lineage"])
@@ -353,7 +349,7 @@ def extract_genomes_info(inputFile, genomeType, live):
 
 def extract_ENA_info(genomeInfo, uploadDir, webin, password):
     logger.info('Retrieving project and run info from ENA (this might take a while)...')
-    
+
     # retrieving metadata from runs (and runs from assembly accessions if provided)
     allRuns = []
     for g in genomeInfo:
@@ -369,7 +365,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
         run_info = ena.get_run(r, webin, password)
         studySet.add(run_info["secondary_study_accession"])
         samplesDict[r] = run_info["sample_accession"]
-    
+
     if not studySet:
         raise ValueError("No study corresponding to runs found.")
 
@@ -392,7 +388,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
             ENA_info = ena.get_study_runs(s, webin, password)
             if ENA_info == []:
                 raise IOError("No runs found on ENA for project {}.".format(s))
-            
+
             for run, item in enumerate(ENA_info):
                 runAccession = ENA_info[run]["run_accession"]
                 if runAccession not in backupDict:
@@ -401,7 +397,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                         sampleInfo = ena.get_sample(sampleAccession, webin, password)
 
                         location = sampleInfo["location"]
-                        latitude, longitude = "", ""
+                        latitude, longitude = "not provided", "not provided"
                         if 'N' in location:
                             latitude = location.split('N')[0].strip()
                             longitude = location.split('N')[1].strip()
@@ -417,17 +413,17 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                         if latitude:
                             latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
                         else:
-                            latitude = "not provided"
+                            raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(runAccession))
 
                         if longitude:
                             longitude = "{:.{}f}".format(round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
                         else:
-                            longitude = "not provided"
- 
+                            raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(runAccession))
+
                         country = sampleInfo["country"].split(':')[0]
                         if not country in GEOGRAPHIC_LOCATIONS:
                             country = "not provided"
-                        
+
                         collectionDate = sampleInfo["collection_date"]
                         if collectionDate == "" or collectionDate == "missing":
                             collectionDate = "not provided"
@@ -471,9 +467,9 @@ def combine_ENA_info(genomeInfo, ENADict):
                 longList.append(ENADict[run]["longitude"])
                 latitList.append(ENADict[run]["latitude"])
 
-            genomeInfo[g]["study"] = studyList[0] 
+            genomeInfo[g]["study"] = studyList[0]
             genomeInfo[g]["description"] = descriptionList[0]
-            
+
             instrument = instrumentList[0]
             if multipleElementSet(instrumentList):
                 instrument = ','.join(instrumentList)
@@ -513,7 +509,7 @@ def combine_ENA_info(genomeInfo, ENADict):
             genomeInfo[g]["country"] = ENADict[run]["country"]
             genomeInfo[g]["longitude"] = ENADict[run]["longitude"]
             genomeInfo[g]["latitude"] = ENADict[run]["latitude"]
-        
+
         genomeInfo[g]["accessions"] = ','.join(genomeInfo[g]["accessions"])
 
 
@@ -534,17 +530,17 @@ def saveAccessions(aliasAccessionDict, accessionsFile, writeMode):
         for elem in aliasAccessionDict:
             f.write("{}\t{}\n".format(elem, aliasAccessionDict[elem]))
 
-def create_manifest_dictionary(run, alias, assemblySoftware, sequencingMethod, 
+def create_manifest_dictionary(run, alias, assemblySoftware, sequencingMethod,
     MAGpath, gen, study, coverage, isCoassembly):
     manifestDict = {
         "accessions" : run,
         "alias" : alias,
-        "assembler" : assemblySoftware, 
-        "sequencingMethod" : sequencingMethod, 
+        "assembler" : assemblySoftware,
+        "sequencingMethod" : sequencingMethod,
         "genome_path" : MAGpath,
         "genome_name" : gen,
         "study" : study,
-        "coverageDepth" : coverage, 
+        "coverageDepth" : coverage,
         "co-assembly" : isCoassembly
     }
 
@@ -554,10 +550,10 @@ def compute_manifests(genomes):
     manifestInfo = {}
     for g in genomes:
         manifestInfo[g] = create_manifest_dictionary(genomes[g]["accessions"],
-            genomes[g]["alias"], genomes[g]["assembly_software"], 
-            genomes[g]["sequencingMethod"], genomes[g]["genome_path"], g, 
+            genomes[g]["alias"], genomes[g]["assembly_software"],
+            genomes[g]["sequencingMethod"], genomes[g]["genome_path"], g,
             genomes[g]["study"], genomes[g]["genome_coverage"], genomes[g]["co-assembly"])
-    
+
     return manifestInfo
 
 def get_study_from_xml(sample):
@@ -572,7 +568,7 @@ def recover_info_from_xml(genomeDict, sample_xml, live_mode):
     # extract list of genomes (samples) to be registered
     xml_structure = minidom.parse(sample_xml)
     samples = xml_structure.getElementsByTagName("SAMPLE")
-    
+
     for s in samples:
         study = get_study_from_xml(s)
 
@@ -618,7 +614,7 @@ def recover_info_from_xml(genomeDict, sample_xml, live_mode):
     if not live_mode:
         for s in samples:
             xml_structure.firstChild.appendChild(s)
-        
+
         with open(sample_xml, 'wb') as f:
             dom_string = xml_structure.toprettyxml().encode("utf-8")
             dom_string = b'\n'.join([s for s in dom_string.splitlines() if s.strip()])
@@ -632,7 +628,7 @@ def create_sample_attribute(sample_attributes, data_list, mag_data=None):
     units = None
     if len(data_list) == 3:
         units = data_list[2]
-    
+
     new_sample_attr = ET.SubElement(sample_attributes, "SAMPLE_ATTRIBUTE")
     ET.SubElement(new_sample_attr, 'TAG').text = tag
     ET.SubElement(new_sample_attr, 'VALUE').text = value
@@ -687,15 +683,15 @@ def write_genomes_xml(genomes, xml_path, genomeType, centreName, tpa):
         if genomes[g]["co-assembly"]:
             plural = 's'
         description = ("This sample represents a {}{} assembled from the "
-            "metagenomic run{} {} of study {}.".format(tpaDescription, 
-            assemblyType, plural, genomes[g]["accessions"], 
+            "metagenomic run{} {} of study {}.".format(tpaDescription,
+            assemblyType, plural, genomes[g]["accessions"],
             genomes[g]["study"]))
-        
+
         sample = ET.SubElement(sample_set, "SAMPLE")
         sample.set("alias", genomes[g]["alias"])
         sample.set("center_name", centreName)
 
-        ET.SubElement(sample, 'TITLE').text = ("{}: {}".format(assemblyType, 
+        ET.SubElement(sample, 'TITLE').text = ("{}: {}".format(assemblyType,
             genomes[g]["alias"]))
         sample_name = ET.SubElement(sample, "SAMPLE_NAME")
         ET.SubElement(sample_name, "TAXON_ID").text = genomes[g]["taxID"]
@@ -746,7 +742,7 @@ def write_submission_xml(upload_dir, centre_name, study=True):
 
 def generate_genome_manifest(genomeInfo, study, manifestsRoot, aliasToSample, genomeType, tpa):
     manifest_path = os.path.join(manifestsRoot, f'{genomeInfo["genome_name"]}.manifest')
-    
+
     tpaAddition, multipleRuns = "", ""
     if tpa:
         tpaAddition = "Third Party Annotation (TPA) "
@@ -767,7 +763,7 @@ def generate_genome_manifest(genomeInfo, study, manifestsRoot, aliasToSample, ge
         ('MOLECULETYPE', "genomic DNA"),
         ('DESCRIPTION', ("This is a {}bin derived from the primary whole genome "
             "shotgun (WGS) data set {}. This sample represents a {} from the "
-            "metagenomic run{} {}.".format(tpaAddition, genomeInfo["study"], 
+            "metagenomic run{} {}.".format(tpaAddition, genomeInfo["study"],
             assemblyType, multipleRuns, genomeInfo["accessions"]))),
         ('RUN_REF', genomeInfo["accessions"]),
         ('FASTA', os.path.abspath(genomeInfo["genome_path"]))
@@ -782,7 +778,7 @@ def generate_genome_manifest(genomeInfo, study, manifestsRoot, aliasToSample, ge
 
 def main():
     ENA_uploader = GenomeUpload()
-    
+
     if not ENA_uploader.live:
         logger.warning("Warning: genome submission is not in live mode, " +
             "files will be validated, but not uploaded.")
@@ -799,17 +795,17 @@ def main():
 
     # sample xml generation or recovery
     genomes = ENA_uploader.create_genome_dictionary(samples_xml)
-        
+
     # manifests creation
     manifestDir = os.path.join(ENA_uploader.upload_dir, "manifests")
     os.makedirs(manifestDir, exist_ok=True)
-    
+
     accessionsgen = "registered_MAGs.tsv"
     if ENA_uploader.genomeType == "bins":
         accessionsgen = accessionsgen.replace("MAG", "bin")
     if not ENA_uploader.live:
         accessionsgen = accessionsgen.replace(".tsv", "_test.tsv")
-    
+
     accessionsFile = os.path.join(ENA_uploader.upload_dir, accessionsgen)
     save = False
     writeMode = 'a'
@@ -823,19 +819,19 @@ def main():
             aliasToNewSampleAccession = getAccessions(accessionsFile)
     else:
         save = True
-        
+
     if save:
         logger.info("Registering genome samples XMLs...")
-        aliasToNewSampleAccession = ena.handle_genomes_registration(samples_xml, 
+        aliasToNewSampleAccession = ena.handle_genomes_registration(samples_xml,
             submission_xml, ENA_uploader.username, ENA_uploader.password, ENA_uploader.live)
         saveAccessions(aliasToNewSampleAccession, accessionsFile, writeMode)
 
     logger.info("Generating manifest files...")
-    
+
     manifestInfo = compute_manifests(genomes)
 
     for m in manifestInfo:
-        generate_genome_manifest(manifestInfo[m], ENA_uploader.upStudy,  
+        generate_genome_manifest(manifestInfo[m], ENA_uploader.upStudy,
             manifestDir, aliasToNewSampleAccession, ENA_uploader.genomeType, ENA_uploader.tpa)
 
 class GenomeUpload:
@@ -845,7 +841,7 @@ class GenomeUpload:
         self.genomeMetadata = self.args.genome_info
         self.genomeType = "bins" if self.args.bins else "MAGs"
         self.live = True if self.args.live else False
-        
+
         if self.args.webin and self.args.password:
             self.username = self.args.webin
             self.password = self.args.password
@@ -867,7 +863,7 @@ class GenomeUpload:
 
             self.username = os.getenv("ENA_WEBIN")
             self.password = os.getenv("ENA_WEBIN_PASSWORD")
-        
+
         if not self.username or not self.password:
             logger.error("ENA Webin username or password are empty")
             sys.exit(1)
@@ -878,24 +874,24 @@ class GenomeUpload:
 
         workDir = self.args.out if self.args.out else os.getcwd()
         self.upload_dir = self.generate_genomes_upload_dir(workDir, self.genomeType)
-    
+
     def parse_args(self, argv):
         parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
             description="Create xmls and manifest files for genome upload to ENA")
-        
+
         parser.add_argument('-u', '--upload_study', type=str, help="Study accession for genomes upload")
         parser.add_argument('--genome_info', type=str, required=True, help="Genomes metadata file")
 
         genomeType = parser.add_mutually_exclusive_group(required=True)
         genomeType.add_argument('-m', '--mags', action='store_true', help="Select for MAG upload")
         genomeType.add_argument('-b', '--bins', action='store_true', help="Select for bin upload")
-        
+
         parser.add_argument('--out', type=str, help="Output folder. Default: working directory")
         parser.add_argument('--force', action='store_true', help="Forces reset of sample xml's backups")
         parser.add_argument('--live', action='store_true', help="Uploads on ENA. Omitting this " +
             "option allows to validate samples beforehand")
         parser.add_argument('--tpa', action='store_true', help="Select if uploading TPA-generated genomes")
-        
+
         # Users can provide their credentials and centre name manually or using a config file
         parser.add_argument('--webin', required=False, help="Webin id")
         parser.add_argument('--password', required=False, help="Webin password")
@@ -905,7 +901,7 @@ class GenomeUpload:
 
         if not args.upload_study:
             raise ValueError("No project selected for genome upload [-u, --upload_study].")
-        
+
         if not os.path.exists(args.genome_info):
             raise FileNotFoundError('Genome metadata file "{}" does not exist'.format(args.genome_info))
 
@@ -928,7 +924,7 @@ class GenomeUpload:
             extract_ENA_info(genomeInfo, self.upload_dir, self.username, self.password)
             logger.info("Writing genome registration XML...")
 
-            write_genomes_xml(genomeInfo, samples_xml, self.genomeType, 
+            write_genomes_xml(genomeInfo, samples_xml, self.genomeType,
                               self.centre_name, self.tpa)
             logger.info("All files have been written to " + self.upload_dir)
         else:
