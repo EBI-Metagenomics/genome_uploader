@@ -429,7 +429,8 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                             country = "not provided"
 
                         collectionDate = sampleInfo["collection_date"].lower()
-                        if not collectionDate or collectionDate == "missing" or collectionDate == "not applicable":
+                        if not collectionDate or collectionDate == "missing" or collectionDate in \
+                                ["not applicable", "not available"]:
                             collectionDate = "not provided"
 
                         tempDict[runAccession] = {
@@ -482,7 +483,7 @@ def combine_ENA_info(genomeInfo, ENADict):
             collectionDate = collectionList[0]
             if multipleElementSet(collectionList):
                 collectionDate = "not provided"
-            if collectionDate.lower() == "not applicable":
+            if collectionDate.lower() in ["not applicable", "not available"]:
                 collectionDate = "not provided"
             genomeInfo[g]["collectionDate"] = collectionDate
 
@@ -514,7 +515,7 @@ def combine_ENA_info(genomeInfo, ENADict):
         else:
             run = genomeInfo[g]["accessions"][0]
             genomeInfo[g]["sequencingMethod"] = ENADict[run]["instrumentModel"]
-            if ENADict[run]["collectionDate"].lower() == "not applicable":
+            if ENADict[run]["collectionDate"].lower() in ["not applicable", "not available"]:
                 genomeInfo[g]["collectionDate"] = "not provided"
             else:
                 genomeInfo[g]["collectionDate"] = ENADict[run]["collectionDate"]
