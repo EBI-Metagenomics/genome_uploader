@@ -428,8 +428,8 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                         if not country in GEOGRAPHIC_LOCATIONS:
                             country = "not provided"
 
-                        collectionDate = sampleInfo["collection_date"]
-                        if collectionDate == "" or collectionDate == "missing":
+                        collectionDate = sampleInfo["collection_date"].lower()
+                        if not collectionDate or collectionDate == "missing" or collectionDate == "not applicable":
                             collectionDate = "not provided"
 
                         tempDict[runAccession] = {
