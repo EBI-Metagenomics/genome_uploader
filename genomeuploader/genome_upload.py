@@ -494,12 +494,18 @@ def combine_ENA_info(genomeInfo, ENADict):
             latitude = latitList[0]
             if multipleElementSet(latitList):
                 latitude = "not provided"
-            genomeInfo[g]["latitude"] = str(round(float(latitude), GEOGRAPHY_DIGIT_COORDS))
+            try:
+                genomeInfo[g]["latitude"] = str(round(float(latitude), GEOGRAPHY_DIGIT_COORDS))
+            except ValueError:
+                genomeInfo[g]["latitude"] = "not provided"
 
             longitude = longList[0]
             if multipleElementSet(longList):
                 longitude = "not provided"
-            genomeInfo[g]["longitude"] = str(round(float(longitude), GEOGRAPHY_DIGIT_COORDS))
+            try:
+                genomeInfo[g]["longitude"] = str(round(float(longitude), GEOGRAPHY_DIGIT_COORDS))
+            except ValueError:
+                genomeInfo[g]["longitude"] = "not provided"
 
             samples = samplesList[0]
             if multipleElementSet(samplesList):
