@@ -384,6 +384,8 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
         for s in studySet:
             studyInfo = ena.get_study(webin, password, s)
             projectDescription = studyInfo["study_description"]
+            if not projectDescription:
+                projectDescription = studyInfo["study_title"]
 
             ENA_info = ena.get_study_runs(s, webin, password)
             if ENA_info == []:
