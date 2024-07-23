@@ -506,7 +506,10 @@ def combine_ENA_info(genomeInfo, ENADict):
         else:
             run = genomeInfo[g]["accessions"][0]
             genomeInfo[g]["sequencingMethod"] = ENADict[run]["instrumentModel"]
-            genomeInfo[g]["collectionDate"] = ENADict[run]["collectionDate"]
+            if ENADict[run]["collectionDate"].lower() == "not applicable":
+                genomeInfo[g]["collectionDate"] = "not provided"
+            else:
+                genomeInfo[g]["collectionDate"] = ENADict[run]["collectionDate"]
             genomeInfo[g]["study"] = ENADict[run]["study"]
             genomeInfo[g]["description"] = ENADict[run]["projectDescription"]
             genomeInfo[g]["sample_accessions"] = ENADict[run]["sampleAccession"]
@@ -515,7 +518,6 @@ def combine_ENA_info(genomeInfo, ENADict):
             genomeInfo[g]["latitude"] = ENADict[run]["latitude"]
 
         genomeInfo[g]["accessions"] = ','.join(genomeInfo[g]["accessions"])
-
 
 
 def getAccessions(accessionsFile):
