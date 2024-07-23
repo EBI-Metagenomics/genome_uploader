@@ -480,6 +480,8 @@ def combine_ENA_info(genomeInfo, ENADict):
             collectionDate = collectionList[0]
             if multipleElementSet(collectionList):
                 collectionDate = "not provided"
+            if collectionDate.lower() == "not applicable":
+                collectionDate = "not provided"
             genomeInfo[g]["collectionDate"] = collectionDate
 
             country = countryList[0]
