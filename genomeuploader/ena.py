@@ -106,7 +106,7 @@ class ENA():
         except (IndexError, TypeError, ValueError):
             raise ValueError("Could not find run {} in ENA.".format(run_accession))
         except:
-            raise Exception("Could not query ENA API: {}".format(response.text))
+            raise Exception("Could not query ENA API for run {}: {}".format(run_accession, response.text))
 
         return run
 
