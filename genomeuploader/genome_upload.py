@@ -429,6 +429,13 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                             country = "not provided"
 
                         collectionDate = sampleInfo["collection_date"]
+                        if collectionDate.lower() in ["not collected", "not provided", "restricted access",
+                                                      "missing: control sample", "missing: sample group",
+                                                      "missing: synthetic construct", "missing: lab stock",
+                                                      "missing: third party data",
+                                                      "missing: data agreement established pre-2023",
+                                                      "missing: endangered species", "missing: human-identifiable"]:
+                            collectionDate = collectionDate.lower()
                         if not collectionDate or collectionDate.lower() == "missing" or collectionDate.lower() in \
                                 ["not applicable", "not available", "na"]:
                             collectionDate = "not provided"
