@@ -61,8 +61,8 @@ where
   * `---genome_info METADATA_FILE` : genomes metadata file in tsv format
   * `-m, --mags, --b, --bins`: select for bin or MAG upload. If in doubt, look at [their definition according to ENA](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome.html>)
   * `--out`: output folder (default: working directory)
-  * `--force`: forces reset of sample xmls generation
-  * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand (it will need the `-test` option in the upload command for the test submission to work)
+  * `--force`: forces reset of submission xml and ENA backup
+  * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand (it will need the `-test` option in the upload command for test submissions to work)
   * `--webin WEBIN_ID`: webin id (format: Webin_XXXXX)
   * `--password PASSWORD`: webin password
   * `--centre_name CENTRE_NAME`: name of the centre generating and uploading genomes
@@ -70,13 +70,15 @@ where
 
 It is recommended to validate your genomes in test mode (i.e. without `--live` in the registration step and with `-test` during the upload) before attempting the final upload. Launching the registration in test mode will add a timestamp to the genome name to allow multiple executions of the test process. 
 
-Sample xmls won't be regenerated automatically if a previous xml already exists. If any metadata or value in the tsv table changes, `--force` will allow xml regeneration. 
+`submission.xml` and `ENA_backup.json` won't be regenerated automatically if a previous run already exists,. To regenerate them, select `--force`. 
 
 ### Produced files:
 The script produces the following files and folders:
 ```bash
 bin_upload/MAG_upload
 ├── manifests
+│    └── ...
+├── manifests_test                  # folder generated for validation in test mode
 │    └── ...
 ├── ENA_backup.json                 # backup file to prevent re-download of metadata from ENA. Regeneration can be forced with --force
 ├── genome_samples.xml              # xml generated to register samples on ENA before the upload
