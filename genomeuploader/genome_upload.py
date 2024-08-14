@@ -442,8 +442,8 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, force):
                                                       "missing: endangered species", "missing: human-identifiable"]:
                             collectionDate = collectionDate.lower()
                         if not collectionDate or collectionDate.lower() == "missing" or collectionDate.lower() in \
-                                ["not applicable", "not available", "na"]:
-                            collectionDate = "not provided"
+                                ["not available", "na"]:
+                            collectionDate = "missing: third party data"
 
                         tempDict[runAccession] = {
                             "instrumentModel" : ENA_info[run]["instrument_model"],
@@ -495,8 +495,8 @@ def combine_ENA_info(genomeInfo, ENADict):
             collectionDate = collectionList[0]
             if multipleElementSet(collectionList):
                 collectionDate = "not provided"
-            if collectionDate.lower() in ["not applicable", "not available", "na"]:
-                collectionDate = "not provided"
+            if collectionDate.lower() in ["not available", "na"]:
+                collectionDate = "missing: third party data"
             genomeInfo[g]["collectionDate"] = collectionDate
 
             country = countryList[0]
