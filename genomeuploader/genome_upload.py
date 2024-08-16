@@ -180,7 +180,7 @@ def compute_MAG_quality(completeness, contamination, RNApresence):
 
 def extract_tax_info(taxInfo):
     # if unclassified, block the execution
-    lineage, position, digitAnnotation = taxInfo.split(';'), 0, False
+    lineage, kingdomPositionInLineage, digitAnnotation = taxInfo.split(';'), 0, False
     lineageFirst = lineage[0]
     if "Unclassified " in lineageFirst:
         if "Archaea" in lineageFirst:
@@ -198,18 +198,18 @@ def extract_tax_info(taxInfo):
     selectedKingdom, finalKingdom = kingdoms, ""
     if lineage[1].isdigit():
         selectedKingdom = kingdomTaxa
-        position = 2
+        kingdomPositionInLineage = 2
         digitAnnotation = True
     for index, k in enumerate(selectedKingdom):
         if digitAnnotation:
-            if k == lineage[position]:
+            if k == lineage[kingdomPositionInLineage]:
                 finalKingdom = selectedKingdom[index]
                 break
         else:
-            if k in lineage[position]:
+            if k in lineage[kingdomPositionInLineage]:
                 finalKingdom = selectedKingdom[index]
                 break
-    
+
     iterator = len(lineage)-1
     submittable = False
     rank = ""
