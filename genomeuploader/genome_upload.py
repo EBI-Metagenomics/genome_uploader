@@ -214,7 +214,7 @@ def extract_tax_info(taxInfo):
     while iterator != -1 and not submittable:
         scientificName = lineage[iterator].strip()
         if digitAnnotation:
-            if not '*' in scientificName:
+            if scientificName and not '*' in scientificName:
                 scientificName = ena.query_taxid(scientificName)
             else:
                 iterator -= 1
