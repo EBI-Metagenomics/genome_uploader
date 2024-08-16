@@ -404,30 +404,32 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, force):
                         sampleInfo = ena.get_sample(sampleAccession, webin, password)
 
                         location = sampleInfo["location"]
-                        latitude, longitude = "not provided", "not provided"
-                        if 'N' in location:
-                            latitude = location.split('N')[0].strip()
-                            longitude = location.split('N')[1].strip()
-                        elif 'S' in location:
-                            latitude = '-' + location.split('S')[0].strip()
-                            longitude = location.split('S')[1].strip()
+                        latitude, longitude = "missing: third party data", "missing: third party data"
 
-                        if 'W' in longitude:
-                            longitude = '-' + longitude.split('W')[0].strip()
-                        elif longitude.endswith('E'):
-                            longitude = longitude.split('E')[0].strip()
+                        if location:
+                            if 'N' in location:
+                                latitude = location.split('N')[0].strip()
+                                longitude = location.split('N')[1].strip()
+                            elif 'S' in location:
+                                latitude = '-' + location.split('S')[0].strip()
+                                longitude = location.split('S')[1].strip()
 
-                        if latitude != "not provided":
-                            try:
-                                latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
-                            except ValueError:
-                                raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(runAccession))
+                            if 'W' in longitude:
+                                longitude = '-' + longitude.split('W')[0].strip()
+                            elif longitude.endswith('E'):
+                                longitude = longitude.split('E')[0].strip()
 
-                        if longitude != "not provided":
-                            try:
-                                longitude = "{:.{}f}".format(round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
-                            except ValueError:
-                                raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(runAccession))
+                            if latitude != "missing: third party data":
+                                try:
+                                    latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
+                                except ValueError:
+                                    raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(runAccession))
+
+                            if longitude != "missing: third party data":
+                                try:
+                                    longitude = "{:.{}f}".format(round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
+                                except ValueError:
+                                    raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(runAccession))
 
                         country = sampleInfo["country"].split(':')[0]
                         if not country in GEOGRAPHIC_LOCATIONS:
