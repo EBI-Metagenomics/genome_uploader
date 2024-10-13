@@ -59,6 +59,9 @@ STUDY_DEFAULT_FIELDS = ','.join([
 
 RETRY_COUNT = 5
 
+PRIVATE_DATA_URL = "https://www.ebi.ac.uk/ena/submit/report/"
+PUBLIC_DATA_URL = "https://www.ebi.ac.uk/ena/portal/api/search"
+
 
 class ENA():
     def get_default_params(self):
@@ -68,28 +71,36 @@ class ENA():
             'dataPortal': 'ena'
         }
 
-    def post_request(self, data, webin, password):
-        url = "https://www.ebi.ac.uk/ena/portal/api/search"
-        auth = (webin, password)
+    def post_request(self, data):
+        url = PUBLIC_DATA_URL
         default_connection_headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "*/*"
         }
-        response = requests.post(url, data=data, auth=auth, headers=default_connection_headers)
+        response = requests.post(url, data=data, headers=default_connection_headers)
         
         return response
 
-    def get_run(self, run_accession, webin, password, attempt=0, search_params=None):
-        data = self.get_default_params()
-        data['result'] = 'read_run'
-        data['fields'] = RUN_DEFAULT_FIELDS
-        data['query'] = 'run_accession=\"{}\"'.format(run_accession)
-
-        if search_params:
-            data.update(search_params)
-
-        response = self.post_request(data, webin, password)
+    def get_request(self, url, webin, password):
+        auth = (webin, password)
+        response = requests.get(url, auth=auth)
         
+        return response        
+
+    def get_run(self, run_accession, webin, password,  private=False, attempt=0, search_params=None):
+        if not private:
+            data = self.get_default_params()
+            data['result'] = 'read_run'
+            data['fields'] = RUN_DEFAULT_FIELDS
+            data['query'] = 'run_accession=\"{}\"'.format(run_accession)
+
+            if search_params:
+                data.update(search_params)
+            response = self.post_request(data)
+        else:
+            url = f'{PRIVATE_DATA_URL}runs/{run_accession}'
+            response = self.get_request(url, webin, password)
+            
         if not response.ok and attempt > 2:
             raise ValueError("Could not retrieve run with accession {}, returned "
                 "message: {}".format(run_accession, response.text))
@@ -107,99 +118,147 @@ class ENA():
             raise ValueError("Could not find run {} in ENA.".format(run_accession))
         except:
             raise Exception("Could not query ENA API: {}".format(response.text))
-
-        return run
-
-    def get_run_from_assembly(self, assembly_name):
-        manifestXml = minidom.parseString(requests.get("https://www.ebi.ac.uk" +
-            "/ena/browser/api/xml/" + assembly_name).text)
+        
+        if private:
+            run_data = run['report']
+            final_data = {'secondary_study_accession': run_data['studyId'], 'sample_accession': run_data['sampleId']}
+            return final_data
+        else:
+            return run
+        
+    #   will not work for private, needs modification after checking best endpoint with ENA for run ref
+    def get_run_from_assembly(self, assembly_name, webin, password, private=False):
+        if not private:
+            manifestXml = minidom.parseString(requests.get("https://www.ebi.ac.uk" +
+                "/ena/browser/api/xml/" + assembly_name).text)
+        else:
+            url = f"https://www.ebi.ac.uk/ena/submit/report/analyses/xml/{assembly_name}"
+            manifestXml = minidom.parseString(requests.get(url, auth=(webin, password)).text)
 
         run_ref = manifestXml.getElementsByTagName("RUN_REF")
         run = run_ref[0].attributes["accession"].value
         
         return run
 
-    def get_study(self, webin, password, study_accession):
-        data = self.get_default_params()
-        data['result'] = "study"
-        data['fields'] = STUDY_DEFAULT_FIELDS
-        data['query'] = 'study_accession="{}" OR secondary_study_accession="{}"' \
-            .format(study_accession, study_accession)
+    def get_study(self, study_accession, webin, password, private=False):
+        if not private:
+            data = self.get_default_params()
+            data['result'] = "study"
+            data['fields'] = STUDY_DEFAULT_FIELDS
+            data['query'] = 'study_accession="{}" OR secondary_study_accession="{}"' \
+                .format(study_accession, study_accession)
 
-        data['dataPortal'] = "ena"
-
-        try:
-            response = self.post_request(data, webin, password)
-            if response.status_code == 204:
-                raise NoDataException()
+            data['dataPortal'] = "ena"
             try:
-                studyList = response.json()
-                assert len(studyList) == 1
-                study = studyList[0]
-            except (IndexError, TypeError, ValueError, KeyError) as e:
-                raise e
-            return study
-        except NoDataException:
-            print("No info found to fetch study {}".format(study_accession))
-        except (IndexError, TypeError, ValueError, KeyError):
-            print("Failed to fetch study {}, returned error: {}".format(study_accession, response.text))
+                response = self.post_request(data)
+                if response.status_code == 204:
+                    raise NoDataException()
+                try:
+                    study = json.loads(response.text)[0]
+                except (IndexError, TypeError, ValueError, KeyError) as e:
+                    raise e
+                return study
+        
+            except NoDataException:
+                print("No info found to fetch study {}".format(study_accession))
+            except (IndexError, TypeError, ValueError, KeyError):
+                print("Failed to fetch study {}, returned error: {}".format(study_accession, response.text))
 
-        raise ValueError('Could not find study {} in ENA.'.format(study_accession))
+            raise ValueError('Could not find study {} in ENA.'.format(study_accession))
+        else:
+            url = f"https://www.ebi.ac.uk/ena/submit/report/studies/xml/{study_accession}"
+            manifestXml = minidom.parseString(requests.get(url, auth=(webin, password)).text)
+            study_desc= manifestXml.getElementsByTagName("STUDY_DESCRIPTION")[0].firstChild.nodeValue
+            final_data = {'study_description': study_desc}
+            return final_data
 
-    def get_study_runs(self, study_acc, webin, password, fields=None, search_params=None):
-        data = self.get_default_params()
-        data['result'] = 'read_run'
-        data['fields'] = fields or RUN_DEFAULT_FIELDS
-        data['query'] = '(study_accession=\"{}\" OR secondary_study_accession=\"{}\")'.format(study_acc, study_acc)
 
-        if search_params:
-            data.update(search_params)
+    def get_study_runs(self, study_accession, webin, password, private= False, fields=None, search_params=None):
+        if not private:
+            data = self.get_default_params()
+            data['result'] = 'read_run'
+            data['fields'] = fields or RUN_DEFAULT_FIELDS
+            data['query'] = '(study_accession=\"{}\" OR secondary_study_accession=\"{}\")'.format(study_accession, study_accession)
 
-        response = self.post_request(data, webin, password)
+            if search_params:
+                data.update(search_params)
+
+            response = self.post_request(data)
+        else:
+            url = f'{PRIVATE_DATA_URL}runs/{study_accession}'
+            response = self.get_request(url, webin, password)
         
         if not response.ok:
-            raise ValueError("Could not retrieve runs for study %s.", study_acc)
+            raise ValueError("Could not retrieve runs for study %s.", study_accession)
         
         if response.status_code == 204:
             return []
 
         try:
-            runs = response.json()
+            runs = response.json()[0:2]
         except:
             raise ValueError("Query against ENA API did not work. Returned "
                 "message: {}".format(response.text))
-
-        return runs
-
-    def get_sample(self, sample_accession, webin, password, fields=None, search_params=None, attempt=0):
-        data = self.get_default_params()
-        data['result'] = 'sample'
-        data['fields'] = fields or SAMPLE_DEFAULT_FIELDS
-        data['query'] = ('(sample_accession=\"{acc}\" OR secondary_sample_accession'
-            '=\"{acc}\") ').format(acc=sample_accession)
-
-        if search_params:
-            data.update(search_params)
-
-        response = self.post_request(data, webin, password)
         
-        if response.status_code == 200:
-            sample = response.json()
-            assert len(sample) == 1 
-            return sample[0]
-
-        if response.status_code == 204:
-            if attempt < 2:
-                new_params = {'dataPortal': 'metagenome' if data['dataPortal'] == 'ena' else 'ena'}
-                attempt += 1
-                return self.get_sample(sample_accession, webin, password, fields=fields, 
-                    search_params=new_params, attempt=attempt)
-            else:
-                raise ValueError("Could not find sample {} in ENA after "
-                    "{} attempts.".format(sample_accession, RETRY_COUNT))
+        if private:
+            final_data = []
+            for run in runs:
+                run_data = run['report']
+                if 'sampleId' in run_data:
+                    run_data['sample_accession'] = run_data.pop('sampleId')
+                if 'id' in run_data:
+                    run_data['run_accession'] = run_data.pop('id')
+                final_data.append(run_data)
+            return(final_data)
         else:
-            raise ValueError("Could not retrieve sample with accession {}. "
-                "Returned message: {}".format(sample_accession, response.text))
+            return runs
+
+    def get_sample(self, sample_accession, webin, password, private=False, fields=None, search_params=None, attempt=0):
+        if not private:
+            data = self.get_default_params()
+            data['result'] = 'sample'
+            data['fields'] = fields or SAMPLE_DEFAULT_FIELDS
+            data['query'] = ('(sample_accession=\"{acc}\" OR secondary_sample_accession'
+                '=\"{acc}\") ').format(acc=sample_accession)
+
+            if search_params:
+                data.update(search_params)
+
+            response = self.post_request(data)
+        
+            if response.status_code == 200:
+                sample = response.json()
+                assert len(sample) == 1 
+                return sample[0]
+
+            if response.status_code == 204:
+                if attempt < 2:
+                    new_params = {'dataPortal': 'metagenome' if data['dataPortal'] == 'ena' else 'ena'}
+                    attempt += 1
+                    return self.get_sample(sample_accession, webin, password, fields=fields, 
+                        search_params=new_params, attempt=attempt)
+                else:
+                    raise ValueError("Could not find sample {} in ENA after "
+                        "{} attempts.".format(sample_accession, RETRY_COUNT))
+            else:
+                raise ValueError("Could not retrieve sample with accession {}. "
+                    "Returned message: {}".format(sample_accession, response.text))
+        else:
+            url = f"https://www.ebi.ac.uk/ena/submit/report/samples/xml/{sample_accession}"
+            final_data = {}
+            manifestXml = minidom.parseString(requests.get(url, auth=(webin, password)).text)
+            sample_attributes = manifestXml.getElementsByTagName('SAMPLE_ATTRIBUTE')
+            for attribute in sample_attributes:
+                tag = attribute.getElementsByTagName('TAG')[0].firstChild.nodeValue
+                if tag == "geographic location (country and/or sea)":
+                    final_data['country'] = attribute.getElementsByTagName('VALUE')[0].firstChild.nodeValue
+                if tag == "geographic location (latitude)":
+                    final_data['latitude'] = attribute.getElementsByTagName('VALUE')[0].firstChild.nodeValue
+                if tag == "geographic location (longitude)":
+                    final_data['longitude'] = attribute.getElementsByTagName('VALUE')[0].firstChild.nodeValue
+                if tag == "collection date":
+                    final_data['collection_date'] = attribute.getElementsByTagName('VALUE')[0].firstChild.nodeValue
+            return final_data
 
     def query_taxid(self, taxid):
         url = "https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{}".format(taxid)
@@ -294,3 +353,4 @@ class ENA():
         logger.info('{} genome samples successfully registered.'.format(str(len(aliasDict))))
 
         return aliasDict
+    

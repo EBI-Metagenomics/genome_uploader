@@ -351,7 +351,7 @@ def extract_genomes_info(inputFile, genomeType, live):
 
     return genomeInfo
 
-def extract_ENA_info(genomeInfo, uploadDir, webin, password):
+def extract_ENA_info(genomeInfo, uploadDir, webin, password, private=False):
     logger.info('Retrieving project and run info from ENA (this might take a while)...')
     
     # retrieving metadata from runs (and runs from assembly accessions if provided)
@@ -360,13 +360,13 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
         if genomeInfo[g]["accessionType"] == "assembly":
             derivedRuns = []
             for acc in genomeInfo[g]["accessions"]:
-                derivedRuns.append(ena.get_run_from_assembly(acc))
+                derivedRuns.append(ena.get_run_from_assembly(acc, private))
             genomeInfo[g]["accessions"] = derivedRuns
         allRuns.extend(genomeInfo[g]["accessions"])
 
     runsSet, studySet, samplesDict, tempDict = set(allRuns), set(), {}, {}
     for r in runsSet:
-        run_info = ena.get_run(r, webin, password)
+        run_info = ena.get_run(r, webin, password, private)
         studySet.add(run_info["secondary_study_accession"])
         samplesDict[r] = run_info["sample_accession"]
     
@@ -386,10 +386,10 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
         except json.decoder.JSONDecodeError:
             backupDict = {}
         for s in studySet:
-            studyInfo = ena.get_study(webin, password, s)
+            studyInfo = ena.get_study(s, webin, password, private=False)
             projectDescription = studyInfo["study_description"]
 
-            ENA_info = ena.get_study_runs(s, webin, password)
+            ENA_info = ena.get_study_runs(s, webin, password, private=False)
             if ENA_info == []:
                 raise IOError("No runs found on ENA for project {}.".format(s))
             
@@ -398,21 +398,25 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password):
                 if runAccession not in backupDict:
                     if runAccession in runsSet:
                         sampleAccession = ENA_info[run]["sample_accession"]
-                        sampleInfo = ena.get_sample(sampleAccession, webin, password)
+                        sampleInfo = ena.get_sample(sampleAccession, webin, password, private=False)
 
-                        location = sampleInfo["location"]
-                        latitude, longitude = None, None
-                        if 'N' in location:
-                            latitude = location.split('N')[0].strip()
-                            longitude = location.split('N')[1].strip()
-                        elif 'S' in location:
-                            latitude = '-' + location.split('S')[0].strip()
-                            longitude = location.split('S')[1].strip()
+                        if sampleInfo['latitude'] and sampleInfo['longitude']:
+                            latitude =  sampleInfo['latitude']
+                            longitude = ['longitude']
+                        else:
+                            location = sampleInfo["location"]
+                            latitude, longitude = None, None
+                            if 'N' in location:
+                                latitude = location.split('N')[0].strip()
+                                longitude = location.split('N')[1].strip()
+                            elif 'S' in location:
+                                latitude = '-' + location.split('S')[0].strip()
+                                longitude = location.split('S')[1].strip()
 
-                        if 'W' in longitude:
-                            longitude = '-' + longitude.split('W')[0].strip()
-                        elif longitude.endswith('E'):
-                            longitude = longitude.split('E')[0].strip()
+                            if 'W' in longitude:
+                                longitude = '-' + longitude.split('W')[0].strip()
+                            elif longitude.endswith('E'):
+                                longitude = longitude.split('E')[0].strip()
 
                         if latitude:
                             latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
@@ -845,6 +849,7 @@ class GenomeUpload:
         self.genomeMetadata = self.args.genome_info
         self.genomeType = "bins" if self.args.bins else "MAGs"
         self.live = True if self.args.live else False
+        self.private = self.args.private
         
         if self.args.webin and self.args.password:
             self.username = self.args.webin
@@ -900,6 +905,7 @@ class GenomeUpload:
         parser.add_argument('--webin', required=False, help="Webin id")
         parser.add_argument('--password', required=False, help="Webin password")
         parser.add_argument('--centre_name', required=False, help="Name of the centre uploading genomes")
+        parser.add_argument('--private', required=False, help="if data is private", action='store_true', default=False)
 
         args = parser.parse_args(argv)
 
@@ -925,7 +931,7 @@ class GenomeUpload:
         genomeInfo = extract_genomes_info(self.genomeMetadata, self.genomeType, self.live)
 
         if not os.path.exists(samples_xml) or self.force:
-            extract_ENA_info(genomeInfo, self.upload_dir, self.username, self.password)
+            extract_ENA_info(genomeInfo, self.upload_dir, self.username, self.password, self.private)
             logger.info("Writing genome registration XML...")
 
             write_genomes_xml(genomeInfo, samples_xml, self.genomeType, 
