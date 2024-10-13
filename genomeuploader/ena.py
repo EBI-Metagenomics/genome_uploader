@@ -167,7 +167,7 @@ class ENA():
         else:
             url = f"https://www.ebi.ac.uk/ena/submit/report/studies/xml/{study_accession}"
             manifestXml = minidom.parseString(requests.get(url, auth=(webin, password)).text)
-            study_desc= manifestXml.getElementsByTagName("STUDY_DESCRIPTION")[0].firstChild.nodeValue
+            study_desc = manifestXml.getElementsByTagName("STUDY_DESCRIPTION")[0].firstChild.nodeValue
             final_data = {'study_description': study_desc}
             return final_data
 

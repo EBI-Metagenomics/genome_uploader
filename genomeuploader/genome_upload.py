@@ -386,10 +386,10 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, private=False):
         except json.decoder.JSONDecodeError:
             backupDict = {}
         for s in studySet:
-            studyInfo = ena.get_study(s, webin, password, private=False)
+            studyInfo = ena.get_study(s, webin, password, private)
             projectDescription = studyInfo["study_description"]
 
-            ENA_info = ena.get_study_runs(s, webin, password, private=False)
+            ENA_info = ena.get_study_runs(s, webin, password, private)
             if ENA_info == []:
                 raise IOError("No runs found on ENA for project {}.".format(s))
             
@@ -398,11 +398,11 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, private=False):
                 if runAccession not in backupDict:
                     if runAccession in runsSet:
                         sampleAccession = ENA_info[run]["sample_accession"]
-                        sampleInfo = ena.get_sample(sampleAccession, webin, password, private=False)
+                        sampleInfo = ena.get_sample(sampleAccession, webin, password, private)
 
                         if sampleInfo['latitude'] and sampleInfo['longitude']:
                             latitude =  sampleInfo['latitude']
-                            longitude = ['longitude']
+                            longitude = sampleInfo['longitude']
                         else:
                             location = sampleInfo["location"]
                             latitude, longitude = None, None
