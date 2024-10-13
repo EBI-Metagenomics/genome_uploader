@@ -126,7 +126,6 @@ class ENA():
         else:
             return run
         
-    #   will not work for private, needs modification after checking best endpoint with ENA for run ref
     def get_run_from_assembly(self, assembly_name, webin, password, private=False):
         if not private:
             manifestXml = minidom.parseString(requests.get("https://www.ebi.ac.uk" +
