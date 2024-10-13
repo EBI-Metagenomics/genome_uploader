@@ -194,7 +194,7 @@ class ENA():
             return []
 
         try:
-            runs = response.json()[0:2]
+            runs = response.json()
         except:
             raise ValueError("Query against ENA API did not work. Returned "
                 "message: {}".format(response.text))
