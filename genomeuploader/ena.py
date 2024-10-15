@@ -128,12 +128,12 @@ class ENA():
         
     def get_run_from_assembly(self, assembly_name, webin, password, private=False):
         if not private:
-            manifestXml = minidom.parseString(requests.get("https://www.ebi.ac.uk" +
-                "/ena/browser/api/xml/" + assembly_name).text)
+            response = requests.get("https://www.ebi.ac.uk/ena/browser/api/xml/" + assembly_name)
+            
         else:
-            url = f"https://www.ebi.ac.uk/ena/submit/report/analyses/xml/{assembly_name}"
-            manifestXml = minidom.parseString(requests.get(url, auth=(webin, password)).text)
+            response = requests.get("https://www.ebi.ac.uk/ena/submit/report/analyses/xml/" + assembly_name, auth=(webin, password))
 
+        manifestXml = minidom.parseString(response.text)
         run_ref = manifestXml.getElementsByTagName("RUN_REF")
         run = run_ref[0].attributes["accession"].value
         
@@ -207,6 +207,8 @@ class ENA():
                     run_data['sample_accession'] = run_data.pop('sampleId')
                 if 'id' in run_data:
                     run_data['run_accession'] = run_data.pop('id')
+                if 'instrumentModel' in run_data:
+                    run_data['instrument_model'] = run_data.pop('instrumentModel')
                 final_data.append(run_data)
             return(final_data)
         else:
