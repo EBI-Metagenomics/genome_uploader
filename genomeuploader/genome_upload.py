@@ -400,7 +400,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, private=False):
                         sampleAccession = ENA_info[run]["sample_accession"]
                         sampleInfo = ena.get_sample(sampleAccession, webin, password, private)
 
-                        if sampleInfo['latitude'] and sampleInfo['longitude']:
+                        if 'latitude' in sampleInfo and 'longitude' in sampleInfo:
                             latitude =  sampleInfo['latitude']
                             longitude = sampleInfo['longitude']
                         else:
