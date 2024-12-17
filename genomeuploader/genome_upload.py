@@ -22,22 +22,19 @@ import re
 import json
 import pandas as pd
 from datetime import date, datetime as dt
-from dotenv import load_dotenv
-from pathlib import Path
 
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 import requests
 
-from ena import ENA
+import ena
+from ena import EnaQuery, EnaSubmit
 
 from constants import METAGENOMES, GEOGRAPHIC_LOCATIONS, MQ, HQ
 
 logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
-
-ena = ENA()
 
 GEOGRAPHY_DIGIT_COORDS = 8
 
@@ -350,110 +347,6 @@ def extract_genomes_info(inputFile, genomeType, live):
         genomeInfo[gen]["scientific_name"] = scientificName
 
     return genomeInfo
-
-def extract_ENA_info(genomeInfo, uploadDir, webin, password, private=False):
-    logger.info('Retrieving project and run info from ENA (this might take a while)...')
-    
-    # retrieving metadata from runs (and runs from assembly accessions if provided)
-    allRuns = []
-    for g in genomeInfo:
-        if genomeInfo[g]["accessionType"] == "assembly":
-            derivedRuns = []
-            for acc in genomeInfo[g]["accessions"]:
-                derivedRuns.append(ena.get_run_from_assembly(acc, private))
-            genomeInfo[g]["accessions"] = derivedRuns
-        allRuns.extend(genomeInfo[g]["accessions"])
-
-    runsSet, studySet, samplesDict, tempDict = set(allRuns), set(), {}, {}
-    for r in runsSet:
-        run_info = ena.get_run(r, webin, password, private)
-        studySet.add(run_info["secondary_study_accession"])
-        samplesDict[r] = run_info["sample_accession"]
-    
-    if not studySet:
-        raise ValueError("No study corresponding to runs found.")
-
-    backupFile = os.path.join(uploadDir, "ENA_backup.json")
-    counter = 0
-    if not os.path.exists(backupFile):
-        with open(backupFile, 'w') as file:
-            pass
-    with open(backupFile, "r+") as file:
-        try:
-            backupDict = json.load(file)
-            tempDict = dict(backupDict)
-            logger.info(f"A backup file {backupFile} for ENA sample metadata has been found.")
-        except json.decoder.JSONDecodeError:
-            backupDict = {}
-        for s in studySet:
-            studyInfo = ena.get_study(s, webin, password, private)
-            projectDescription = studyInfo["study_description"]
-
-            ENA_info = ena.get_study_runs(s, webin, password, private)
-            if ENA_info == []:
-                raise IOError("No runs found on ENA for project {}.".format(s))
-            
-            for run, item in enumerate(ENA_info):
-                runAccession = ENA_info[run]["run_accession"]
-                if runAccession not in backupDict:
-                    if runAccession in runsSet:
-                        sampleAccession = ENA_info[run]["sample_accession"]
-                        sampleInfo = ena.get_sample(sampleAccession, webin, password, private)
-
-                        if 'latitude' in sampleInfo and 'longitude' in sampleInfo:
-                            latitude =  sampleInfo['latitude']
-                            longitude = sampleInfo['longitude']
-                        else:
-                            location = sampleInfo["location"]
-                            latitude, longitude = None, None
-                            if 'N' in location:
-                                latitude = location.split('N')[0].strip()
-                                longitude = location.split('N')[1].strip()
-                            elif 'S' in location:
-                                latitude = '-' + location.split('S')[0].strip()
-                                longitude = location.split('S')[1].strip()
-
-                            if 'W' in longitude:
-                                longitude = '-' + longitude.split('W')[0].strip()
-                            elif longitude.endswith('E'):
-                                longitude = longitude.split('E')[0].strip()
-
-                        if latitude:
-                            latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
-                        else:
-                            latitude = "not provided"
-
-                        if longitude:
-                            longitude = "{:.{}f}".format(round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
-                        else:
-                            longitude = "not provided"
- 
-                        country = sampleInfo["country"].split(':')[0]
-                        if not country in GEOGRAPHIC_LOCATIONS:
-                            country = "not provided"
-                        
-                        collectionDate = sampleInfo["collection_date"]
-                        if collectionDate == "" or collectionDate == "missing":
-                            collectionDate = "not provided"
-
-                        tempDict[runAccession] = {
-                            "instrumentModel" : ENA_info[run]["instrument_model"],
-                            "collectionDate" : collectionDate,
-                            "country" : country,
-                            "latitude" : latitude,
-                            "longitude" : longitude,
-                            "projectDescription" : projectDescription,
-                            "study" : s,
-                            "sampleAccession" : samplesDict[runAccession]
-                        }
-                        counter += 1
-
-                        if (counter%10 == 0) or (len(runsSet) - len(backupDict) == counter):
-                            file.seek(0)
-                            file.write(json.dumps(tempDict))
-                            file.truncate()
-    tempDict = {**tempDict, **backupDict}
-    combine_ENA_info(genomeInfo, tempDict)
 
 def multipleElementSet(metadataList):
     return len(set(metadataList))>1
@@ -830,8 +723,8 @@ def main():
         
     if save:
         logger.info("Registering genome samples XMLs...")
-        aliasToNewSampleAccession = ena.handle_genomes_registration(samples_xml, 
-            submission_xml, ENA_uploader.username, ENA_uploader.password, ENA_uploader.live)
+        ena_submit = EnaSubmit(samples_xml, submission_xml, ENA_uploader.live)
+        aliasToNewSampleAccession = ena_submit.handle_genomes_registration()
         saveAccessions(aliasToNewSampleAccession, accessionsFile, writeMode)
 
     logger.info("Generating manifest files...")
@@ -850,32 +743,6 @@ class GenomeUpload:
         self.genomeType = "bins" if self.args.bins else "MAGs"
         self.live = True if self.args.live else False
         self.private = self.args.private
-        
-        if self.args.webin and self.args.password:
-            self.username = self.args.webin
-            self.password = self.args.password
-        else:
-            # Config file
-            user_config = Path.home() / ".genome_uploader.config.env"
-            if user_config.exists():
-                logger.debug("Loading the env variables from ".format(user_config))
-                load_dotenv(str(user_config))
-            else:
-                cwd_config = Path.cwd() / ".genome_uploader.config.env"
-                if cwd_config.exists():
-                    logger.debug("Loading the variables from the current directory.")
-                    load_dotenv(str(cwd_config))
-                else:
-                    logger.debug("Trying to load env variables from the .env file")
-                    # from a local .env file
-                    load_dotenv()
-
-            self.username = os.getenv("ENA_WEBIN")
-            self.password = os.getenv("ENA_WEBIN_PASSWORD")
-        
-        if not self.username or not self.password:
-            logger.error("ENA Webin username or password are empty")
-            sys.exit(1)
 
         self.tpa = True if self.args.tpa else False
         self.centre_name = self.args.centre_name
@@ -883,6 +750,8 @@ class GenomeUpload:
 
         workDir = self.args.out if self.args.out else os.getcwd()
         self.upload_dir = self.generate_genomes_upload_dir(workDir, self.genomeType)
+
+        self.private = self.args.private
     
     def parse_args(self, argv):
         parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
@@ -902,8 +771,6 @@ class GenomeUpload:
         parser.add_argument('--tpa', action='store_true', help="Select if uploading TPA-generated genomes")
         
         # Users can provide their credentials and centre name manually or using a config file
-        parser.add_argument('--webin', required=False, help="Webin id")
-        parser.add_argument('--password', required=False, help="Webin password")
         parser.add_argument('--centre_name', required=False, help="Name of the centre uploading genomes")
         parser.add_argument('--private', required=False, help="if data is private", action='store_true', default=False)
 
@@ -916,6 +783,116 @@ class GenomeUpload:
             raise FileNotFoundError('Genome metadata file "{}" does not exist'.format(args.genome_info))
 
         return args
+
+    def extract_ENA_info(self, genomeInfo, uploadDir, private=False):
+        logger.info('Retrieving project and run info from ENA (this might take a while)...')
+        
+        # retrieving metadata from runs (and runs from assembly accessions if provided)
+        allRuns = []
+        for g in genomeInfo:
+            if genomeInfo[g]["accessionType"] == "assembly":
+                derivedRuns = []
+                for acc in genomeInfo[g]["accessions"]:
+                    ena_query = EnaQuery(acc, "run_assembly", self.private)
+                    derivedRuns.append(ena_query.build_query())
+                genomeInfo[g]["accessions"] = derivedRuns
+            allRuns.extend(genomeInfo[g]["accessions"])
+
+        runsSet, studySet, samplesDict, tempDict = set(allRuns), set(), {}, {}
+        for r in runsSet:
+            ena_query = EnaQuery(r, "run", self.private)
+            run_info = ena_query.build_query()
+            studySet.add(run_info["secondary_study_accession"])
+            samplesDict[r] = run_info["sample_accession"]
+        
+        if not studySet:
+            raise ValueError("No study corresponding to runs found.")
+
+        backupFile = os.path.join(uploadDir, "ENA_backup.json")
+        counter = 0
+        if not os.path.exists(backupFile):
+            with open(backupFile, 'w') as file:
+                pass
+        with open(backupFile, "r+") as file:
+            try:
+                backupDict = json.load(file)
+                tempDict = dict(backupDict)
+                logger.info(f"A backup file {backupFile} for ENA sample metadata has been found.")
+            except json.decoder.JSONDecodeError:
+                backupDict = {}
+            for s in studySet:
+                ena_query = EnaQuery(s, "study", self.private)
+                studyInfo = ena_query.build_query()
+                projectDescription = studyInfo["study_description"]
+
+                ena_query = EnaQuery(s, "study_runs", self.private)
+                ENA_info = ena_query.build_query()
+                if ENA_info == []:
+                    raise IOError("No runs found on ENA for project {}.".format(s))
+                
+                for run, item in enumerate(ENA_info):
+                    runAccession = ENA_info[run]["run_accession"]
+                    if runAccession not in backupDict:
+                        if runAccession in runsSet:
+                            sampleAccession = ENA_info[run]["sample_accession"]
+                            ena_query = EnaQuery(sampleAccession, "sample", self.private)
+                            sampleInfo = ena_query.build_query()
+
+                            if 'latitude' in sampleInfo and 'longitude' in sampleInfo:
+                                latitude =  sampleInfo['latitude']
+                                longitude = sampleInfo['longitude']
+                            else:
+                                location = sampleInfo["location"]
+                                latitude, longitude = None, None
+                                if 'N' in location:
+                                    latitude = location.split('N')[0].strip()
+                                    longitude = location.split('N')[1].strip()
+                                elif 'S' in location:
+                                    latitude = '-' + location.split('S')[0].strip()
+                                    longitude = location.split('S')[1].strip()
+
+                                if 'W' in longitude:
+                                    longitude = '-' + longitude.split('W')[0].strip()
+                                elif longitude.endswith('E'):
+                                    longitude = longitude.split('E')[0].strip()
+
+                            if latitude:
+                                latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
+                            else:
+                                latitude = "not provided"
+
+                            if longitude:
+                                longitude = "{:.{}f}".format(round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
+                            else:
+                                longitude = "not provided"
+    
+                            country = sampleInfo["country"].split(':')[0]
+                            if not country in GEOGRAPHIC_LOCATIONS:
+                                country = "not provided"
+                            
+                            collectionDate = sampleInfo["collection_date"]
+                            if collectionDate == "" or collectionDate == "missing":
+                                collectionDate = "not provided"
+
+                            tempDict[runAccession] = {
+                                "instrumentModel" : ENA_info[run]["instrument_model"],
+                                "collectionDate" : collectionDate,
+                                "country" : country,
+                                "latitude" : latitude,
+                                "longitude" : longitude,
+                                "projectDescription" : projectDescription,
+                                "study" : s,
+                                "sampleAccession" : samplesDict[runAccession]
+                            }
+                            counter += 1
+
+                            if (counter%10 == 0) or (len(runsSet) - len(backupDict) == counter):
+                                file.seek(0)
+                                file.write(json.dumps(tempDict))
+                                file.truncate()
+        tempDict = {**tempDict, **backupDict}
+        combine_ENA_info(genomeInfo, tempDict)
+
 
     def generate_genomes_upload_dir(self, dir, genomeType):
         uploadName = "MAG_upload"

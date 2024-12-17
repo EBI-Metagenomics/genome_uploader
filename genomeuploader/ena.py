@@ -19,9 +19,11 @@
 import requests
 import json
 import logging
-import os 
+import os
+import sys 
 from time import sleep
-import sys
+from pathlib import Path
+from dotenv import load_dotenv
 
 import xml.dom.minidom as minidom
 from requests.exceptions import ConnectionError, HTTPError, RequestException, Timeout
@@ -91,16 +93,82 @@ def parse_accession(accession):
         logging.error(f"{accession} is not a valid accession")
         sys.exit()
 
+def configure_credentials():
+    # Config file
+    user_config = Path.home() / ".genome_uploader.config.env"
+    if user_config.exists():
+        logger.debug("Loading the env variables from ".format(user_config))
+        load_dotenv(str(user_config))
+    else:
+        cwd_config = Path.cwd() / ".genome_uploader.config.env"
+        if cwd_config.exists():
+            logger.debug("Loading the variables from the current directory.")
+            load_dotenv(str(cwd_config))
+        else:
+            logger.debug("Trying to load env variables from the .env file")
+            # from a local .env file
+            load_dotenv()
 
-class ENA():
-    def __init__(self, accession, private=False):
+    username = os.getenv("ENA_WEBIN")
+    password = os.getenv("ENA_WEBIN_PASSWORD")
+
+    return username, password
+
+def query_taxid(taxid):
+    url = "https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{}".format(taxid)
+    response = requests.get(url)
+
+    try:
+        # Will raise exception if response status code is non-200 
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        print("Request failed {} with error {}".format(url, e))
+        return False
+    
+    res = response.json()
+    
+    return res.get("scientificName", "")
+
+def query_scientific_name(scientificName, searchRank=False):
+    url = "https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{}".format(scientificName)
+    response = requests.get(url)
+    
+    try:
+        # Will raise exception if response status code is non-200 
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        if searchRank:
+            return False, "", ""
+        else:
+            return False, ""
+    
+    try:
+        res = response.json()[0]
+    except IndexError:
+        if searchRank:
+            return False, "", ""
+        else:
+            return False, ""
+
+    submittable = res.get("submittable", "").lower() == "true"
+    taxid = res.get("taxId", "")
+    rank = res.get("rank", "")
+
+    if searchRank:
+        return submittable, taxid, rank
+    else:
+        return submittable, taxid
+
+
+
+class EnaQuery():
+    def __init__(self, accession, query_type, private=False):
         self.private_url = "https://www.ebi.ac.uk/ena/submit/report"
         self.public_url = "https://www.ebi.ac.uk/ena/portal/api/search"
         self.browser_url = "https://www.ebi.ac.uk/ena/browser/api/xml"
         self.accession = accession
         self.acc_type = parse_accession(accession)
-        username = os.getenv("ENA_WEBIN")
-        password = os.getenv("ENA_WEBIN_PASSWORD")
+        username, password = configure_credentials()
         if username is None or password is None:
             logging.error("ENA_WEBIN and ENA_WEBIN_PASSWORD are not set")
         if username and password:
@@ -108,7 +176,7 @@ class ENA():
         else:
             self.auth = None
         self.private = private
-
+        self.query_type = query_type
 
     def post_request(self, data):
         response = requests.post(
@@ -311,55 +379,53 @@ class ENA():
         return sample         
 
 
-    def query_taxid(self, taxid):
-        url = "https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{}".format(taxid)
-        response = requests.get(url)
-
-        try:
-            # Will raise exception if response status code is non-200 
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            print("Request failed {} with error {}".format(url, e))
-            return False
-        
-        res = response.json()
-        
-        return res.get("scientificName", "")
-
-    def query_scientific_name(self, scientificName, searchRank=False):
-        url = "https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{}".format(scientificName)
-        response = requests.get(url)
-        
-        try:
-            # Will raise exception if response status code is non-200 
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            if searchRank:
-                return False, "", ""
+    def build_query(self):
+        if self.query_type == "study":
+            if self.private:
+                ena_response = self._get_private_study()
             else:
-                return False, ""
-        
-        try:
-            res = response.json()[0]
-        except IndexError:
-            if searchRank:
-                return False, "", ""
+                ena_response = self._get_public_study()
+        elif self.query_type == "run":
+            if self.private:
+                ena_response = self._get_private_run()
             else:
-                return False, ""
+                ena_response = self._get_public_run()
+        elif self.query_type == "run_assembly":
+            if self.private:
+                ena_response = self._get_private_run_from_assembly()
+            else:
+                ena_response = self._get_public_run_from_assembly()
+        elif self.query_type == "study_runs":
+            if self.private:
+                ena_response = self._get_private_study_runs()
+            else:
+                ena_response = self._get_public_study_runs()
+        elif self.query_type == "sample":
+            if self.private:
+                ena_response = self._get_private_sample()
+            else:
+                ena_response = self._get_public_sample()
+        return ena_response
 
-        submittable = res.get("submittable", "").lower() == "true"
-        taxid = res.get("taxId", "")
-        rank = res.get("rank", "")
 
-        if searchRank:
-            return submittable, taxid, rank
+class EnaSubmit():
+    def __init__(self, sample_xml, submission_xml, live=False):
+        self.sample_xml = sample_xml
+        self.submission_xml = submission_xml
+        self.live = live
+        username, password = configure_credentials()
+        if username is None or password is None:
+            logging.error("ENA_WEBIN and ENA_WEBIN_PASSWORD are not set")
+        if username and password:
+            self.auth = (username, password)
         else:
-            return submittable, taxid
+            self.auth = None
+        
 
-    def handle_genomes_registration(self, sample_xml, submission_xml, live=False):
+    def handle_genomes_registration(self):
         liveSub, mode = "", "live"
 
-        if not live:
+        if not self.live:
             liveSub = "dev"
             mode = "test"
 
@@ -368,8 +434,8 @@ class ENA():
         logger.info('Registering sample xml in {} mode.'.format(mode))
 
         f = {
-            'SUBMISSION': open(submission_xml, 'r'),
-            'SAMPLE': open(sample_xml, 'r')
+            'SUBMISSION': open(self.submission_xml, 'r'),
+            'SAMPLE': open(self.sample_xml, 'r')
         }
 
         submissionResponse = requests.post(url, files = f, auth = self.auth)
@@ -405,3 +471,6 @@ class ENA():
 
         return aliasDict
     
+
+
+        
