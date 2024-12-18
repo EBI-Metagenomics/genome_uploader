@@ -30,13 +30,33 @@ import requests
 import ena
 from ena import EnaQuery, EnaSubmit
 
-from constants import METAGENOMES, GEOGRAPHIC_LOCATIONS, MQ, HQ
+from constants import *
 
 logging.basicConfig(level=logging.DEBUG)
-
 logger = logging.getLogger(__name__)
 
-GEOGRAPHY_DIGIT_COORDS = 8
+def parse_args(argv):
+    parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+        description="Create xmls and manifest files for genome upload to ENA")
+    
+    parser.add_argument('-u', '--upload_study', type=str, help="Study accession for genomes upload")
+    parser.add_argument('--genome_info', type=str, required=True, help="Genomes metadata file")
+
+    genomeType = parser.add_mutually_exclusive_group(required=True)
+    genomeType.add_argument('-m', '--mags', action='store_true', help="Select for MAG upload")
+    genomeType.add_argument('-b', '--bins', action='store_true', help="Select for bin upload")
+    
+    parser.add_argument('--out', type=str, help="Output folder. Default: working directory")
+    parser.add_argument('--force', action='store_true', help="Forces reset of sample xml's backups")
+    parser.add_argument('--live', action='store_true', help="Uploads on ENA. Omitting this " +
+        "option allows to validate samples beforehand")
+    parser.add_argument('--tpa', action='store_true', help="Select if uploading TPA-generated genomes")
+    
+    # Users can provide their credentials and centre name manually or using a config file
+    parser.add_argument('--centre_name', required=False, help="Name of the centre uploading genomes")
+    parser.add_argument('--private', required=False, help="if data is private", action='store_true', default=False)
+
+    return parser.parse_args(argv)
 
 '''
 Input table: expects the following parameters:
@@ -58,55 +78,49 @@ Input table: expects the following parameters:
     genome_coverage : genome coverage
     genome_path: path to genome to upload
 '''
-def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
+
+def validate_metadata_tsv(input_file, genome_type, live):
     logger.info('Retrieving info for genomes to submit...')
     
-    binMandatoryFields = ["genome_name", "accessions",
-        "assembly_software", "binning_software", 
-        "binning_parameters", "stats_generation_software", "NCBI_lineage",
-        "broad_environment", "local_environment", "environmental_medium", "metagenome",
-        "co-assembly", "genome_coverage", "genome_path"]
-    MAGMandatoryFields = ["rRNA_presence", "completeness", "contamination"]
-    
-    allFields = MAGMandatoryFields + binMandatoryFields
-    metadata = pd.read_csv(inputFile, sep='\t', usecols=allFields)
+    all_fields = MAG_MANDATORY_FIELDS + BIN_MANDATORY_FIELDS
+    metadata = pd.read_csv(input_file, sep='\t', usecols=all_fields)
     
     # make sure there are no empty cells
-    cleanColumns = list(metadata.dropna(axis=1))
-    if genomeType == "MAGs":
-        missingValues = [item for item in allFields if item not in cleanColumns]
+    clean_columns = list(metadata.dropna(axis=1))
+    if genome_type == "MAGs":
+        missing_values = [item for item in all_fields if item not in clean_columns]
     else:
-        missingValues = [item for item in binMandatoryFields if item not in cleanColumns]
+        missing_values = [item for item in BIN_MANDATORY_FIELDS if item not in clean_columns]
     
-    if missingValues:
+    if missing_values:
         raise ValueError("The following mandatory fields have missing values in " +
-            "the input file: {}".format(", ".join(missingValues)))
+            "the input file: {}".format(", ".join(missing_values)))
 
     # check amount of genomes to register at the same time
     if len(metadata) >= 5000:
         raise ValueError("Genomes need to be registered in batches of 5000 genomes or smaller.")
 
     # check whether accessions follow the right format
-    accessions_regExp = re.compile(r"([E|S|D]R[R|Z]\d{6,})")
+    accessions_reg_exp = re.compile(r"([E|S|D]R[R|Z]\d{6,})")
 
-    accessionComparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", 
+    accession_comparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", 
         "correct", "mismatching", "co-assembly"])
-    accessionComparison["genome_name"] = metadata["genome_name"]
+    accession_comparison["genome_name"] = metadata["genome_name"]
 
-    accessionComparison["attemptive_accessions"] = metadata["accessions"].map(
+    accession_comparison["attemptive_accessions"] = metadata["accessions"].map(
         lambda a: len(a.split(',')))
 
-    accessionComparison["correct"] = metadata["accessions"].map(
-        lambda a: len(accessions_regExp.findall(a)))
+    accession_comparison["correct"] = metadata["accessions"].map(
+        lambda a: len(accessions_reg_exp.findall(a)))
 
-    accessionComparison["mismatching"] = accessionComparison.apply(lambda row: 
+    accession_comparison["mismatching"] = accession_comparison.apply(lambda row: 
         True if row["attemptive_accessions"] == row["correct"] 
         else None, axis=1).isna()
 
-    mismatchingAccessions = accessionComparison[accessionComparison["mismatching"]]["genome_name"]
-    if not mismatchingAccessions.empty:
+    mismatching_accessions = accession_comparison[accession_comparison["mismatching"]]["genome_name"]
+    if not mismatching_accessions.empty:
         raise ValueError("Run accessions are not correctly formatted for the following " + 
-            "genomes: " + ','.join(mismatchingAccessions.values))
+            "genomes: " + ','.join(mismatching_accessions.values))
 
     # check whether completeness and contamination are floats
     try:
@@ -117,14 +131,14 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
         raise ValueError("Completeness, contamination or coverage values should be formatted as floats")
 
     # check whether all co-assemblies have more than one run associated and viceversa
-    accessionComparison["co-assembly"] = metadata["co-assembly"]
-    coassemblyDiscrepancy = metadata[(
-        (accessionComparison["correct"] < 2) & (accessionComparison["co-assembly"])) |
-        ((accessionComparison["correct"] > 1) & (~accessionComparison["co-assembly"])
+    accession_comparison["co-assembly"] = metadata["co-assembly"]
+    coassembly_discrepancy = metadata[(
+        (accession_comparison["correct"] < 2) & (accession_comparison["co-assembly"])) |
+        ((accession_comparison["correct"] > 1) & (~accession_comparison["co-assembly"])
         )]["genome_name"]
-    if not coassemblyDiscrepancy.empty:
+    if not coassembly_discrepancy.empty:
         raise ValueError("The following genomes show discrepancy between number of runs "
-            "involved and co-assembly status: " + ','.join(coassemblyDiscrepancy.values))
+            "involved and co-assembly status: " + ','.join(coassembly_discrepancy.values))
 
     # are provided metagenomes part of the accepted metagenome list?
     if False in metadata.apply(lambda row: 
@@ -150,97 +164,97 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
             timestamp = str(int(dt.timestamp(dt.now())))
             timestamp_names = [row["genome_name"] + '_' + timestamp for index, row in metadata.iterrows()]
             metadata["unique_genome_name"] = timestamp_names
-            genomeInfo = metadata.set_index("unique_genome_name").transpose().to_dict()
+            genome_info = metadata.set_index("unique_genome_name").transpose().to_dict()
         else:
-            genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
+            genome_info = metadata.set_index("genome_name").transpose().to_dict()
     else:
         raise ValueError("Duplicate names found in genome names")
 
-    return genomeInfo
+    return genome_info
 
 def round_stats(stats):
-    newStat = round(float(stats), 2)
-    if newStat == 100.0:
-        newStat = 100
-    if newStat == 0:
-        newStat = 0.0
+    new_stat = round(float(stats), 2)
+    if new_stat == 100.0:
+        new_stat = 100
+    if new_stat == 0:
+        new_stat = 0.0
 
-    return newStat
+    return new_stat
 
-def compute_MAG_quality(completeness, contamination, RNApresence):
-    RNApresent = str(RNApresence).lower() in ["true", "yes", "y"]
+def compute_mag_quality(completeness, contamination, rna_presence):
+    rna_presence = str(rna_presence).lower() in ["true", "yes", "y"]
     quality = MQ
-    if float(completeness) >= 90 and float(contamination) <= 5 and RNApresent:
+    if float(completeness) >= 90 and float(contamination) <= 5 and rna_presence:
         quality = HQ
     
     return quality, completeness, contamination
 
-def extract_tax_info(taxInfo):
+def extract_tax_info(tax_info):
     # if unclassified, block the execution
-    lineage, kingdomPositionInLineage, digitAnnotation = taxInfo.split(';'), 0, False
-    lineageFirst = lineage[0]
-    if "Unclassified " in lineageFirst:
-        if "Archaea" in lineageFirst:
-            scientificName = "uncultured archaeon"
-        elif "Bacteria" in lineageFirst:
-            scientificName = "uncultured bacterium"
-        elif "Eukaryota" in lineageFirst:
-            scientificName = "uncultured eukaryote"
-        submittable, taxid, rank = ena.query_scientific_name(scientificName, searchRank=True)
-        return taxid, scientificName
+    lineage, kingdom_position_lineage, digit_annotation = tax_info.split(';'), 0, False
+    lineage_first = lineage[0]
+    if "Unclassified " in lineage_first:
+        if "Archaea" in lineage_first:
+            scientific_name = "uncultured archaeon"
+        elif "Bacteria" in lineage_first:
+            scientific_name = "uncultured bacterium"
+        elif "Eukaryota" in lineage_first:
+            scientific_name = "uncultured eukaryote"
+        submittable, taxid, rank = ena.query_scientific_name(scientific_name, search_rank=True)
+        return taxid, scientific_name
 
     kingdoms = ["Archaea", "Bacteria", "Eukaryota"]
-    kingdomTaxa = ["2157", "2", "2759"]
+    kingdom_taxa = ["2157", "2", "2759"]
 
-    selectedKingdom, finalKingdom = kingdoms, ""
+    selected_kingdom, final_kingdom = kingdoms, ""
     if lineage[1].isdigit():
-        selectedKingdom = kingdomTaxa
-        kingdomPositionInLineage = 2
-        digitAnnotation = True
-    for index, k in enumerate(selectedKingdom):
-        if digitAnnotation:
-            if k == lineage[kingdomPositionInLineage]:
-                finalKingdom = selectedKingdom[index]
+        selected_kingdom = kingdom_taxa
+        kingdom_position_lineage = 2
+        digit_annotation = True
+    for index, k in enumerate(selected_kingdom):
+        if digit_annotation:
+            if k == lineage[kingdom_position_lineage]:
+                final_kingdom = selected_kingdom[index]
                 break
         else:
-            if k in lineage[kingdomPositionInLineage]:
-                finalKingdom = selectedKingdom[index]
+            if k in lineage[kingdom_position_lineage]:
+                final_kingdom = selected_kingdom[index]
                 break
 
     iterator = len(lineage)-1
     submittable = False
     rank = ""
     while iterator != -1 and not submittable:
-        scientificName = lineage[iterator].strip()
-        if digitAnnotation:
-            if not '*' in scientificName:
-                scientificName = ena.query_taxid(scientificName)
+        scientific_name = lineage[iterator].strip()
+        if digit_annotation:
+            if not '*' in scientific_name:
+                scientific_name = ena.query_taxid(scientific_name)
             else:
                 iterator -= 1
                 continue
-        elif "__" in scientificName:
-            scientificName = scientificName.split("__")[1]
+        elif "__" in scientific_name:
+            scientific_name = scientific_name.split("__")[1]
         else:
-            raise ValueError("Unrecognised taxonomy format: " + scientificName)
-        submittable, taxid, rank = ena.query_scientific_name(scientificName, searchRank=True)
+            raise ValueError("Unrecognised taxonomy format: " + scientific_name)
+        submittable, taxid, rank = ena.query_scientific_name(scientific_name, search_rank=True)
 
         if not submittable:
-            if finalKingdom == "Archaea" or finalKingdom == "2157":
-                submittable, scientificName, taxid = extract_Archaea_info(scientificName, rank)
-            elif finalKingdom == "Bacteria" or finalKingdom == "2":
-                submittable, scientificName, taxid = extract_Bacteria_info(scientificName, rank)
-            elif finalKingdom == "Eukaryota" or finalKingdom == "2759":
-                submittable, scientificName, taxid = extract_Eukaryota_info(scientificName, rank)
+            if final_kingdom == "Archaea" or final_kingdom == "2157":
+                submittable, scientific_name, taxid = extract_archaea_info(scientific_name, rank)
+            elif final_kingdom == "Bacteria" or final_kingdom == "2":
+                submittable, scientific_name, taxid = extract_bacteria_info(scientific_name, rank)
+            elif final_kingdom == "Eukaryota" or final_kingdom == "2759":
+                submittable, scientific_name, taxid = extract_eukaryota_info(scientific_name, rank)
         iterator -= 1
 
-    return taxid, scientificName
+    return taxid, scientific_name
 
-def extract_Eukaryota_info(name, rank):
-    nonSubmittable = (False, "", 0)
+def extract_eukaryota_info(name, rank):
+    non_submittable = (False, "", 0)
 
     # Asterisks in given taxonomy suggest the classification might be not confident enough.
     if '*' in name:
-        return nonSubmittable
+        return non_submittable
 
     if rank == "super kingdom":
         name = "uncultured eukaryote"
@@ -262,9 +276,9 @@ def extract_Eukaryota_info(name, rank):
                 if submittable:
                     return submittable, name, taxid
                 else:
-                    return nonSubmittable
+                    return non_submittable
 
-def extract_Bacteria_info(name, rank):
+def extract_bacteria_info(name, rank):
     if rank == "species":
         name = name
     elif rank == "superkingdom":
@@ -274,7 +288,7 @@ def extract_Bacteria_info(name, rank):
     elif rank == "genus":
         name = "uncultured {} sp.".format(name)
     
-    submittable, taxid, rank = ena.query_scientific_name(name, searchRank=True)
+    submittable, taxid, rank = ena.query_scientific_name(name, search_rank=True)
     if not submittable:
         if rank in ["species", "genus"] and name.lower().endswith("bacteria"):
             name = "uncultured {}".format(name.lower().replace("bacteria", "bacterium"))
@@ -285,7 +299,7 @@ def extract_Bacteria_info(name, rank):
 
     return submittable, name, taxid
 
-def extract_Archaea_info(name, rank):
+def extract_archaea_info(name, rank):
     if rank == "species":
         name = name
     elif rank == "superkingdom":
@@ -302,7 +316,7 @@ def extract_Archaea_info(name, rank):
     elif rank == "genus":
         name = "uncultured {} sp.".format(name)
     
-    submittable, taxid, rank = ena.query_scientific_name(name, searchRank=True)
+    submittable, taxid, rank = ena.query_scientific_name(name, search_rank=True)
     if not submittable:
         if "Candidatus" in name:
             if rank == "phylum":
@@ -313,149 +327,149 @@ def extract_Archaea_info(name, rank):
                             
     return submittable, name, taxid
 
-def extract_genomes_info(inputFile, genomeType, live):
-    genomeInfo = read_and_cleanse_metadata_tsv(inputFile, genomeType, live)
-    for gen in genomeInfo:
-        genomeInfo[gen]["accessions"] = genomeInfo[gen]["accessions"].split(',')
-        accessionType = "run"
-        assembly_regExp = re.compile(r"([E|S|D]RZ\d{6,})")
-        if assembly_regExp.findall(genomeInfo[gen]["accessions"][0]):
-            accessionType = "assembly"
-        genomeInfo[gen]["accessionType"] = accessionType
+def extract_genomes_info(input_file, genome_type, live):
+    genome_info = validate_metadata_tsv(input_file, genome_type, live)
+    for gen in genome_info:
+        genome_info[gen]["accessions"] = genome_info[gen]["accessions"].split(',')
+        accession_type = "run"
+        assembly_reg_exp = re.compile(r"([E|S|D]RZ\d{6,})")
+        if assembly_reg_exp.findall(genome_info[gen]["accessions"][0]):
+            accession_type = "assembly"
+        genome_info[gen]["accessionType"] = accession_type
 
-        genomeInfo[gen]["isolationSource"] = genomeInfo[gen]["metagenome"]
+        genome_info[gen]["isolationSource"] = genome_info[gen]["metagenome"]
         
         try:
-            (genomeInfo[gen]["MAG_quality"], 
-            genomeInfo[gen]["completeness"], 
-            genomeInfo[gen]["contamination"]) = compute_MAG_quality(
-                                    str(round_stats(genomeInfo[gen]["completeness"])),
-                                    str(round_stats(genomeInfo[gen]["contamination"])), 
-                                    genomeInfo[gen]["rRNA_presence"])
+            (genome_info[gen]["MAG_quality"], 
+            genome_info[gen]["completeness"], 
+            genome_info[gen]["contamination"]) = compute_mag_quality(
+                                    str(round_stats(genome_info[gen]["completeness"])),
+                                    str(round_stats(genome_info[gen]["contamination"])), 
+                                    genome_info[gen]["rRNA_presence"])
         except IndexError:
             pass
 
-        if str(genomeInfo[gen]["co-assembly"]).lower() in ["yes", "y", "true"]:
-            genomeInfo[gen]["co-assembly"] = True
+        if str(genome_info[gen]["co-assembly"]).lower() in ["yes", "y", "true"]:
+            genome_info[gen]["co-assembly"] = True
         else:
-            genomeInfo[gen]["co-assembly"] = False
+            genome_info[gen]["co-assembly"] = False
         
-        genomeInfo[gen]["alias"] = gen
+        genome_info[gen]["alias"] = gen
 
-        taxID, scientificName = extract_tax_info(genomeInfo[gen]["NCBI_lineage"])
-        genomeInfo[gen]["taxID"] = taxID
-        genomeInfo[gen]["scientific_name"] = scientificName
+        tax_id, scientific_name = extract_tax_info(genome_info[gen]["NCBI_lineage"])
+        genome_info[gen]["taxID"] = tax_id
+        genome_info[gen]["scientific_name"] = scientific_name
 
-    return genomeInfo
+    return genome_info
 
-def multipleElementSet(metadataList):
-    return len(set(metadataList))>1
+def multiple_element_set(metadata_list):
+    return len(set(metadata_list))>1
 
-def combine_ENA_info(genomeInfo, ENADict):
-    for g in genomeInfo:
+def combine_ENA_info(genome_info, ena_dict):
+    for g in genome_info:
         # TODO: optimise all the part below
-        if genomeInfo[g]["co-assembly"]:
-            instrumentList, collectionList, countryList = [], [], []
-            studyList, descriptionList, samplesList = [], [], []
-            longList, latitList = [], []
-            for run in genomeInfo[g]["accessions"]:
-                instrumentList.append(ENADict[run]["instrumentModel"])
-                collectionList.append(ENADict[run]["collectionDate"])
-                countryList.append(ENADict[run]["country"])
-                studyList.append(ENADict[run]["study"])
-                descriptionList.append(ENADict[run]["projectDescription"])
-                samplesList.append(ENADict[run]["sampleAccession"])
-                longList.append(ENADict[run]["longitude"])
-                latitList.append(ENADict[run]["latitude"])
+        if genome_info[g]["co-assembly"]:
+            instrument_list, collection_list, country_list = [], [], []
+            study_list, description_list, samples_list = [], [], []
+            long_list, latit_list = [], []
+            for run in genome_info[g]["accessions"]:
+                instrument_list.append(ena_dict[run]["instrumentModel"])
+                collection_list.append(ena_dict[run]["collectionDate"])
+                country_list.append(ena_dict[run]["country"])
+                study_list.append(ena_dict[run]["study"])
+                description_list.append(ena_dict[run]["projectDescription"])
+                samples_list.append(ena_dict[run]["sampleAccession"])
+                long_list.append(ena_dict[run]["longitude"])
+                latit_list.append(ena_dict[run]["latitude"])
 
-            genomeInfo[g]["study"] = studyList[0] 
-            genomeInfo[g]["description"] = descriptionList[0]
+            genome_info[g]["study"] = study_list[0] 
+            genome_info[g]["description"] = description_list[0]
             
-            instrument = instrumentList[0]
-            if multipleElementSet(instrumentList):
-                instrument = ','.join(instrumentList)
-            genomeInfo[g]["sequencingMethod"] = instrument
+            instrument = instrument_list[0]
+            if multiple_element_set(instrument_list):
+                instrument = ','.join(instrument_list)
+            genome_info[g]["sequencingMethod"] = instrument
 
-            collectionDate = collectionList[0]
-            if multipleElementSet(collectionList):
-                collectionDate = "not provided"
-            genomeInfo[g]["collectionDate"] = collectionDate
+            collection_date = collection_list[0]
+            if multiple_element_set(collection_list):
+                collection_date = "not provided"
+            genome_info[g]["collectionDate"] = collection_date
 
-            country = countryList[0]
-            if multipleElementSet(countryList):
+            country = country_list[0]
+            if multiple_element_set(country_list):
                 country = "not applicable"
-            genomeInfo[g]["country"] = country
+            genome_info[g]["country"] = country
 
-            latitude = latitList[0]
-            if multipleElementSet(latitList):
+            latitude = latit_list[0]
+            if multiple_element_set(latit_list):
                 latitude = "not provided"
-            genomeInfo[g]["latitude"] = str(round(float(latitude), GEOGRAPHY_DIGIT_COORDS))
+            genome_info[g]["latitude"] = str(round(float(latitude), GEOGRAPHY_DIGIT_COORDS))
 
-            longitude = longList[0]
-            if multipleElementSet(longList):
+            longitude = long_list[0]
+            if multiple_element_set(long_list):
                 longitude = "not provided"
-            genomeInfo[g]["longitude"] = str(round(float(longitude), GEOGRAPHY_DIGIT_COORDS))
+            genome_info[g]["longitude"] = str(round(float(longitude), GEOGRAPHY_DIGIT_COORDS))
 
-            samples = samplesList[0]
-            if multipleElementSet(samplesList):
-                samples = ','.join(samplesList)
-            genomeInfo[g]["sample_accessions"] = samples
+            samples = samples_list[0]
+            if multiple_element_set(samples_list):
+                samples = ','.join(samples_list)
+            genome_info[g]["sample_accessions"] = samples
         else:
-            run = genomeInfo[g]["accessions"][0]
-            genomeInfo[g]["sequencingMethod"] = ENADict[run]["instrumentModel"]
-            genomeInfo[g]["collectionDate"] = ENADict[run]["collectionDate"]
-            genomeInfo[g]["study"] = ENADict[run]["study"]
-            genomeInfo[g]["description"] = ENADict[run]["projectDescription"]
-            genomeInfo[g]["sample_accessions"] = ENADict[run]["sampleAccession"]
-            genomeInfo[g]["country"] = ENADict[run]["country"]
-            genomeInfo[g]["longitude"] = ENADict[run]["longitude"]
-            genomeInfo[g]["latitude"] = ENADict[run]["latitude"]
+            run = genome_info[g]["accessions"][0]
+            genome_info[g]["sequencingMethod"] = ena_dict[run]["instrumentModel"]
+            genome_info[g]["collectionDate"] = ena_dict[run]["collectionDate"]
+            genome_info[g]["study"] = ena_dict[run]["study"]
+            genome_info[g]["description"] = ena_dict[run]["projectDescription"]
+            genome_info[g]["sample_accessions"] = ena_dict[run]["sampleAccession"]
+            genome_info[g]["country"] = ena_dict[run]["country"]
+            genome_info[g]["longitude"] = ena_dict[run]["longitude"]
+            genome_info[g]["latitude"] = ena_dict[run]["latitude"]
         
-        genomeInfo[g]["accessions"] = ','.join(genomeInfo[g]["accessions"])
+        genome_info[g]["accessions"] = ','.join(genome_info[g]["accessions"])
 
 
 
-def getAccessions(accessionsFile):
-    accessionDict = {}
-    with open(accessionsFile, 'r') as f:
+def get_accessions(accessions_file):
+    accession_dict = {}
+    with open(accessions_file, 'r') as f:
         for line in f:
             line = line.split('\t')
             alias = line[0]
             accession = line[1].rstrip('\n')
-            accessionDict[alias] = accession
+            accession_dict[alias] = accession
 
-    return accessionDict
+    return accession_dict
 
-def saveAccessions(aliasAccessionDict, accessionsFile, writeMode):
-    with open(accessionsFile, writeMode) as f:
-        for elem in aliasAccessionDict:
-            f.write("{}\t{}\n".format(elem, aliasAccessionDict[elem]))
+def save_accessions(alias_accession_dict, accessions_file, write_mode):
+    with open(accessions_file, write_mode) as f:
+        for elem in alias_accession_dict:
+            f.write("{}\t{}\n".format(elem, alias_accession_dict[elem]))
 
-def create_manifest_dictionary(run, alias, assemblySoftware, sequencingMethod, 
-    MAGpath, gen, study, coverage, isCoassembly):
-    manifestDict = {
+def create_manifest_dictionary(run, alias, assembly_software, sequencing_method, 
+    mag_path, gen, study, coverage, is_coassembly):
+    manifest_dict = {
         "accessions" : run,
         "alias" : alias,
-        "assembler" : assemblySoftware, 
-        "sequencingMethod" : sequencingMethod, 
-        "genome_path" : MAGpath,
+        "assembler" : assembly_software, 
+        "sequencingMethod" : sequencing_method, 
+        "genome_path" : mag_path,
         "genome_name" : gen,
         "study" : study,
         "coverageDepth" : coverage, 
-        "co-assembly" : isCoassembly
+        "co-assembly" : is_coassembly
     }
 
-    return manifestDict
+    return manifest_dict
 
 def compute_manifests(genomes):
-    manifestInfo = {}
+    manifest_info = {}
     for g in genomes:
-        manifestInfo[g] = create_manifest_dictionary(genomes[g]["accessions"],
+        manifest_info[g] = create_manifest_dictionary(genomes[g]["accessions"],
             genomes[g]["alias"], genomes[g]["assembly_software"], 
             genomes[g]["sequencingMethod"], genomes[g]["genome_path"], g, 
             genomes[g]["study"], genomes[g]["genome_coverage"], genomes[g]["co-assembly"])
     
-    return manifestInfo
+    return manifest_info
 
 def get_study_from_xml(sample):
     description = sample.childNodes[5].childNodes[0].data
@@ -463,7 +477,7 @@ def get_study_from_xml(sample):
 
     return study
 
-def recover_info_from_xml(genomeDict, sample_xml, live_mode):
+def recover_info_from_xml(genome_dict, sample_xml, live_mode):
     logger.info("Retrieving data for genome submission...")
 
     # extract list of genomes (samples) to be registered
@@ -474,42 +488,42 @@ def recover_info_from_xml(genomeDict, sample_xml, live_mode):
         study = get_study_from_xml(s)
 
         # extract alias from xml and find a match with genomes the user is uploading
-        XMLalias = s.attributes["alias"].value
+        xml_alias = s.attributes["alias"].value
         if not live_mode:         # remove time stamp if test mode is selected
-            aliasSplit = XMLalias.split("_")
-            XMLalias = '_'.join(aliasSplit[:-1])
-        for gen in genomeDict:
+            alias_split = xml_alias.split("_")
+            xml_alias = '_'.join(alias_split[:-1])
+        for gen in genome_dict:
             # if match is found, associate attributes listed in the xml file
             # with genomes to upload
-            if XMLalias == gen:
+            if xml_alias == gen:
                 if not live_mode:
-                    currentTimestamp = str(int(dt.timestamp(dt.now())))
-                    XMLalias = gen + '_' + currentTimestamp
-                    s.attributes["alias"].value = XMLalias
-                    sampleTitle = s.getElementsByTagName("TITLE")[0]
-                    sampleTitleValue = sampleTitle.firstChild.nodeValue.split("_")
-                    sampleTitleValue[-1] = currentTimestamp
-                    newSampleTitle = '_'.join(sampleTitleValue)
-                    s.getElementsByTagName("TITLE")[0].firstChild.replaceWholeText(newSampleTitle)
+                    current_time_stamp = str(int(dt.timestamp(dt.now())))
+                    xml_alias = gen + '_' + current_time_stamp
+                    s.attributes["alias"].value = xml_alias
+                    sample_title = s.getElementsByTagName("TITLE")[0]
+                    sample_title_value = sample_title.firstChild.nodeValue.split("_")
+                    sample_title_value[-1] = current_time_stamp
+                    new_sample_title = '_'.join(sample_title_value)
+                    s.getElementsByTagName("TITLE")[0].firstChild.replaceWholeText(new_sample_title)
                 attributes = s.childNodes[7].getElementsByTagName("SAMPLE_ATTRIBUTE")
-                seqMethod, assSoftware = "", ""
+                seq_method, ass_software = "", ""
                 for a in attributes:
-                    tagElem = a.getElementsByTagName("TAG")
-                    tag = tagElem[0].childNodes[0].nodeValue
+                    tag_elem = a.getElementsByTagName("TAG")
+                    tag = tag_elem[0].childNodes[0].nodeValue
                     if tag == "sequencing method":
-                        seqMethodElem = a.getElementsByTagName("VALUE")
-                        seqMethod = seqMethodElem[0].childNodes[0].nodeValue
+                        seq_method_elem = a.getElementsByTagName("VALUE")
+                        seq_method = seq_method_elem[0].childNodes[0].nodeValue
                     elif tag == "assembly software":
-                        assSoftwareElem = a.getElementsByTagName("VALUE")
-                        assSoftware = assSoftwareElem[0].childNodes[0].nodeValue
-                    if not seqMethod == "" and not assSoftware == "":
+                        ass_software_elem = a.getElementsByTagName("VALUE")
+                        ass_software = ass_software_elem[0].childNodes[0].nodeValue
+                    if not seq_method == "" and not ass_software == "":
                         break
 
-                genomeDict[gen]["accessions"] = ','.join(genomeDict[gen]["accessions"])
-                genomeDict[gen]["alias"] = XMLalias
-                genomeDict[gen]["assembly_software"] = assSoftware
-                genomeDict[gen]["sequencingMethod"] = seqMethod
-                genomeDict[gen]["study"] = study
+                genome_dict[gen]["accessions"] = ','.join(genome_dict[gen]["accessions"])
+                genome_dict[gen]["alias"] = xml_alias
+                genome_dict[gen]["assembly_software"] = ass_software
+                genome_dict[gen]["sequencingMethod"] = seq_method
+                genome_dict[gen]["study"] = study
                 break
 
     if not live_mode:
@@ -537,7 +551,7 @@ def create_sample_attribute(sample_attributes, data_list, mag_data=None):
     if units:
         ET.SubElement(new_sample_attr, 'UNITS').text = units
 
-def write_genomes_xml(genomes, xml_path, genomeType, centreName, tpa):
+def write_genomes_xml(genomes, xml_path, genome_type, centre_name, tpa):
     map_sample_attributes = [
         # tag - value - unit (optional)
         ["project name", "description"],
@@ -561,10 +575,10 @@ def write_genomes_xml(genomes, xml_path, genomeType, centreName, tpa):
         ["metagenomic source", "metagenome"],
     ]
 
-    checklist, assemblyType = "ERC000047", "Metagenome-assembled genome"
-    if genomeType == "bins":
+    checklist, assembly_type = "ERC000047", "Metagenome-assembled genome"
+    if genome_type == "bins":
         checklist = "ERC000050"
-        assemblyType = "binned metagenome"
+        assembly_type = "binned metagenome"
 
     constant_sample_attributes = [
         # tag - value
@@ -573,9 +587,9 @@ def write_genomes_xml(genomes, xml_path, genomeType, centreName, tpa):
         ["ENA-CHECKLIST", checklist],
     ]
 
-    tpaDescription = ""
+    tpa_description = ""
     if tpa:
-        tpaDescription = "Third Party Annotation (TPA) "
+        tpa_description = "Third Party Annotation (TPA) "
 
     sample_set = ET.Element("SAMPLE_SET")
 
@@ -584,15 +598,15 @@ def write_genomes_xml(genomes, xml_path, genomeType, centreName, tpa):
         if genomes[g]["co-assembly"]:
             plural = 's'
         description = ("This sample represents a {}{} assembled from the "
-            "metagenomic run{} {} of study {}.".format(tpaDescription, 
-            assemblyType, plural, genomes[g]["accessions"], 
+            "metagenomic run{} {} of study {}.".format(tpa_description, 
+            assembly_type, plural, genomes[g]["accessions"], 
             genomes[g]["study"]))
         
         sample = ET.SubElement(sample_set, "SAMPLE")
         sample.set("alias", genomes[g]["alias"])
-        sample.set("center_name", centreName)
+        sample.set("center_name", centre_name)
 
-        ET.SubElement(sample, 'TITLE').text = ("{}: {}".format(assemblyType, 
+        ET.SubElement(sample, 'TITLE').text = ("{}: {}".format(assembly_type, 
             genomes[g]["alias"]))
         sample_name = ET.SubElement(sample, "SAMPLE_NAME")
         ET.SubElement(sample_name, "TAXON_ID").text = genomes[g]["taxID"]
@@ -641,35 +655,35 @@ def write_submission_xml(upload_dir, centre_name, study=True):
 
     return sub_xml
 
-def generate_genome_manifest(genomeInfo, study, manifestsRoot, aliasToSample, genomeType, tpa):
-    manifest_path = os.path.join(manifestsRoot, f'{genomeInfo["genome_name"]}.manifest')
+def generate_genome_manifest(genome_info, study, manifests_root, alias_to_sample, genome_type, tpa):
+    manifest_path = os.path.join(manifests_root, f'{genome_info["genome_name"]}.manifest')
     
-    tpaAddition, multipleRuns = "", ""
+    tpa_addition, multiple_runs = "", ""
     if tpa:
-        tpaAddition = "Third Party Annotation (TPA) "
-    if genomeInfo["co-assembly"]:
-        multipleRuns = "s"
-    assemblyType = "Metagenome-Assembled Genome (MAG)"
-    if genomeType == "bins":
-        assemblyType = "binned metagenome"
+        tpa_addition = "Third Party Annotation (TPA) "
+    if genome_info["co-assembly"]:
+        multiple_runs = "s"
+    assembly_type = "Metagenome-Assembled Genome (MAG)"
+    if genome_type == "bins":
+        assembly_type = "binned metagenome"
 
     values = (
         ('STUDY', study),
-        ('SAMPLE', aliasToSample[genomeInfo["alias"]]),
-        ('ASSEMBLYNAME', genomeInfo["alias"]),
-        ('ASSEMBLY_TYPE', assemblyType),
-        ('COVERAGE', genomeInfo["coverageDepth"]),
-        ('PROGRAM', genomeInfo["assembler"]),
-        ('PLATFORM', genomeInfo["sequencingMethod"]),
+        ('SAMPLE', alias_to_sample[genome_info["alias"]]),
+        ('ASSEMBLYNAME', genome_info["alias"]),
+        ('ASSEMBLY_TYPE', assembly_type),
+        ('COVERAGE', genome_info["coverageDepth"]),
+        ('PROGRAM', genome_info["assembler"]),
+        ('PLATFORM', genome_info["sequencingMethod"]),
         ('MOLECULETYPE', "genomic DNA"),
         ('DESCRIPTION', ("This is a {}bin derived from the primary whole genome "
             "shotgun (WGS) data set {}. This sample represents a {} from the "
-            "metagenomic run{} {}.".format(tpaAddition, genomeInfo["study"], 
-            assemblyType, multipleRuns, genomeInfo["accessions"]))),
-        ('RUN_REF', genomeInfo["accessions"]),
-        ('FASTA', os.path.abspath(genomeInfo["genome_path"]))
+            "metagenomic run{} {}.".format(tpa_addition, genome_info["study"], 
+            assembly_type, multiple_runs, genome_info["accessions"]))),
+        ('RUN_REF', genome_info["accessions"]),
+        ('FASTA', os.path.abspath(genome_info["genome_path"]))
     )
-    logger.info("Writing manifest file (.manifest) for {}.".format(genomeInfo["alias"]))
+    logger.info("Writing manifest file (.manifest) for {}.".format(genome_info["alias"]))
     with open(manifest_path, "w") as outfile:
         for (k, v) in values:
             manifest = f'{k}\t{v}\n'
@@ -684,63 +698,62 @@ def main():
         logger.warning("Warning: genome submission is not in live mode, " +
             "files will be validated, but not uploaded.")
 
-    xmlGenomeFile, xmlSubFile = "genome_samples.xml", "submission.xml"
-    samples_xml = os.path.join(ENA_uploader.upload_dir, xmlGenomeFile)
-    submissionXmlPath = os.path.join(ENA_uploader.upload_dir, xmlSubFile)
-    submission_xml = submissionXmlPath
-    genomes, manifestInfo = {}, {}
+    xml_genome_file, xml_sub_file = "genome_samples.xml", "submission.xml"
+    samples_xml = os.path.join(ENA_uploader.upload_dir, xml_genome_file)
+    submission_xml_path = os.path.join(ENA_uploader.upload_dir, xml_sub_file)
+    submission_xml = submission_xml_path
+    genomes, manifest_info = {}, {}
 
     # submission xml existence
-    if not os.path.exists(submissionXmlPath):
+    if not os.path.exists(submission_xml_path):
         submission_xml = write_submission_xml(ENA_uploader.upload_dir, ENA_uploader.centre_name, False)
 
     # sample xml generation or recovery
     genomes = ENA_uploader.create_genome_dictionary(samples_xml)
         
     # manifests creation
-    manifestDir = os.path.join(ENA_uploader.upload_dir, "manifests")
-    os.makedirs(manifestDir, exist_ok=True)
+    manifest_dir = os.path.join(ENA_uploader.upload_dir, "manifests")
+    os.makedirs(manifest_dir, exist_ok=True)
     
     accessionsgen = "registered_MAGs.tsv"
-    if ENA_uploader.genomeType == "bins":
+    if ENA_uploader.genome_type == "bins":
         accessionsgen = accessionsgen.replace("MAG", "bin")
     if not ENA_uploader.live:
         accessionsgen = accessionsgen.replace(".tsv", "_test.tsv")
     
-    accessionsFile = os.path.join(ENA_uploader.upload_dir, accessionsgen)
+    accessions_file = os.path.join(ENA_uploader.upload_dir, accessionsgen)
     save = False
-    writeMode = 'a'
-    if os.path.exists(accessionsFile):
+    write_mode = 'a'
+    if os.path.exists(accessions_file):
         if not ENA_uploader.live:
             save = True
             if ENA_uploader.force:
-                writeMode = 'w'
+                write_mode = 'w'
         if not save:
             logger.info("Genome samples already registered, reading ERS accessions...")
-            aliasToNewSampleAccession = getAccessions(accessionsFile)
+            alias_to_new_sample_accession = get_accessions(accessions_file)
     else:
         save = True
         
     if save:
         logger.info("Registering genome samples XMLs...")
         ena_submit = EnaSubmit(samples_xml, submission_xml, ENA_uploader.live)
-        aliasToNewSampleAccession = ena_submit.handle_genomes_registration()
-        saveAccessions(aliasToNewSampleAccession, accessionsFile, writeMode)
+        alias_to_new_sample_accession = ena_submit.handle_genomes_registration()
+        save_accessions(alias_to_new_sample_accession, accessions_file, write_mode)
 
     logger.info("Generating manifest files...")
     
-    manifestInfo = compute_manifests(genomes)
+    manifest_info = compute_manifests(genomes)
 
-    for m in manifestInfo:
-        generate_genome_manifest(manifestInfo[m], ENA_uploader.upStudy,  
-            manifestDir, aliasToNewSampleAccession, ENA_uploader.genomeType, ENA_uploader.tpa)
+    for m in manifest_info:
+        generate_genome_manifest(manifest_info[m], ENA_uploader.up_study,  
+            manifest_dir, alias_to_new_sample_accession, ENA_uploader.genome_type, ENA_uploader.tpa)
 
 class GenomeUpload:
     def __init__(self, argv=sys.argv[1:]):
         self.args = self.parse_args(argv)
-        self.upStudy = self.args.upload_study
-        self.genomeMetadata = self.args.genome_info
-        self.genomeType = "bins" if self.args.bins else "MAGs"
+        self.up_study = self.args.upload_study
+        self.genome_type = "bins" if self.args.bins else "MAGs"
         self.live = True if self.args.live else False
         self.private = self.args.private
 
@@ -748,101 +761,78 @@ class GenomeUpload:
         self.centre_name = self.args.centre_name
         self.force = True if self.args.force else False
 
-        workDir = self.args.out if self.args.out else os.getcwd()
-        self.upload_dir = self.generate_genomes_upload_dir(workDir, self.genomeType)
+        work_dir = self.args.out if self.args.out else os.getcwd()
+        self.upload_dir = self.generate_genomes_upload_dir(work_dir, self.genome_type)
 
         self.private = self.args.private
-    
-    def parse_args(self, argv):
-        parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
-            description="Create xmls and manifest files for genome upload to ENA")
-        
-        parser.add_argument('-u', '--upload_study', type=str, help="Study accession for genomes upload")
-        parser.add_argument('--genome_info', type=str, required=True, help="Genomes metadata file")
 
-        genomeType = parser.add_mutually_exclusive_group(required=True)
-        genomeType.add_argument('-m', '--mags', action='store_true', help="Select for MAG upload")
-        genomeType.add_argument('-b', '--bins', action='store_true', help="Select for bin upload")
-        
-        parser.add_argument('--out', type=str, help="Output folder. Default: working directory")
-        parser.add_argument('--force', action='store_true', help="Forces reset of sample xml's backups")
-        parser.add_argument('--live', action='store_true', help="Uploads on ENA. Omitting this " +
-            "option allows to validate samples beforehand")
-        parser.add_argument('--tpa', action='store_true', help="Select if uploading TPA-generated genomes")
-        
-        # Users can provide their credentials and centre name manually or using a config file
-        parser.add_argument('--centre_name', required=False, help="Name of the centre uploading genomes")
-        parser.add_argument('--private', required=False, help="if data is private", action='store_true', default=False)
-
-        args = parser.parse_args(argv)
-
-        if not args.upload_study:
+        if not self.args.upload_study:
             raise ValueError("No project selected for genome upload [-u, --upload_study].")
-        
-        if not os.path.exists(args.genome_info):
-            raise FileNotFoundError('Genome metadata file "{}" does not exist'.format(args.genome_info))
+        self.upload_study = self.args.upload_study
 
-        return args
+        if not os.path.exists(self.args.genome_info):
+            raise FileNotFoundError('Genome metadata file "{}" does not exist'.format(self.args.genome_info))
+        self.genome_metadata = self.args.genome_info
 
-    def extract_ENA_info(self, genomeInfo, uploadDir, private=False):
+    def extract_ena_info(self, genome_info, upload_dir):
         logger.info('Retrieving project and run info from ENA (this might take a while)...')
         
         # retrieving metadata from runs (and runs from assembly accessions if provided)
-        allRuns = []
-        for g in genomeInfo:
-            if genomeInfo[g]["accessionType"] == "assembly":
-                derivedRuns = []
-                for acc in genomeInfo[g]["accessions"]:
+        all_runs = []
+        for g in genome_info:
+            if genome_info[g]["accessionType"] == "assembly":
+                derived_runs = []
+                for acc in genome_info[g]["accessions"]:
                     ena_query = EnaQuery(acc, "run_assembly", self.private)
-                    derivedRuns.append(ena_query.build_query())
-                genomeInfo[g]["accessions"] = derivedRuns
-            allRuns.extend(genomeInfo[g]["accessions"])
+                    derived_runs.append(ena_query.build_query())
+                genome_info[g]["accessions"] = derived_runs
+            all_runs.extend(genome_info[g]["accessions"])
 
-        runsSet, studySet, samplesDict, tempDict = set(allRuns), set(), {}, {}
-        for r in runsSet:
+        runs_set, study_set, samples_dict, temp_dict = set(all_runs), set(), {}, {}
+        for r in runs_set:
             ena_query = EnaQuery(r, "run", self.private)
             run_info = ena_query.build_query()
-            studySet.add(run_info["secondary_study_accession"])
-            samplesDict[r] = run_info["sample_accession"]
+            study_set.add(run_info["secondary_study_accession"])
+            samples_dict[r] = run_info["sample_accession"]
         
-        if not studySet:
+        if not study_set:
             raise ValueError("No study corresponding to runs found.")
 
-        backupFile = os.path.join(uploadDir, "ENA_backup.json")
+        backup_file = os.path.join(upload_dir, "ENA_backup.json")
         counter = 0
-        if not os.path.exists(backupFile):
-            with open(backupFile, 'w') as file:
+        if not os.path.exists(backup_file):
+            with open(backup_file, 'w') as file:
                 pass
-        with open(backupFile, "r+") as file:
+        with open(backup_file, "r+") as file:
             try:
-                backupDict = json.load(file)
-                tempDict = dict(backupDict)
-                logger.info(f"A backup file {backupFile} for ENA sample metadata has been found.")
+                backup_dict = json.load(file)
+                temp_dict = dict(backup_dict)
+                logger.info(f"A backup file {backup_file} for ENA sample metadata has been found.")
             except json.decoder.JSONDecodeError:
-                backupDict = {}
-            for s in studySet:
+                backup_dict = {}
+            for s in study_set:
                 ena_query = EnaQuery(s, "study", self.private)
-                studyInfo = ena_query.build_query()
-                projectDescription = studyInfo["study_description"]
+                study_info = ena_query.build_query()
+                project_description = study_info["study_description"]
 
                 ena_query = EnaQuery(s, "study_runs", self.private)
-                ENA_info = ena_query.build_query()
-                if ENA_info == []:
+                ena_info = ena_query.build_query()
+                if ena_info == []:
                     raise IOError("No runs found on ENA for project {}.".format(s))
                 
-                for run, item in enumerate(ENA_info):
-                    runAccession = ENA_info[run]["run_accession"]
-                    if runAccession not in backupDict:
-                        if runAccession in runsSet:
-                            sampleAccession = ENA_info[run]["sample_accession"]
-                            ena_query = EnaQuery(sampleAccession, "sample", self.private)
-                            sampleInfo = ena_query.build_query()
+                for run, item in enumerate(ena_info):
+                    run_accession = ena_info[run]["run_accession"]
+                    if run_accession not in backup_dict:
+                        if run_accession in runs_set:
+                            sample_accession = ena_info[run]["sample_accession"]
+                            ena_query = EnaQuery(sample_accession, "sample", self.private)
+                            sample_info = ena_query.build_query()
 
-                            if 'latitude' in sampleInfo and 'longitude' in sampleInfo:
-                                latitude =  sampleInfo['latitude']
-                                longitude = sampleInfo['longitude']
+                            if 'latitude' in sample_info and 'longitude' in sample_info:
+                                latitude =  sample_info['latitude']
+                                longitude = sample_info['longitude']
                             else:
-                                location = sampleInfo["location"]
+                                location = sample_info["location"]
                                 latitude, longitude = None, None
                                 if 'N' in location:
                                     latitude = location.split('N')[0].strip()
@@ -866,58 +856,58 @@ class GenomeUpload:
                             else:
                                 longitude = "not provided"
     
-                            country = sampleInfo["country"].split(':')[0]
+                            country = sample_info["country"].split(':')[0]
                             if not country in GEOGRAPHIC_LOCATIONS:
                                 country = "not provided"
                             
-                            collectionDate = sampleInfo["collection_date"]
+                            collectionDate = sample_info["collection_date"]
                             if collectionDate == "" or collectionDate == "missing":
                                 collectionDate = "not provided"
 
-                            tempDict[runAccession] = {
-                                "instrumentModel" : ENA_info[run]["instrument_model"],
+                            temp_dict[run_accession] = {
+                                "instrumentModel" : ena_info[run]["instrument_model"],
                                 "collectionDate" : collectionDate,
                                 "country" : country,
                                 "latitude" : latitude,
                                 "longitude" : longitude,
-                                "projectDescription" : projectDescription,
+                                "projectDescription" : project_description,
                                 "study" : s,
-                                "sampleAccession" : samplesDict[runAccession]
+                                "sampleAccession" : samples_dict[run_accession]
                             }
                             counter += 1
 
-                            if (counter%10 == 0) or (len(runsSet) - len(backupDict) == counter):
+                            if (counter%10 == 0) or (len(runs_set) - len(backup_dict) == counter):
                                 file.seek(0)
-                                file.write(json.dumps(tempDict))
+                                file.write(json.dumps(temp_dict))
                                 file.truncate()
-        tempDict = {**tempDict, **backupDict}
-        combine_ENA_info(genomeInfo, tempDict)
+        temp_dict = {**temp_dict, **backup_dict}
+        combine_ENA_info(genome_info, temp_dict)
 
 
-    def generate_genomes_upload_dir(self, dir, genomeType):
-        uploadName = "MAG_upload"
-        if genomeType == "bins":
-            uploadName = uploadName.replace("MAG", "bin")
-        upload_dir = os.path.join(dir, uploadName)
+    def generate_genomes_upload_dir(self, dir, genome_type):
+        upload_name = "MAG_upload"
+        if genome_type == "bins":
+            upload_name = upload_name.replace("MAG", "bin")
+        upload_dir = os.path.join(dir, upload_name)
         os.makedirs(upload_dir, exist_ok=True)
         return upload_dir
 
     def create_genome_dictionary(self, samples_xml):
         logger.info('Retrieving data for MAG submission...')
 
-        genomeInfo = extract_genomes_info(self.genomeMetadata, self.genomeType, self.live)
+        genome_info = extract_genomes_info(self.genome_metadata, self.genome_type, self.live)
 
         if not os.path.exists(samples_xml) or self.force:
-            extract_ENA_info(genomeInfo, self.upload_dir, self.username, self.password, self.private)
+            self.extract_ena_info(genome_info, self.upload_dir)
             logger.info("Writing genome registration XML...")
 
-            write_genomes_xml(genomeInfo, samples_xml, self.genomeType, 
+            write_genomes_xml(genome_info, samples_xml, self.genome_type, 
                               self.centre_name, self.tpa)
             logger.info("All files have been written to " + self.upload_dir)
         else:
-            recover_info_from_xml(genomeInfo, samples_xml, self.live)
+            recover_info_from_xml(genome_info, samples_xml, self.live)
 
-        return genomeInfo
+        return genome_info
 
 if __name__ == "__main__":
     main()

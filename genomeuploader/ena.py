@@ -129,15 +129,15 @@ def query_taxid(taxid):
     
     return res.get("scientificName", "")
 
-def query_scientific_name(scientificName, searchRank=False):
-    url = "https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{}".format(scientificName)
+def query_scientific_name(scientific_name, search_rank=False):
+    url = "https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{}".format(scientific_name)
     response = requests.get(url)
     
     try:
         # Will raise exception if response status code is non-200 
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        if searchRank:
+        if search_rank:
             return False, "", ""
         else:
             return False, ""
@@ -145,7 +145,7 @@ def query_scientific_name(scientificName, searchRank=False):
     try:
         res = response.json()[0]
     except IndexError:
-        if searchRank:
+        if search_rank:
             return False, "", ""
         else:
             return False, ""
@@ -154,7 +154,7 @@ def query_scientific_name(scientificName, searchRank=False):
     taxid = res.get("taxId", "")
     rank = res.get("rank", "")
 
-    if searchRank:
+    if search_rank:
         return submittable, taxid, rank
     else:
         return submittable, taxid
@@ -423,13 +423,13 @@ class EnaSubmit():
         
 
     def handle_genomes_registration(self):
-        liveSub, mode = "", "live"
+        live_sub, mode = "", "live"
 
         if not self.live:
-            liveSub = "dev"
+            live_sub = "dev"
             mode = "test"
 
-        url = "https://www{}.ebi.ac.uk/ena/submit/drop-box/submit/".format(liveSub)
+        url = "https://www{}.ebi.ac.uk/ena/submit/drop-box/submit/".format(live_sub)
 
         logger.info('Registering sample xml in {} mode.'.format(mode))
 
@@ -438,38 +438,38 @@ class EnaSubmit():
             'SAMPLE': open(self.sample_xml, 'r')
         }
 
-        submissionResponse = requests.post(url, files = f, auth = self.auth)
+        submission_response = requests.post(url, files = f, auth = self.auth)
 
-        if submissionResponse.status_code != 200:
-            if str(submissionResponse.status_code).startswith('5'):
+        if submission_response.status_code != 200:
+            if str(submission_response.status_code).startswith('5'):
                 raise Exception("Genomes could not be submitted to ENA as the server " +
                     "does not respond. Please again try later.")
             else:
                 raise Exception("Genomes could not be submitted to ENA. HTTP response: " +
-                    submissionResponse.reason)
+                    submission_response.reason)
 
-        receiptXml = minidom.parseString((submissionResponse.content).decode("utf-8"))
-        receipt = receiptXml.getElementsByTagName("RECEIPT")
+        receipt_xml = minidom.parseString((submission_response.content).decode("utf-8"))
+        receipt = receipt_xml.getElementsByTagName("RECEIPT")
         success = receipt[0].attributes["success"].value
         if success == "true":
-            aliasDict = {}
-            samples = receiptXml.getElementsByTagName("SAMPLE")
+            alias_dict = {}
+            samples = receipt_xml.getElementsByTagName("SAMPLE")
             for s in samples:
-                sraAcc = s.attributes["accession"].value
+                sra_acc = s.attributes["accession"].value
                 alias = s.attributes["alias"].value
-                aliasDict[alias] = sraAcc
+                alias_dict[alias] = sra_acc
         elif success == "false":
-            errors = receiptXml.getElementsByTagName("ERROR")
-            finalError = "\tSome genomes could not be submitted to ENA. Please, check the errors below."
+            errors = receipt_xml.getElementsByTagName("ERROR")
+            final_error = "\tSome genomes could not be submitted to ENA. Please, check the errors below."
             for error in errors:
-                finalError += "\n\t" + error.firstChild.data
-            finalError += "\n\tIf you wish to validate again your data and metadata, "
-            finalError += "please use the --force option."
-            raise Exception(finalError)
+                final_error += "\n\t" + error.firstChild.data
+            final_error += "\n\tIf you wish to validate again your data and metadata, "
+            final_error += "please use the --force option."
+            raise Exception(final_error)
         
-        logger.info('{} genome samples successfully registered.'.format(str(len(aliasDict))))
+        logger.info('{} genome samples successfully registered.'.format(str(len(alias_dict))))
 
-        return aliasDict
+        return alias_dict
     
 
 

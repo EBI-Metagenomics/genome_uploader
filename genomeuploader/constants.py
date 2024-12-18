@@ -635,3 +635,28 @@ GEOGRAPHIC_LOCATIONS = [
     "Zambia",
     "Zimbabwe",
 ]
+
+BIN_MANDATORY_FIELDS = [
+    "genome_name", 
+    "accessions",
+    "assembly_software", 
+    "binning_software", 
+    "binning_parameters", 
+    "stats_generation_software", 
+    "NCBI_lineage",
+    "broad_environment", 
+    "local_environment", 
+    "environmental_medium", 
+    "metagenome",
+    "co-assembly", 
+    "genome_coverage", 
+    "genome_path"
+]
+
+MAG_MANDATORY_FIELDS = [
+    "rRNA_presence", 
+    "completeness", 
+    "contamination"
+]
+
+GEOGRAPHY_DIGIT_COORDS = 8
