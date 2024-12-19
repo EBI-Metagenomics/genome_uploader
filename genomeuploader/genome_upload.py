@@ -37,24 +37,24 @@ logger = logging.getLogger(__name__)
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
-        description="Create xmls and manifest files for genome upload to ENA")
+        description="Create xmls and manifest files for genome upload and upload to ENA")
     
-    parser.add_argument('-u', '--upload_study', type=str, help="Study accession for genomes upload")
+    parser.add_argument('-u', '--upload_study', type=str, required=True, help="Study accession for genomes upload")
     parser.add_argument('--genome_info', type=str, required=True, help="Genomes metadata file")
 
-    genomeType = parser.add_mutually_exclusive_group(required=True)
+    genomeType = parser.add_mutually_exclusive_group(required=True, default=False)
     genomeType.add_argument('-m', '--mags', action='store_true', help="Select for MAG upload")
     genomeType.add_argument('-b', '--bins', action='store_true', help="Select for bin upload")
     
     parser.add_argument('--out', type=str, help="Output folder. Default: working directory")
-    parser.add_argument('--force', action='store_true', help="Forces reset of sample xml's backups")
-    parser.add_argument('--live', action='store_true', help="Uploads on ENA. Omitting this " +
+    parser.add_argument('--force', action='store_true', required=False, default=False, help="Forces reset of sample xml's backups")
+    parser.add_argument('--live', action='store_true', required=False, default=False, help="Uploads on ENA. Omitting this " +
         "option allows to validate samples beforehand")
-    parser.add_argument('--tpa', action='store_true', help="Select if uploading TPA-generated genomes")
+    parser.add_argument('--tpa', action='store_true', required=False, default=False, help="Select if uploading TPA-generated genomes")
     
-    # Users can provide their credentials and centre name manually or using a config file
-    parser.add_argument('--centre_name', required=False, help="Name of the centre uploading genomes")
-    parser.add_argument('--private', required=False, help="if data is private", action='store_true', default=False)
+    # Users can provide their credentials in environment variables or using a config file
+    parser.add_argument('--centre_name', required=True, help="Name of the centre uploading genomes")
+    parser.add_argument('--private', required=False, action='store_true', default=False, help="if data is private",)
 
     return parser.parse_args(argv)
 
@@ -78,99 +78,6 @@ Input table: expects the following parameters:
     genome_coverage : genome coverage
     genome_path: path to genome to upload
 '''
-
-def validate_metadata_tsv(input_file, genome_type, live):
-    logger.info('Retrieving info for genomes to submit...')
-    
-    all_fields = MAG_MANDATORY_FIELDS + BIN_MANDATORY_FIELDS
-    metadata = pd.read_csv(input_file, sep='\t', usecols=all_fields)
-    
-    # make sure there are no empty cells
-    clean_columns = list(metadata.dropna(axis=1))
-    if genome_type == "MAGs":
-        missing_values = [item for item in all_fields if item not in clean_columns]
-    else:
-        missing_values = [item for item in BIN_MANDATORY_FIELDS if item not in clean_columns]
-    
-    if missing_values:
-        raise ValueError("The following mandatory fields have missing values in " +
-            "the input file: {}".format(", ".join(missing_values)))
-
-    # check amount of genomes to register at the same time
-    if len(metadata) >= 5000:
-        raise ValueError("Genomes need to be registered in batches of 5000 genomes or smaller.")
-
-    # check whether accessions follow the right format
-    accessions_reg_exp = re.compile(r"([E|S|D]R[R|Z]\d{6,})")
-
-    accession_comparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", 
-        "correct", "mismatching", "co-assembly"])
-    accession_comparison["genome_name"] = metadata["genome_name"]
-
-    accession_comparison["attemptive_accessions"] = metadata["accessions"].map(
-        lambda a: len(a.split(',')))
-
-    accession_comparison["correct"] = metadata["accessions"].map(
-        lambda a: len(accessions_reg_exp.findall(a)))
-
-    accession_comparison["mismatching"] = accession_comparison.apply(lambda row: 
-        True if row["attemptive_accessions"] == row["correct"] 
-        else None, axis=1).isna()
-
-    mismatching_accessions = accession_comparison[accession_comparison["mismatching"]]["genome_name"]
-    if not mismatching_accessions.empty:
-        raise ValueError("Run accessions are not correctly formatted for the following " + 
-            "genomes: " + ','.join(mismatching_accessions.values))
-
-    # check whether completeness and contamination are floats
-    try:
-        pd.to_numeric(metadata["completeness"])
-        pd.to_numeric(metadata["contamination"])
-        pd.to_numeric(metadata["genome_coverage"])
-    except:
-        raise ValueError("Completeness, contamination or coverage values should be formatted as floats")
-
-    # check whether all co-assemblies have more than one run associated and viceversa
-    accession_comparison["co-assembly"] = metadata["co-assembly"]
-    coassembly_discrepancy = metadata[(
-        (accession_comparison["correct"] < 2) & (accession_comparison["co-assembly"])) |
-        ((accession_comparison["correct"] > 1) & (~accession_comparison["co-assembly"])
-        )]["genome_name"]
-    if not coassembly_discrepancy.empty:
-        raise ValueError("The following genomes show discrepancy between number of runs "
-            "involved and co-assembly status: " + ','.join(coassembly_discrepancy.values))
-
-    # are provided metagenomes part of the accepted metagenome list?
-    if False in metadata.apply(lambda row: 
-        True if row["metagenome"] in METAGENOMES 
-        else False, axis=1).unique():
-        raise ValueError("Metagenomes associated with each genome need to belong to ENA's " +
-            "approved metagenomes list.")
-
-    # do provided file paths exist?
-    if False in metadata.apply(lambda row: 
-        True if os.path.exists(row["genome_path"]) 
-        else False, axis =1).unique():
-        raise FileNotFoundError("Some genome paths do not exist.")
-
-    # check genome name lengths
-    #if not (metadata["genome_name"].map(lambda a: len(a) < 20).all()):
-    #    raise ValueError("Genome names must be shorter than 20 characters.")
-
-    # create dictionary while checking genome name uniqueness
-    uniqueness = metadata["genome_name"].nunique() == metadata["genome_name"].size
-    if uniqueness:
-        if not live:
-            timestamp = str(int(dt.timestamp(dt.now())))
-            timestamp_names = [row["genome_name"] + '_' + timestamp for index, row in metadata.iterrows()]
-            metadata["unique_genome_name"] = timestamp_names
-            genome_info = metadata.set_index("unique_genome_name").transpose().to_dict()
-        else:
-            genome_info = metadata.set_index("genome_name").transpose().to_dict()
-    else:
-        raise ValueError("Duplicate names found in genome names")
-
-    return genome_info
 
 def round_stats(stats):
     new_stat = round(float(stats), 2)
@@ -327,45 +234,10 @@ def extract_archaea_info(name, rank):
                             
     return submittable, name, taxid
 
-def extract_genomes_info(input_file, genome_type, live):
-    genome_info = validate_metadata_tsv(input_file, genome_type, live)
-    for gen in genome_info:
-        genome_info[gen]["accessions"] = genome_info[gen]["accessions"].split(',')
-        accession_type = "run"
-        assembly_reg_exp = re.compile(r"([E|S|D]RZ\d{6,})")
-        if assembly_reg_exp.findall(genome_info[gen]["accessions"][0]):
-            accession_type = "assembly"
-        genome_info[gen]["accessionType"] = accession_type
-
-        genome_info[gen]["isolationSource"] = genome_info[gen]["metagenome"]
-        
-        try:
-            (genome_info[gen]["MAG_quality"], 
-            genome_info[gen]["completeness"], 
-            genome_info[gen]["contamination"]) = compute_mag_quality(
-                                    str(round_stats(genome_info[gen]["completeness"])),
-                                    str(round_stats(genome_info[gen]["contamination"])), 
-                                    genome_info[gen]["rRNA_presence"])
-        except IndexError:
-            pass
-
-        if str(genome_info[gen]["co-assembly"]).lower() in ["yes", "y", "true"]:
-            genome_info[gen]["co-assembly"] = True
-        else:
-            genome_info[gen]["co-assembly"] = False
-        
-        genome_info[gen]["alias"] = gen
-
-        tax_id, scientific_name = extract_tax_info(genome_info[gen]["NCBI_lineage"])
-        genome_info[gen]["taxID"] = tax_id
-        genome_info[gen]["scientific_name"] = scientific_name
-
-    return genome_info
-
 def multiple_element_set(metadata_list):
     return len(set(metadata_list))>1
 
-def combine_ENA_info(genome_info, ena_dict):
+def combine_ena_info(genome_info, ena_dict):
     for g in genome_info:
         # TODO: optimise all the part below
         if genome_info[g]["co-assembly"]:
@@ -426,7 +298,6 @@ def combine_ENA_info(genome_info, ena_dict):
             genome_info[g]["latitude"] = ena_dict[run]["latitude"]
         
         genome_info[g]["accessions"] = ','.join(genome_info[g]["accessions"])
-
 
 
 def get_accessions(accessions_file):
@@ -691,90 +562,182 @@ def generate_genome_manifest(genome_info, study, manifests_root, alias_to_sample
         if tpa:
             outfile.write("TPA\ttrue\n")
 
-def main():
-    ENA_uploader = GenomeUpload()
-    
-    if not ENA_uploader.live:
-        logger.warning("Warning: genome submission is not in live mode, " +
-            "files will be validated, but not uploaded.")
-
-    xml_genome_file, xml_sub_file = "genome_samples.xml", "submission.xml"
-    samples_xml = os.path.join(ENA_uploader.upload_dir, xml_genome_file)
-    submission_xml_path = os.path.join(ENA_uploader.upload_dir, xml_sub_file)
-    submission_xml = submission_xml_path
-    genomes, manifest_info = {}, {}
-
-    # submission xml existence
-    if not os.path.exists(submission_xml_path):
-        submission_xml = write_submission_xml(ENA_uploader.upload_dir, ENA_uploader.centre_name, False)
-
-    # sample xml generation or recovery
-    genomes = ENA_uploader.create_genome_dictionary(samples_xml)
-        
-    # manifests creation
-    manifest_dir = os.path.join(ENA_uploader.upload_dir, "manifests")
-    os.makedirs(manifest_dir, exist_ok=True)
-    
-    accessionsgen = "registered_MAGs.tsv"
-    if ENA_uploader.genome_type == "bins":
-        accessionsgen = accessionsgen.replace("MAG", "bin")
-    if not ENA_uploader.live:
-        accessionsgen = accessionsgen.replace(".tsv", "_test.tsv")
-    
-    accessions_file = os.path.join(ENA_uploader.upload_dir, accessionsgen)
-    save = False
-    write_mode = 'a'
-    if os.path.exists(accessions_file):
-        if not ENA_uploader.live:
-            save = True
-            if ENA_uploader.force:
-                write_mode = 'w'
-        if not save:
-            logger.info("Genome samples already registered, reading ERS accessions...")
-            alias_to_new_sample_accession = get_accessions(accessions_file)
-    else:
-        save = True
-        
-    if save:
-        logger.info("Registering genome samples XMLs...")
-        ena_submit = EnaSubmit(samples_xml, submission_xml, ENA_uploader.live)
-        alias_to_new_sample_accession = ena_submit.handle_genomes_registration()
-        save_accessions(alias_to_new_sample_accession, accessions_file, write_mode)
-
-    logger.info("Generating manifest files...")
-    
-    manifest_info = compute_manifests(genomes)
-
-    for m in manifest_info:
-        generate_genome_manifest(manifest_info[m], ENA_uploader.up_study,  
-            manifest_dir, alias_to_new_sample_accession, ENA_uploader.genome_type, ENA_uploader.tpa)
 
 class GenomeUpload:
-    def __init__(self, argv=sys.argv[1:]):
-        self.args = self.parse_args(argv)
-        self.up_study = self.args.upload_study
-        self.genome_type = "bins" if self.args.bins else "MAGs"
-        self.live = True if self.args.live else False
-        self.private = self.args.private
+    def __init__(
+        self,
+        upload_study: str,
+        centre_name: str,
+        genome_info: str,
+        bins: bool = False,
+        live: bool = False,
+        private: bool = False,
+        tpa: bool = False,
+        force: bool = False,
+        out: str = None,
+        ):
+        f"""
+        Submission of genomes.
 
-        self.tpa = True if self.args.tpa else False
-        self.centre_name = self.args.centre_name
-        self.force = True if self.args.force else False
+        :param upload_study: Study accession for genomes upload.
+        :param centre_name: Name of the centre uploading genomes.
+        :param genome_info: Genomes metadata file.
+        :param bins: Performs bin upload.
+        :params live: Live upload to ENA.
+        :param private: Is this a private study?
+        :param tpa: Is this a third-party assembly?
+        :param force: Resets sample XML backups.
+        :param out: Output folder.
+        """
 
-        work_dir = self.args.out if self.args.out else os.getcwd()
-        self.upload_dir = self.generate_genomes_upload_dir(work_dir, self.genome_type)
+        self.genome_type = "bins" if bins else "MAGs"
+        self.live = live
+        self.private = private
 
-        self.private = self.args.private
+        self.tpa = tpa
+        self.centre_name = centre_name
+        self.force = force
 
-        if not self.args.upload_study:
+        self.work_dir = out if out is not None else os.getcwd()
+        self.upload_dir = self.generate_genomes_upload_dir()
+
+        if not upload_study:
             raise ValueError("No project selected for genome upload [-u, --upload_study].")
-        self.upload_study = self.args.upload_study
+        self.upload_study = upload_study
 
-        if not os.path.exists(self.args.genome_info):
-            raise FileNotFoundError('Genome metadata file "{}" does not exist'.format(self.args.genome_info))
-        self.genome_metadata = self.args.genome_info
+        if not os.path.exists(genome_info):
+            raise FileNotFoundError(f"Genome metadata file {genome_info} does not exist")
+        self.genome_metadata = genome_info
 
-    def extract_ena_info(self, genome_info, upload_dir):
+    def validate_metadata_tsv(self):
+        logger.info('Retrieving info for genomes to submit...')
+        
+        all_fields = MAG_MANDATORY_FIELDS + BIN_MANDATORY_FIELDS
+        metadata = pd.read_csv(self.genome_metadata, sep='\t', usecols=all_fields)
+        
+        # make sure there are no empty cells
+        clean_columns = list(metadata.dropna(axis=1))
+        if self.genome_type == "MAGs":
+            missing_values = [item for item in all_fields if item not in clean_columns]
+        else:
+            missing_values = [item for item in BIN_MANDATORY_FIELDS if item not in clean_columns]
+        
+        if missing_values:
+            raise ValueError("The following mandatory fields have missing values in " +
+                "the input file: {}".format(", ".join(missing_values)))
+
+        # check amount of genomes to register at the same time
+        if len(metadata) >= 5000:
+            raise ValueError("Genomes need to be registered in batches of 5000 genomes or smaller.")
+
+        # check whether accessions follow the right format
+        accessions_reg_exp = re.compile(r"([E|S|D]R[R|Z]\d{6,})")
+
+        accession_comparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", 
+            "correct", "mismatching", "co-assembly"])
+        accession_comparison["genome_name"] = metadata["genome_name"]
+
+        accession_comparison["attemptive_accessions"] = metadata["accessions"].map(
+            lambda a: len(a.split(',')))
+
+        accession_comparison["correct"] = metadata["accessions"].map(
+            lambda a: len(accessions_reg_exp.findall(a)))
+
+        accession_comparison["mismatching"] = accession_comparison.apply(lambda row: 
+            True if row["attemptive_accessions"] == row["correct"] 
+            else None, axis=1).isna()
+
+        mismatching_accessions = accession_comparison[accession_comparison["mismatching"]]["genome_name"]
+        if not mismatching_accessions.empty:
+            raise ValueError("Run accessions are not correctly formatted for the following " + 
+                "genomes: " + ','.join(mismatching_accessions.values))
+
+        # check whether completeness and contamination are floats
+        try:
+            pd.to_numeric(metadata["completeness"])
+            pd.to_numeric(metadata["contamination"])
+            pd.to_numeric(metadata["genome_coverage"])
+        except:
+            raise ValueError("Completeness, contamination or coverage values should be formatted as floats")
+
+        # check whether all co-assemblies have more than one run associated and viceversa
+        accession_comparison["co-assembly"] = metadata["co-assembly"]
+        coassembly_discrepancy = metadata[(
+            (accession_comparison["correct"] < 2) & (accession_comparison["co-assembly"])) |
+            ((accession_comparison["correct"] > 1) & (~accession_comparison["co-assembly"])
+            )]["genome_name"]
+        if not coassembly_discrepancy.empty:
+            raise ValueError("The following genomes show discrepancy between number of runs "
+                "involved and co-assembly status: " + ','.join(coassembly_discrepancy.values))
+
+        # are provided metagenomes part of the accepted metagenome list?
+        if False in metadata.apply(lambda row: 
+            True if row["metagenome"] in METAGENOMES 
+            else False, axis=1).unique():
+            raise ValueError("Metagenomes associated with each genome need to belong to ENA's " +
+                "approved metagenomes list.")
+
+        # do provided file paths exist?
+        if False in metadata.apply(lambda row: 
+            True if os.path.exists(row["genome_path"]) 
+            else False, axis =1).unique():
+            raise FileNotFoundError("Some genome paths do not exist.")
+
+        # check genome name lengths
+        #if not (metadata["genome_name"].map(lambda a: len(a) < 20).all()):
+        #    raise ValueError("Genome names must be shorter than 20 characters.")
+
+        # create dictionary while checking genome name uniqueness
+        uniqueness = metadata["genome_name"].nunique() == metadata["genome_name"].size
+        if uniqueness:
+            if not self.live:
+                timestamp = str(int(dt.timestamp(dt.now())))
+                timestamp_names = [row["genome_name"] + '_' + timestamp for index, row in metadata.iterrows()]
+                metadata["unique_genome_name"] = timestamp_names
+                genome_info = metadata.set_index("unique_genome_name").transpose().to_dict()
+            else:
+                genome_info = metadata.set_index("genome_name").transpose().to_dict()
+        else:
+            raise ValueError("Duplicate names found in genome names")
+
+        return genome_info
+
+    def extract_genomes_info(self):
+        genome_info = self.validate_metadata_tsv()
+        for gen in genome_info:
+            genome_info[gen]["accessions"] = genome_info[gen]["accessions"].split(',')
+            accession_type = "run"
+            assembly_reg_exp = re.compile(r"([E|S|D]RZ\d{6,})")
+            if assembly_reg_exp.findall(genome_info[gen]["accessions"][0]):
+                accession_type = "assembly"
+            genome_info[gen]["accessionType"] = accession_type
+
+            genome_info[gen]["isolationSource"] = genome_info[gen]["metagenome"]
+            
+            try:
+                (genome_info[gen]["MAG_quality"], 
+                genome_info[gen]["completeness"], 
+                genome_info[gen]["contamination"]) = compute_mag_quality(
+                                        str(round_stats(genome_info[gen]["completeness"])),
+                                        str(round_stats(genome_info[gen]["contamination"])), 
+                                        genome_info[gen]["rRNA_presence"])
+            except IndexError:
+                pass
+
+            if str(genome_info[gen]["co-assembly"]).lower() in ["yes", "y", "true"]:
+                genome_info[gen]["co-assembly"] = True
+            else:
+                genome_info[gen]["co-assembly"] = False
+            
+            genome_info[gen]["alias"] = gen
+
+            tax_id, scientific_name = extract_tax_info(genome_info[gen]["NCBI_lineage"])
+            genome_info[gen]["taxID"] = tax_id
+            genome_info[gen]["scientific_name"] = scientific_name
+
+        return genome_info
+
+    def extract_ena_info(self, genome_info):
         logger.info('Retrieving project and run info from ENA (this might take a while)...')
         
         # retrieving metadata from runs (and runs from assembly accessions if provided)
@@ -798,7 +761,7 @@ class GenomeUpload:
         if not study_set:
             raise ValueError("No study corresponding to runs found.")
 
-        backup_file = os.path.join(upload_dir, "ENA_backup.json")
+        backup_file = os.path.join(self.upload_dir, "ENA_backup.json")
         counter = 0
         if not os.path.exists(backup_file):
             with open(backup_file, 'w') as file:
@@ -881,24 +844,24 @@ class GenomeUpload:
                                 file.write(json.dumps(temp_dict))
                                 file.truncate()
         temp_dict = {**temp_dict, **backup_dict}
-        combine_ENA_info(genome_info, temp_dict)
+        combine_ena_info(genome_info, temp_dict)
 
 
-    def generate_genomes_upload_dir(self, dir, genome_type):
+    def generate_genomes_upload_dir(self):
         upload_name = "MAG_upload"
-        if genome_type == "bins":
+        if self.genome_type == "bins":
             upload_name = upload_name.replace("MAG", "bin")
-        upload_dir = os.path.join(dir, upload_name)
+        upload_dir = os.path.join(self.work_dir, upload_name)
         os.makedirs(upload_dir, exist_ok=True)
         return upload_dir
 
     def create_genome_dictionary(self, samples_xml):
         logger.info('Retrieving data for MAG submission...')
 
-        genome_info = extract_genomes_info(self.genome_metadata, self.genome_type, self.live)
+        genome_info = self.extract_genomes_info()
 
         if not os.path.exists(samples_xml) or self.force:
-            self.extract_ena_info(genome_info, self.upload_dir)
+            self.extract_ena_info(genome_info)
             logger.info("Writing genome registration XML...")
 
             write_genomes_xml(genome_info, samples_xml, self.genome_type, 
@@ -908,7 +871,76 @@ class GenomeUpload:
             recover_info_from_xml(genome_info, samples_xml, self.live)
 
         return genome_info
+    
+    def genome_upload(self):
+        if not self.live:
+            logger.warning("Warning: genome submission is not in live mode, " +
+                           "files will be validated, but not uploaded.")
+        samples_xml = os.path.join(self.upload_dir, "genome_samples.xml")
+        submission_xml = os.path.join(self.upload_dir, "submission.xml")
+        genomes, manifest_info = {}, {}
 
+        # submission xml existence
+        if not os.path.exists(submission_xml):
+            submission_xml = write_submission_xml(self.upload_dir, self.centre_name, False)
+        
+        # sample xml generation or recovery
+        genomes = self.create_genome_dictionary(samples_xml)
+
+        # manifests creation
+        manifest_dir = os.path.join(self.upload_dir, "manifests")
+        os.makedirs(manifest_dir, exist_ok=True)
+
+        accessionsgen = "registered_MAGs.tsv"
+        if self.genome_type == "bins":
+            accessionsgen = accessionsgen.replace("MAG", "bin")
+        if not self.live:
+            accessionsgen = accessionsgen.replace(".tsv", "_test.tsv")
+
+        accessions_file = os.path.join(self.upload_dir, accessionsgen)
+        save = False
+        write_mode = 'a'
+        if os.path.exists(accessions_file):
+            if not self.live:
+                save = True
+                if self.force:
+                    write_mode = 'w'
+            if not save:
+                logger.info("Genome samples already registered, reading ERS accessions...")
+                alias_to_new_sample_accession = get_accessions(accessions_file)
+        else:
+            save = True
+            
+        if save:
+            logger.info("Registering genome samples XMLs...")
+            ena_submit = EnaSubmit(samples_xml, submission_xml, self.live)
+            alias_to_new_sample_accession = ena_submit.handle_genomes_registration()
+            save_accessions(alias_to_new_sample_accession, accessions_file, write_mode)
+
+        logger.info("Generating manifest files...")
+
+        manifest_info = compute_manifests(genomes)
+
+        for m in manifest_info:
+            generate_genome_manifest(manifest_info[m], self.upload_study,  
+                manifest_dir, alias_to_new_sample_accession, self.genome_type, self.tpa)
+
+
+def main():
+    args = parse_args(sys.argv[1:])
+    ena_upload = GenomeUpload(
+        upload_study=args.upload_study,
+        centre_name=args.centre_name,
+        genome_info=args.genome_info,
+        bins=args.bins,
+        live=args.live,
+        private=args.private,
+        tpa=args.tpa,
+        force=args.force,
+        out = args.out,
+    )
+    ena_upload.genome_upload()
+    
 if __name__ == "__main__":
     main()
     logger.info('Completed')
