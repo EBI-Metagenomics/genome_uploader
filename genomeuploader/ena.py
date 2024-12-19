@@ -43,9 +43,9 @@ STUDY_RUN_DEFAULT_FIELDS = ",".join(["sample_accession", "run_accession", "instr
 ASSEMBLY_DEFAULT_FIELDS = "sample_accession"
 
 
-SAMPLE_DEFAULT_FIELDS = ",".join(["sample_accession", "secondary_sample_accession", "collection_date", "country", "location"])
+SAMPLE_DEFAULT_FIELDS = ",".join(["sample_accession", "collection_date", "country", "location"])
 
-STUDY_DEFAULT_FIELDS = "study_description"
+STUDY_DEFAULT_FIELDS = "study_accession,study_description"
 
 RETRY_COUNT = 3
 
@@ -71,9 +71,11 @@ def parse_accession(accession):
     elif "RR" in accession:
         return "run_accession"
     elif "SAM" in accession:
-        return "secondary_sample_accession"
-    elif "RS" in accession:
         return "sample_accession"
+    elif "RS" in accession:
+        return "secondary_sample_accession"
+    elif "RZ" in accession:
+        return "analysis_accession"
     else:
         logging.error(f"{accession} is not a valid accession")
         sys.exit()
@@ -192,7 +194,7 @@ class EnaQuery:
                     return response.json()
                 else:
                     #   only return the fist element in the list is the default. In these cases there should only be one entry returned
-                    return json.loads(response.txt)[0]
+                    return json.loads(response.text)[0]
         except (IndexError, TypeError, ValueError, KeyError):
             logging.error(f"Failed to fetch {self.accession}, returned error: {response.text}")
 
@@ -226,7 +228,8 @@ class EnaQuery:
         run = self.get_data_or_handle_error(response)
         run_data = run["report"]
         reformatted_data = {
-            "secondary_study_accession": run_data["studyID"],
+            "run_accession": run_data["id"],
+            "secondary_study_accession": run_data["studyId"],
             "sample_accession": run_data["sampleId"],
         }
         logging.info(f"{self.accession} private run returned from ENA")
@@ -251,7 +254,7 @@ class EnaQuery:
         response = self.retry_or_handle_request_error(self.get_request, url)
         study = self.get_data_or_handle_error(response, xml=True)
         study_desc = study.getElementsByTagName("STUDY_DESCRIPTION")[0].firstChild.nodeValue
-        reformatted_data = {"study_description": study_desc}
+        reformatted_data = {"study_accession": self.accession, "study_description": study_desc}
         logging.info(f"{self.accession} private study returned from ENA")
         return reformatted_data
 
@@ -317,6 +320,7 @@ class EnaQuery:
         url = f"{self.private_url}/samples/xml/{self.accession}"
         reponse = self.retry_or_handle_request_error(self.get_request, url)
         reformatted_data = {}
+        reformatted_data["sample_accession"] = self.accession
         parsed_xml = self.get_data_or_handle_error(reponse, xml=True)
         sample_attributes = parsed_xml.getElementsByTagName("SAMPLE_ATTRIBUTE")
         for attribute in sample_attributes:
@@ -341,54 +345,15 @@ class EnaQuery:
         return sample
 
     def build_query(self):
-        if self.query_type == "study":
-            if self.private:
-                try:
-                    ena_response = self._get_private_study()
-                except Exception:
-                    logging.info("Private API failed, trying public")
-            ena_response = self._get_public_study()
-        elif self.query_type == "run":
-            if self.private:
-                try:
-                    ena_response = self._get_private_run()
-                except Exception:
-                    logging.info("Private API failed, trying public")
-
-            ena_response = self._get_public_run()
-        elif self.query_type == "run_assembly":
-            if self.private:
-                try:
-                    ena_response = self._get_private_run_from_assembly()
-                except Exception:
-                    logging.info("Private API failed, trying public")
-            ena_response = self._get_public_run_from_assembly()
-        elif self.query_type == "study_runs":
-            if self.private:
-                try:
-                    ena_response = self._get_private_study_runs()
-                except Exception:
-                    logging.info("Private API failed, trying public")
-            ena_response = self._get_public_study_runs()
-        elif self.query_type == "sample":
-            if self.private:
-                try:    
-                    ena_response = self._get_private_sample()
-                except Exception:
-                    logging.info("Private API failed, trying public")
-            ena_response = self._get_public_sample()
-        return ena_response
-
-    def build_query(self):
         """If the private flag is given, assume private data and try private APIs.
-        ENA also has cases where a run may be private but the sample may be public etc. Hence always try 
+        ENA also has cases where a run may be private but the sample may be public etc. Hence always try
         public if private fails"""
         api_map = {
             "study": (self._get_private_study, self._get_public_study),
             "run": (self._get_private_run, self._get_public_run),
             "run_assembly": (self._get_private_run_from_assembly, self._get_public_run_from_assembly),
             "study_runs": (self._get_private_study_runs, self._get_public_study_runs),
-            "sample": (self._get_private_sample, self._get_public_sample)
+            "sample": (self._get_private_sample, self._get_public_sample),
         }
 
         private_api, public_api = api_map.get(self.query_type, (None, None))
@@ -403,7 +368,6 @@ class EnaQuery:
             ena_response = public_api()
 
         return ena_response
-
 
 
 class EnaSubmit:

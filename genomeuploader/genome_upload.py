@@ -51,7 +51,7 @@ def parse_args(argv):
     parser.add_argument("-u", "--upload_study", type=str, required=True, help="Study accession for genomes upload")
     parser.add_argument("--genome_info", type=str, required=True, help="Genomes metadata file")
 
-    genomeType = parser.add_mutually_exclusive_group(required=True, default=False)
+    genomeType = parser.add_mutually_exclusive_group(required=True)
     genomeType.add_argument("-m", "--mags", action="store_true", help="Select for MAG upload")
     genomeType.add_argument("-b", "--bins", action="store_true", help="Select for bin upload")
 

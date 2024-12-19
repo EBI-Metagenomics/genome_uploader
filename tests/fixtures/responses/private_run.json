@@ -1,0 +1,17 @@
+[
+  {
+    "report": {
+      "id": "ERR4918394",
+      "alias": "webin-reads-SA01_02C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:14:11",
+      "firstPublic": "2022-08-02T17:24:21",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783303",
+      "sampleId": "ERS5444411"
+    },
+    "links": []
+  }
+]
