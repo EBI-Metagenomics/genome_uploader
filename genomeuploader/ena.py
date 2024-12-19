@@ -343,30 +343,67 @@ class EnaQuery:
     def build_query(self):
         if self.query_type == "study":
             if self.private:
-                ena_response = self._get_private_study()
-            else:
-                ena_response = self._get_public_study()
+                try:
+                    ena_response = self._get_private_study()
+                except Exception:
+                    logging.info("Private API failed, trying public")
+            ena_response = self._get_public_study()
         elif self.query_type == "run":
             if self.private:
-                ena_response = self._get_private_run()
-            else:
-                ena_response = self._get_public_run()
+                try:
+                    ena_response = self._get_private_run()
+                except Exception:
+                    logging.info("Private API failed, trying public")
+
+            ena_response = self._get_public_run()
         elif self.query_type == "run_assembly":
             if self.private:
-                ena_response = self._get_private_run_from_assembly()
-            else:
-                ena_response = self._get_public_run_from_assembly()
+                try:
+                    ena_response = self._get_private_run_from_assembly()
+                except Exception:
+                    logging.info("Private API failed, trying public")
+            ena_response = self._get_public_run_from_assembly()
         elif self.query_type == "study_runs":
             if self.private:
-                ena_response = self._get_private_study_runs()
-            else:
-                ena_response = self._get_public_study_runs()
+                try:
+                    ena_response = self._get_private_study_runs()
+                except Exception:
+                    logging.info("Private API failed, trying public")
+            ena_response = self._get_public_study_runs()
         elif self.query_type == "sample":
             if self.private:
-                ena_response = self._get_private_sample()
-            else:
-                ena_response = self._get_public_sample()
+                try:    
+                    ena_response = self._get_private_sample()
+                except Exception:
+                    logging.info("Private API failed, trying public")
+            ena_response = self._get_public_sample()
         return ena_response
+
+    def build_query(self):
+        """If the private flag is given, assume private data and try private APIs.
+        ENA also has cases where a run may be private but the sample may be public etc. Hence always try 
+        public if private fails"""
+        api_map = {
+            "study": (self._get_private_study, self._get_public_study),
+            "run": (self._get_private_run, self._get_public_run),
+            "run_assembly": (self._get_private_run_from_assembly, self._get_public_run_from_assembly),
+            "study_runs": (self._get_private_study_runs, self._get_public_study_runs),
+            "sample": (self._get_private_sample, self._get_public_sample)
+        }
+
+        private_api, public_api = api_map.get(self.query_type, (None, None))
+
+        if self.private:
+            try:
+                ena_response = private_api()
+            except Exception:
+                logging.info(f"Private API for {self.query_type} failed, trying public.")
+                ena_response = public_api()
+        else:
+            ena_response = public_api()
+
+        return ena_response
+
 
 
 class EnaSubmit:
