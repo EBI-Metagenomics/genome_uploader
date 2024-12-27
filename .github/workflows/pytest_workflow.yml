@@ -27,7 +27,7 @@ jobs:
           emoji: false
           verbose: true
           job-summary: true
-          
+
   pytest_39:
     name: Run pytest 3.9
     needs:
