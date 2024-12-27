@@ -186,6 +186,7 @@ class EnaQuery:
                     logging.error(f"{self.accession} private data is not present in the specified Webin account")
                 else:
                     logging.error(f"{self.accession} public data does not exist")
+                return None
             else:
                 if xml:
                     return minidom.parseString(data_txt)
@@ -194,7 +195,7 @@ class EnaQuery:
                     return response.json()
                 else:
                     #   only return the fist element in the list is the default. In these cases there should only be one entry returned
-                    return json.loads(response.text)[0]
+                    return json.loads(response.text)[0] 
         except (IndexError, TypeError, ValueError, KeyError):
             logging.error(f"Failed to fetch {self.accession}, returned error: {response.text}")
 
@@ -290,9 +291,10 @@ class EnaQuery:
         logging.info(f"public run from the assembly {self.accession} returned from ENA")
 
         return run
-
+    
     def _get_private_study_runs(self):
-        url = f"{self.private_url}/runs/{self.accession}"
+        #   Pagination documentation unclear - offest not working. Using hardcoded 2000 default. TO MODIFY
+        url = f"{self.private_url}/runs/{self.accession}?format=json&max-results=2000"
         response = self.retry_or_handle_request_error(self.get_request, url)
         runs = self.get_data_or_handle_error(response, full_json=True)
         reformatted_data = []
@@ -305,6 +307,7 @@ class EnaQuery:
             if "instrumentModel" in run_data:
                 run_data["instrument_model"] = run_data.pop("instrumentModel")
             reformatted_data.append(run_data)
+        logging.info(f"found {len(reformatted_data)} runs for study {self.accession}")
         logging.info(f"private runs from study {self.accession}, returned from ENA")
         return reformatted_data
 
