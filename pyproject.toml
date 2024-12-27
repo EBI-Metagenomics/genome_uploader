@@ -52,6 +52,7 @@ test = [
     "pytest-md==0.2.0",
     "pytest-workflow==2.0.1",
     "pytest-cov==3.0.0",
+    "pytest-responses==0.5.1"
 ]
 
 [build-system]
