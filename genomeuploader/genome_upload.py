@@ -676,7 +676,7 @@ def write_genomes_xml(genomes, xml_path, genomeType, centreName, tpa):
         ["completeness software", "stats_generation_software"],
         ["completeness score", "completeness", "%"],
         ["contamination score", "contamination", "%"],
-        ["isolation source", "isolationSource"],
+        ["isolation_source", "isolationSource"],
         ["collection date", "collectionDate"],
         ["geographic location (country and/or sea)", "country"],
         ["geographic location (latitude)", "latitude", "DD"],
