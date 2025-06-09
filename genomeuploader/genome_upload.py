@@ -268,7 +268,7 @@ def extract_Eukaryota_info(name, rank):
 def extract_Bacteria_info(name, rank):
     if rank == "species":
         name = name
-    elif rank == "superkingdom":
+    elif rank == "domain":
         name = "uncultured bacterium".format(name)
     elif rank in ["family", "order", "class", "phylum"]:
         name = "uncultured {} bacterium".format(name)
@@ -289,7 +289,7 @@ def extract_Bacteria_info(name, rank):
 def extract_Archaea_info(name, rank):
     if rank == "species":
         name = name
-    elif rank == "superkingdom":
+    elif rank == "domain":
         name = "uncultured archaeon"
     elif rank == "phylum":
         if "Euryarchaeota" in name:
@@ -676,7 +676,7 @@ def write_genomes_xml(genomes, xml_path, genomeType, centreName, tpa):
         ["completeness software", "stats_generation_software"],
         ["completeness score", "completeness", "%"],
         ["contamination score", "contamination", "%"],
-        ["isolation source", "isolationSource"],
+        ["isolation_source", "isolationSource"],
         ["collection date", "collectionDate"],
         ["geographic location (country and/or sea)", "country"],
         ["geographic location (latitude)", "latitude", "DD"],
