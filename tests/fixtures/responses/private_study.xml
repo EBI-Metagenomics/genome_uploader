@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+  <STUDY_SET>
+    <STUDY accession="ERP125469" alias="ena-STUDY-UNIVERSITY OF COPENHAGEN-02-12-2020-08:09:52:762-111" center_name="UNIVERSITY OF COPENHAGEN">
+      <IDENTIFIERS>
+        <PRIMARY_ID>ERP125469</PRIMARY_ID>
+        <SUBMITTER_ID namespace="UNIVERSITY OF COPENHAGEN">ena-STUDY-UNIVERSITY OF COPENHAGEN-02-12-2020-08:09:52:762-111</SUBMITTER_ID>
+      </IDENTIFIERS>
+      <DESCRIPTOR>
+        <STUDY_TITLE>HoloFood Salmon Trial A+B Gut Metagenome</STUDY_TITLE>
+        <STUDY_ABSTRACT>Metagenomic raw reads, assemblies, and bins derived from HoloFood salmon gut samples from trial A and B. The samples in this project contributed to the salmon MAG catalogue (project: PRJEB55376 [ERP140265]).</STUDY_ABSTRACT>
+        <STUDY_DESCRIPTION>Metagenomic raw reads, assemblies, and bins derived from HoloFood salmon gut samples from trial A and B. The samples in this project contributed to the salmon MAG catalogue (project: PRJEB55376 [ERP140265]).</STUDY_DESCRIPTION>
+        <CENTER_PROJECT_NAME>HoloFood Salmon Trial A+B Gut Metagenome</CENTER_PROJECT_NAME>
+        <STUDY_TYPE existing_study_type="Other"/>
+      </DESCRIPTOR>
+    </STUDY>
+  </STUDY_SET>

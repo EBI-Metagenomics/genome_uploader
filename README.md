@@ -1,5 +1,5 @@
 # Public bins and MAGs uploader
-Python script to upload bins and MAGs in fasta format to ENA (European Nucleotide Archive). This script generates xmls and manifests necessary for submission with webin-cli. 
+Python script to upload bins and MAGs in fasta format to ENA (European Nucleotide Archive). This script generates xmls and manifests necessary for submission with webin-cli.
 
 It takes as input one tsv (tab-separated values) table in the following format:
 
@@ -26,20 +26,20 @@ With columns indicating:
   * _local_environment_: `string` (explanation following)
   * _environmental_medium_: `string` (explanation following)
 
-According to ENA checklist's guidelines, 'broad_environment' describes the broad ecological context of a sample - desert, taiga, coral reef, ... 'local_environment' is more local - lake, harbour, cliff, ... 'environmental_medium' is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ... 
+According to ENA checklist's guidelines, 'broad_environment' describes the broad ecological context of a sample - desert, taiga, coral reef, ... 'local_environment' is more local - lake, harbour, cliff, ... 'environmental_medium' is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ...
 For host-associated metagenomic samples, the three variables can be defined similarly to the following example for the chicken gut metagenome: "chicken digestive system", "digestive tube", "caecum". More information can be found at [ERC000050](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) for bins and [ERC000047](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>) for MAGs under field names "broad-scale environmental context", "local environmental context", "environmental medium"
 
 Another example can be found [here](examples/input_example.tsv)
 
 ### Warnings
 
-Raw-read runs from which genomes were generated should already be available on the INSDC (ENA by EBI, GenBank by NCBI, or DDBJ), hence at least one DRR|ERR|SRR accession should be available for every genome to be uploaded. Assembly accessions (ERZ|SRZ|DRZ) are also supported. 
+Raw-read runs from which genomes were generated should already be available on the INSDC (ENA by EBI, GenBank by NCBI, or DDBJ), hence at least one DRR|ERR|SRR accession should be available for every genome to be uploaded. Assembly accessions (ERZ|SRZ|DRZ) are also supported.
 
-If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes. 
+If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.
 
-Files to be uploaded will need to be compressed (e.g. already in .gz format). 
+Files to be uploaded will need to be compressed (e.g. already in .gz format).
 
-No more than 5000 genomes can be submitted at the same time. 
+No more than 5000 genomes can be submitted at the same time.
 
 ## Register samples and generate pre-upload files
 The script needs `python`, `pandas`, `requests`, and `ena-webin-cli` to run. We provide a yaml file for the generation of a conda environment:
@@ -68,9 +68,9 @@ where
   * `--centre_name CENTRE_NAME`: name of the centre generating and uploading genomes
   * `--tpa`: if uploading TPA (Third PArty) generated genomes
 
-It is recommended to validate your genomes in test mode (i.e. without `--live` in the registration step and with `-test` during the upload) before attempting the final upload. Launching the registration in test mode will add a timestamp to the genome name to allow multiple executions of the test process. 
+It is recommended to validate your genomes in test mode (i.e. without `--live` in the registration step and with `-test` during the upload) before attempting the final upload. Launching the registration in test mode will add a timestamp to the genome name to allow multiple executions of the test process.
 
-Sample xmls won't be regenerated automatically if a previous xml already exists. If any metadata or value in the tsv table changes, `--force` will allow xml regeneration. 
+Sample xmls won't be regenerated automatically if a previous xml already exists. If any metadata or value in the tsv table changes, `--force` will allow xml regeneration.
 
 ### Produced files:
 The script produces the following files and folders:
