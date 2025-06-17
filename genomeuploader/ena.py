@@ -34,10 +34,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class NoDataException(ValueError):
-    pass
-
-
 
 def get_default_connection_headers():
     return {
@@ -51,8 +47,6 @@ def get_default_connection_headers():
 def get_default_params():
     return {"format": "json", "includeMetagenomes": True, "dataPortal": "ena"}
 
-class InvalidAccessionError(ValueError):
-    pass
 
 def parse_accession(accession):
     for prefix, acc_type in ACCESSION_MAP.items():
@@ -183,7 +177,6 @@ class EnaQuery:
         except Exception as e:
             raise EnaParseError(f"{self.accession}: Failed to parse response as {mode}: {e}")
 
-    def get_data_or_handle_error(self, response, mode="single_json"):
         data_txt = response.text.strip()
         if not data_txt:
             msg = f"{self.accession} {'private' if self.private else 'public'} data is empty or missing"
@@ -232,7 +225,11 @@ class EnaQuery:
         request_func = self.get_request if method == "get" else self.post_request
         request_input = url or data
         response = self.retry_or_handle_request_error(request_func, request_input)
-        parsed = self.get_data_or_handle_error(response, mode=mode)
+        try:
+            parsed = self.get_data_or_raise(response, mode=mode)
+        except (EnaEmptyResponseError, EnaParseError) as e:
+            logging.error(e)
+            return None
         return reformatter(parsed) if reformatter else parsed
 
     def _get_private_run(self):
@@ -375,59 +372,4 @@ class EnaQuery:
         return ena_response
 
 
-class EnaSubmit:
-    def __init__(self, sample_xml, submission_xml, live=False):
-        self.sample_xml = sample_xml
-        self.submission_xml = submission_xml
-        self.live = live
-        username, password = configure_credentials()
-        if username is None or password is None:
-            logging.error("ENA_WEBIN and ENA_WEBIN_PASSWORD are not set")
-        if username and password:
-            self.auth = (username, password)
-        else:
-            self.auth = None
 
-    def handle_genomes_registration(self):
-        live_sub, mode = "", "live"
-
-        if not self.live:
-            live_sub = "dev"
-            mode = "test"
-
-        url = "https://www{}.ebi.ac.uk/ena/submit/drop-box/submit/".format(live_sub)
-
-        logger.info("Registering sample xml in {} mode.".format(mode))
-
-        f = {"SUBMISSION": open(self.submission_xml, "r"), "SAMPLE": open(self.sample_xml, "r")}
-
-        submission_response = requests.post(url, files=f, auth=self.auth)
-
-        if submission_response.status_code != 200:
-            if str(submission_response.status_code).startswith("5"):
-                raise Exception("Genomes could not be submitted to ENA as the server " + "does not respond. Please again try later.")
-            else:
-                raise Exception("Genomes could not be submitted to ENA. HTTP response: " + submission_response.reason)
-
-        receipt_xml = minidom.parseString((submission_response.content).decode("utf-8"))
-        receipt = receipt_xml.getElementsByTagName("RECEIPT")
-        success = receipt[0].attributes["success"].value
-        if success == "true":
-            alias_dict = {}
-            samples = receipt_xml.getElementsByTagName("SAMPLE")
-            for s in samples:
-                sra_acc = s.attributes["accession"].value
-                alias = s.attributes["alias"].value
-                alias_dict[alias] = sra_acc
-        elif success == "false":
-            errors = receipt_xml.getElementsByTagName("ERROR")
-            final_error = "\tSome genomes could not be submitted to ENA. Please, check the errors below."
-            for error in errors:
-                final_error += "\n\t" + error.firstChild.data
-            final_error += "\n\tIf you wish to validate again your data and metadata, "
-            final_error += "please use the --force option."
-            raise Exception(final_error)
-
-        logger.info("{} genome samples successfully registered.".format(str(len(alias_dict))))
-
-        return alias_dict
