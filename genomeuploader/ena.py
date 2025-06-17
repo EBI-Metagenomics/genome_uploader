@@ -26,6 +26,8 @@ from time import sleep
 import requests
 from dotenv import load_dotenv
 from requests.exceptions import ConnectionError, HTTPError, RequestException, Timeout
+from .config import ACCESSION_MAP, USER_ENV_FILE_PATH, RUN_KEY_RENAME_MAP, SAMPLE_ATTRIBUTE_MAP, RETRY_COUNT, ENA_SUBMISSION_URL, ENA_SEARCH_URL, ENA_BROWSER_URL,
+RUN_DEFAULT_FIELDS, STUDY_RUN_DEFAULT_FIELDS, ASSEMBLY_DEFAULT_FIELDS, SAMPLE_DEFAULT_FIELDS, STUDY_DEFAULT_FIELDS
 
 logging.basicConfig(level=logging.INFO)
 
@@ -35,19 +37,6 @@ logger = logging.getLogger(__name__)
 class NoDataException(ValueError):
     pass
 
-
-RUN_DEFAULT_FIELDS = ",".join(["secondary_study_accession", "sample_accession"])
-
-STUDY_RUN_DEFAULT_FIELDS = ",".join(["sample_accession", "run_accession", "instrument_model"])
-
-ASSEMBLY_DEFAULT_FIELDS = "sample_accession"
-
-
-SAMPLE_DEFAULT_FIELDS = ",".join(["sample_accession", "collection_date", "country", "location"])
-
-STUDY_DEFAULT_FIELDS = "study_accession,study_description"
-
-RETRY_COUNT = 3
 
 
 def get_default_connection_headers():
@@ -62,44 +51,38 @@ def get_default_connection_headers():
 def get_default_params():
     return {"format": "json", "includeMetagenomes": True, "dataPortal": "ena"}
 
+class InvalidAccessionError(ValueError):
+    pass
 
 def parse_accession(accession):
-    if accession.startswith("PRJ"):
-        return "study_accession"
-    elif "RP" in accession:
-        return "secondary_study_accession"
-    elif "RR" in accession:
-        return "run_accession"
-    elif "SAM" in accession:
-        return "sample_accession"
-    elif "RS" in accession:
-        return "secondary_sample_accession"
-    elif "RZ" in accession:
-        return "analysis_accession"
-    else:
-        logging.error(f"{accession} is not a valid accession")
-        sys.exit()
+    for prefix, acc_type in ACCESSION_MAP.items():
+        if accession.startswith(prefix):
+            return acc_type
+    logging.error(f"Unrecognized accession format: '{accession}'")
+    raise InvalidAccessionError("Invalid accession: {accession}")
 
 
-def configure_credentials():
-    # Config file
-    user_config = Path.home() / ".genome_uploader.config.env"
-    if user_config.exists():
-        logger.debug("Loading the env variables from ".format())
-        load_dotenv(str(user_config))
+def configure_credentials(env_filename=USER_ENV_FILE_PATH):
+    search_paths = [
+        Path.home() / env_filename,
+        Path.cwd() / env_filename,
+        Path.cwd / ".env"
+    ]
+
+    for env_path in search_paths:
+        if env_path.exists():
+            logger.debug(f"Loading environment variables from {env_path}")
+            load_dotenv(dotenv_path=env_path)
+            break
     else:
-        cwd_config = Path.cwd() / ".genome_uploader.config.env"
-        if cwd_config.exists():
-            logger.debug("Loading the variables from the current directory.")
-            load_dotenv(str(cwd_config))
-        else:
-            logger.debug("Trying to load env variables from the .env file")
-            # from a local .env file
-            load_dotenv()
+        logger.debug("No environment file found; relying on system environment variables.")
 
     username = os.getenv("ENA_WEBIN")
     password = os.getenv("ENA_WEBIN_PASSWORD")
 
+    if not username or not password:
+        logger.warning("ENA_WEBIN and/or ENA_WEBIN_PASSWORD not found in environment variables.")
+    
     return username, password
 
 
@@ -149,21 +132,23 @@ def query_scientific_name(scientific_name, search_rank=False):
     else:
         return submittable, taxid
 
+class CrednetialsManager():
+    @staticmethod
+    def get_credentials():
+        username, password = configure_credentials()
+        if not username or not password:
+            logging.error("ENA_WEBIN and ENA_WEBIN_PASSWORD are not set.")
+            return None
+        return (username, password)
 
 class EnaQuery:
     def __init__(self, accession, query_type, private=False):
-        self.private_url = "https://www.ebi.ac.uk/ena/submit/report"
-        self.public_url = "https://www.ebi.ac.uk/ena/portal/api/search"
-        self.browser_url = "https://www.ebi.ac.uk/ena/browser/api/xml"
+        self.private_url = ENA_SUBMISSION_URL
+        self.public_url = ENA_SEARCH_URL
+        self.browser_url = ENA_BROWSER_URL
         self.accession = accession
         self.acc_type = parse_accession(accession)
-        username, password = configure_credentials()
-        if username is None or password is None:
-            logging.error("ENA_WEBIN and ENA_WEBIN_PASSWORD are not set")
-        if username and password:
-            self.auth = (username, password)
-        else:
-            self.auth = None
+        self.auth = CrednetialsManager.get_credentials()
         self.private = private
         self.query_type = query_type
 
@@ -178,26 +163,46 @@ class EnaQuery:
             response = requests.get(url)
         return response
 
-    def get_data_or_handle_error(self, response, xml=False, full_json=False):
+
+    def get_data_or_raise(self, response, mode="single_json"):
+        data_txt = response.text.strip()
+        if not data_txt:
+            raise EnaEmptyResponseError(f"{self.accession}: Empty or missing response text.")
+
+        parsers = {
+            "xml": lambda txt: minidom.parseString(txt),
+            "full_json": lambda txt: json.loads(txt),
+            "single_json": lambda txt: json.loads(txt)[0]
+        }
+
+        if mode not in parsers:
+            raise EnaParseError(f"Unknown mode: {mode}")
+
         try:
-            data_txt = response.text
-            if data_txt is None:
-                if self.private:
-                    logging.error(f"{self.accession} private data is not present in the specified Webin account")
-                else:
-                    logging.error(f"{self.accession} public data does not exist")
-                return None
-            else:
-                if xml:
-                    return minidom.parseString(data_txt)
-                elif full_json:
-                    #   return the full json when more than one entry expected
-                    return response.json()
-                else:
-                    #   only return the fist element in the list is the default. In these cases there should only be one entry returned
-                    return json.loads(response.text)[0] 
+            return parsers[mode](data_txt)
+        except Exception as e:
+            raise EnaParseError(f"{self.accession}: Failed to parse response as {mode}: {e}")
+
+    def get_data_or_handle_error(self, response, mode="single_json"):
+        data_txt = response.text.strip()
+        if not data_txt:
+            msg = f"{self.accession} {'private' if self.private else 'public'} data is empty or missing"
+            logging.error(msg)
+            return None
+        parsers = {
+            "xml": lambda txt: minidom.parseString(txt),
+            "full_json": lambda txt: json.loads(txt),
+            "single_json": lambda txt: json.loads(txt)[0]
+        }
+
+        try:
+            if mode not in parsers:
+                raise ValueError(f"Unknown mode: {mode}")
+            return parsers[mode][data_txt]
         except (IndexError, TypeError, ValueError, KeyError):
-            logging.error(f"Failed to fetch {self.accession}, returned error: {response.text}")
+            logging.error(f"Failed to parse {self.accession} response in mode '{mode}': {e}")
+            logging.debug(f"Response text: {data_txt}")
+            return None
 
     def retry_or_handle_request_error(self, request, *args, **kwargs):
         attempt = 0
@@ -223,129 +228,126 @@ class EnaQuery:
                 print(f"An unexpected error occurred: {e}")
                 raise
 
+    def _fetch_ena_data(self, *, url=None, data=None, method="get", mode="single_json", reformatter=None):
+        request_func = self.get_request if method == "get" else self.post_request
+        request_input = url or data
+        response = self.retry_or_handle_request_error(request_func, request_input)
+        parsed = self.get_data_or_handle_error(response, mode=mode)
+        return reformatter(parsed) if reformatter else parsed
+
     def _get_private_run(self):
         url = f"{self.private_url}/runs/{self.accession}"
-        response = self.retry_or_handle_request_error(self.get_request, url)
-        run = self.get_data_or_handle_error(response)
-        run_data = run["report"]
-        reformatted_data = {
-            "run_accession": run_data["id"],
-            "secondary_study_accession": run_data["studyId"],
-            "sample_accession": run_data["sampleId"],
-        }
+        def reformatter(run):
+            run_data = run["report"]
+            return {
+                "run_accession": run_data["id"],
+                "secondary_study_accession": run_data["studyId"],
+                "sample_accession": run_data["sampleId"]
+            }
+        data = self._fetch_ena_data(url=url, mode="single_json", reformatter=reformatter)
         logging.info(f"{self.accession} private run returned from ENA")
-        return reformatted_data
+        return data
 
     def _get_public_run(self):
         data = get_default_params()
-        data.update(
-            {
-                "result": "read_run",
-                "query": f'run_accession="{self.accession}"',
-                "fields": "secondary_study_accession,sample_accession",
-            }
-        )
-        response = self.retry_or_handle_request_error(self.post_request, data)
-        run = self.get_data_or_handle_error(response)
+        data.update({
+            "result": "read_run",
+            "query": f'run_accession="{self.accession}"',
+            "fields": "secondary_study_accession,sample_accession"
+        })
+        result = self._fetch_ena_data(data=data, method="post", mode="single_json")
         logging.info(f"{self.accession} public run returned from ENA")
-        return run
+        return result
 
     def _get_private_study(self):
         url = f"{self.private_url}/studies/xml/{self.accession}"
-        response = self.retry_or_handle_request_error(self.get_request, url)
-        study = self.get_data_or_handle_error(response, xml=True)
-        study_desc = study.getElementsByTagName("STUDY_DESCRIPTION")[0].firstChild.nodeValue
-        reformatted_data = {"study_accession": self.accession, "study_description": study_desc}
+        def reformatter(xml_doc):
+            desc = xml_doc.getElementsByTagName("STUDY_DESCRIPTION")[0].firstChild.nodeValue
+            return {"study_accession": self.accession, "study_description": desc}
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
         logging.info(f"{self.accession} private study returned from ENA")
-        return reformatted_data
+        return result
 
     def _get_public_study(self):
         data = get_default_params()
-        data.update(
-            {
-                "result": "study",
-                "query": f'{self.acc_type}="{self.accession}"',
-                "fields": STUDY_DEFAULT_FIELDS,
-            }
-        )
-        response = self.retry_or_handle_request_error(self.post_request, data)
-        study = self.get_data_or_handle_error(response)
+        data.update({
+            "result": "study",
+            "query": f'{self.acc_type}="{self.accession}"',
+            "fields": STUDY_DEFAULT_FIELDS
+        })
+        result = self._fetch_ena_data(data=data, method="post", mode="single_json")
         logging.info(f"{self.accession} public study returned from ENA")
-        return study
+        return result
 
     def _get_private_run_from_assembly(self):
         url = f"{self.private_url}/analyses/xml/{self.accession}"
-        reponse = self.retry_or_handle_request_error(self.get_request, url)
-        parsed_xml = self.get_data_or_handle_error(reponse, xml=True)
-        run_ref = parsed_xml.getElementsByTagName("RUN_REF")
-        run = run_ref[0].attributes["accession"].value
+        def reformatter(xml_doc):
+            return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
         logging.info(f"private run from the assembly {self.accession} returned from ENA")
-        return run
+        return result
 
     def _get_public_run_from_assembly(self):
-        url = f"{self.browser_url}/{self.accession}"
-        reponse = self.retry_or_handle_request_error(self.get_request, url)
-        parsed_xml = self.get_data_or_handle_error(reponse, xml=True)
-        run_ref = parsed_xml.getElementsByTagName("RUN_REF")
-        run = run_ref[0].attributes["accession"].value
+        def reformatter(xml_doc):
+            return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
         logging.info(f"public run from the assembly {self.accession} returned from ENA")
-
-        return run
+        return result
     
     def _get_private_study_runs(self):
         #   Pagination documentation unclear - offest not working. Using hardcoded 2000 default. TO MODIFY
         url = f"{self.private_url}/runs/{self.accession}?format=json&max-results=2000"
-        response = self.retry_or_handle_request_error(self.get_request, url)
-        runs = self.get_data_or_handle_error(response, full_json=True)
-        reformatted_data = []
-        for run in runs:
-            run_data = run["report"]
-            if "sampleId" in run_data:
-                run_data["sample_accession"] = run_data.pop("sampleId")
-            if "id" in run_data:
-                run_data["run_accession"] = run_data.pop("id")
-            if "instrumentModel" in run_data:
-                run_data["instrument_model"] = run_data.pop("instrumentModel")
-            reformatted_data.append(run_data)
-        logging.info(f"found {len(reformatted_data)} runs for study {self.accession}")
+        def reformatter(runs):
+            result = []
+            for run in runs:
+                run_data = run["report"]
+                updated_data = {
+                    RUN_KEY_RENAME_MAP.get(k, k): v for k in run_data.items()
+                }
+                result.append(updated_data)
+            return result
+        result = self._fetch_ena_data(url=url, mode="full_json", reformatter=reformatter)
+        logging.info(f"found {len(result)} runs for study {self.accession}")
         logging.info(f"private runs from study {self.accession}, returned from ENA")
-        return reformatted_data
+        return result
 
     def _get_public_study_runs(self):
         data = get_default_params()
-        data.update({"result": "read_run", "fields": STUDY_RUN_DEFAULT_FIELDS, "query": f"{self.acc_type}={self.accession}"})
-        response = self.retry_or_handle_request_error(self.post_request, data)
-        runs = self.get_data_or_handle_error(response, full_json=True)
+        data.update({
+            "result": "read_run",
+            "fields": STUDY_RUN_DEFAULT_FIELDS,
+            "query": f"{self.acc_type}={self.accession}"
+        })
+        result = self._fetch_ena_data(data=data, method="post", mode="full_json")
         logging.info(f"public runs from study {self.accession}, returned from ENA")
-        return runs
+        return result
 
     def _get_private_sample(self):
         url = f"{self.private_url}/samples/xml/{self.accession}"
-        reponse = self.retry_or_handle_request_error(self.get_request, url)
-        reformatted_data = {}
-        reformatted_data["sample_accession"] = self.accession
-        parsed_xml = self.get_data_or_handle_error(reponse, xml=True)
-        sample_attributes = parsed_xml.getElementsByTagName("SAMPLE_ATTRIBUTE")
-        for attribute in sample_attributes:
-            tag = attribute.getElementsByTagName("TAG")[0].firstChild.nodeValue
-            if tag == "geographic location (country and/or sea)":
-                reformatted_data["country"] = attribute.getElementsByTagName("VALUE")[0].firstChild.nodeValue
-            if tag == "geographic location (latitude)":
-                reformatted_data["latitude"] = attribute.getElementsByTagName("VALUE")[0].firstChild.nodeValue
-            if tag == "geographic location (longitude)":
-                reformatted_data["longitude"] = attribute.getElementsByTagName("VALUE")[0].firstChild.nodeValue
-            if tag == "collection date":
-                reformatted_data["collection_date"] = attribute.getElementsByTagName("VALUE")[0].firstChild.nodeValue
+        def reformatter(xml_doc):
+            reformatted = {"sample_accession": self.accession}
+            for attr in xml_doc.getElementsByTagName("SAMPLE_ATTRIBUTE"):
+                tag = attr.getElementsByTagName("TAG")[0].firstChild.nodeValue
+                val = attr.getElementsByTagName("VALUE")[0].firstChild.nodeValue
+                field = SAMPLE_ATTRIBUTE_MAP.get(tag)
+                if field:
+                    reformatted[field] = val
+            return reformatted
+        
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
         logging.info(f"{self.accession} private sample returned from ENA")
-        return reformatted_data
+        return result
 
     def _get_public_sample(self):
         data = get_default_params()
-        data.update({"result": "sample", "fields": SAMPLE_DEFAULT_FIELDS, "query": f"{self.acc_type}={self.accession}"})
-        response = self.retry_or_handle_request_error(self.post_request, data)
-        sample = self.get_data_or_handle_error(response)
+        data.update({
+            "result": "sample",
+            "fields": SAMPLE_DEFAULT_FIELDS,
+            "query": f"{self.acc_type}={self.accession}"
+        })
+        result = self._fetch_ena_data(data=data, method="post", mode="single_json")
         logging.info(f"{self.accession} public sample returned from ENA")
-        return sample
+        return result
 
     def build_query(self):
         """If the private flag is given, assume private data and try private APIs.
