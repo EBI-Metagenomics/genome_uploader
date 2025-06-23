@@ -14,11 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib.metadata
 import os
 import sys
 import logging
-import argparse
 import re
+import click
 import json
 import pandas as pd
 from datetime import date, datetime as dt
@@ -153,7 +154,8 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
             metadata["unique_genome_name"] = timestamp_names
             genomeInfo = metadata.set_index("unique_genome_name").transpose().to_dict()
         else:
-            genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
+        # TODO: add tab
+        genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
     else:
         raise ValueError("Duplicate names found in genome names")
 
@@ -554,7 +556,7 @@ def getAccessions(accessionsFile):
     return accessionDict
 
 def saveAccessions(aliasAccessionDict, accessionsFile):
-    with open(accessionsFile, 'w') as f:
+    with open(accessionsFile, 'a') as f:
         for elem in aliasAccessionDict:
             f.write("{}\t{}\n".format(elem, aliasAccessionDict[elem]))
 
@@ -802,33 +804,23 @@ def generate_genome_manifest(genomeInfo, study, manifestsRoot, aliasToSample, ge
         if tpa:
             outfile.write("TPA\ttrue\n")
 
-def main():
-    ENA_uploader = GenomeUpload()
-
-    if not ENA_uploader.live:
-        logger.warning("Warning: genome submission is not in live mode, " +
-            "files will be validated, but not uploaded.")
-
-    ENA_uploader.folders_creator()
-    ENA_uploader.file_generation_selection()
 
 class GenomeUpload:
-    def __init__(self, argv=sys.argv[1:]):
-        self.args = self.parse_args(argv)
-        self.upStudy = self.args.upload_study
-        self.genomeMetadata = self.args.genome_info
-        self.genomeType = "bins" if self.args.bins else "MAGs"
-        self.live = True if self.args.live else False
+    def __init__(self, args):
+        self.upStudy = args['upload_study']
+        self.genomeMetadata = args['genome_info']
+        self.genomeType = "bins" if args['bins'] else "MAGs"
+        self.live = args['live']
 
         # credentials
-        if self.args.webin and self.args.password:
-            self.username = self.args.webin
-            self.password = self.args.password
+        if args['webin'] and args['password']:
+            self.username = args['webin']
+            self.password = args['password']
         else:
             # Config file
             user_config = Path.home() / ".genome_uploader.config.env"
             if user_config.exists():
-                logger.debug("Loading the env variables from ".format(user_config))
+                logger.debug(f"Loading the env variables from {user_config}")
                 load_dotenv(str(user_config))
             else:
                 cwd_config = Path.cwd() / ".genome_uploader.config.env"
@@ -837,7 +829,6 @@ class GenomeUpload:
                     load_dotenv(str(cwd_config))
                 else:
                     logger.debug("Trying to load env variables from the .env file")
-                    # from a local .env file
                     load_dotenv()
 
             self.username = os.getenv("ENA_WEBIN")
@@ -847,20 +838,17 @@ class GenomeUpload:
             logger.error("ENA Webin username or password are empty")
             sys.exit(1)
 
-        # submission params
-        self.tpa = True if self.args.tpa else False
-        self.centre_name = self.args.centre_name
-        self.force = True if self.args.force else False
-
-        # work directories
-        self.work_dir = self.args.out if self.args.out else os.getcwd()
+        self.tpa = args['tpa']
+        self.centre_name = args['centre_name']
+        self.force = args['force']
+        self.work_dir = args['out'] if args['out'] else os.getcwd()
         self.upload_dir = self.set_genome_upload_dir()
+
         manifestName = "manifests"
         if not self.live:
             manifestName = manifestName.replace("manifests", "manifests_test")
         self.manifest_dir = os.path.join(self.upload_dir, manifestName)
 
-        # filenames
         self.samples_xml = os.path.join(self.upload_dir, "genome_samples.xml")
         self.submission_xml = os.path.join(self.upload_dir, "submission.xml")
         self.genomes = {}
@@ -871,38 +859,6 @@ class GenomeUpload:
         if not self.live:
             accessionsGen = accessionsGen.replace(".tsv", "_test.tsv")
         self.accessions_file = os.path.join(self.upload_dir, accessionsGen)
-
-    def parse_args(self, argv):
-        parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter,
-            description="Create xmls and manifest files for genome upload to ENA")
-
-        parser.add_argument('-u', '--upload_study', type=str, help="Study accession for genomes upload")
-        parser.add_argument('--genome_info', type=str, required=True, help="Genomes metadata file")
-
-        genomeType = parser.add_mutually_exclusive_group(required=True)
-        genomeType.add_argument('-m', '--mags', action='store_true', help="Select for MAG upload")
-        genomeType.add_argument('-b', '--bins', action='store_true', help="Select for bin upload")
-
-        parser.add_argument('--out', type=str, help="Output folder. Default: working directory")
-        parser.add_argument('--force', action='store_true', help="Forces file reset")
-        parser.add_argument('--live', action='store_true', help="Uploads on ENA. Omitting this " +
-            "option allows to validate samples beforehand")
-        parser.add_argument('--tpa', action='store_true', help="Select if uploading TPA-generated genomes")
-
-        # Users can provide their credentials and centre name manually or using a config file
-        parser.add_argument('--webin', required=False, help="Webin id")
-        parser.add_argument('--password', required=False, help="Webin password")
-        parser.add_argument('--centre_name', required=False, help="Name of the centre uploading genomes")
-
-        args = parser.parse_args(argv)
-
-        if not args.upload_study:
-            raise ValueError("No project selected for genome upload [-u, --upload_study].")
-
-        if not os.path.exists(args.genome_info):
-            raise FileNotFoundError('Genome metadata file "{}" does not exist'.format(args.genome_info))
-
-        return args
 
     def set_genome_upload_dir(self):
         uploadName = "MAG_upload"
@@ -930,23 +886,40 @@ class GenomeUpload:
 
         write_genomes_xml(genomeInfo, self.samples_xml, self.genomeType,
                             self.centre_name, self.tpa)
+
         logger.info("All files have been written to " + self.upload_dir)
 
-        # do not re-register samples if they have
-        # already been registered in live mode
-        save = True
-        if os.path.exists(self.accessions_file):
-            if self.live:
-                save = False
-
-        if save:
-            logger.info("Registering genome samples XMLs...")
-            aliasAccessionMap = ena.handle_genomes_registration(self.samples_xml,
-                self.submission_xml, self.username, self.password, self.live)
+        # register all genomes
+        # ! do not re-register samples if they have already been registered in live mode
+        logger.info("Registering genome samples XMLs...")
+        aliasAccessionMap = ena.handle_genomes_registration(self.samples_xml,
+                                                            self.submission_xml, self.username, self.password,
+                                                            len(genomeInfo), self.live)
+        if len(aliasAccessionMap) == len(genomeInfo):
+            # all genomes were registered
             saveAccessions(aliasAccessionMap, self.accessions_file)
         else:
-            logger.info("Genome samples already registered, reading ERS accessions...")
-            aliasAccessionMap = getAccessions(self.accessions_file)
+            # are there already registered genomes?
+            if len(aliasAccessionMap) > 0:
+                # exclude those from XML
+                if os.path.exists(self.samples_xml):
+                    os.remove(self.samples_xml)
+                filtered_genomeInfo = {k: v for k, v in genomeInfo.items() if k not in aliasAccessionMap}
+                logger.info("Re-writing genome registration XML...")
+                write_genomes_xml(filtered_genomeInfo, self.samples_xml, self.genomeType,
+                                  self.centre_name, self.tpa)
+                logger.info("Registering new genome samples XMLs...")
+                newAliasAccessionMap = ena.handle_genomes_registration(self.samples_xml,
+                                                                    self.submission_xml, self.username, self.password,
+                                                                    len(filtered_genomeInfo), self.live)
+                if len(newAliasAccessionMap) == len(filtered_genomeInfo):
+                    # all new genomes were registered
+                    saveAccessions(newAliasAccessionMap, self.accessions_file)
+                    aliasAccessionMap.update(newAliasAccessionMap)
+                else:
+                    raise Exception("Errors did occur on newly registration step.")
+            else:
+                raise Exception("Some genomes could not be submitted to ENA. Please, check the errors.")
 
         logger.info("Generating manifest files...")
 
@@ -956,6 +929,50 @@ class GenomeUpload:
             generate_genome_manifest(manifestInfo[m], self.upStudy,
                 self.manifest_dir, aliasAccessionMap, self.genomeType, self.tpa)
 
+
+__version__ = importlib.metadata.version("genome_uploader")
+@click.command()
+@click.version_option(__version__, message="genome_uploader %(version)s")
+@click.option('-u', '--upload_study', required=True, help="Study accession for genomes upload")
+@click.option('--genome_info', type=click.Path(exists=True), required=True, help="Genomes metadata file")
+@click.option('-m', '--mags', is_flag=True, help="Select for MAG upload")
+@click.option('-b', '--bins', is_flag=True, help="Select for bin upload")
+@click.option('--out', type=click.Path(), help="Output folder. Default: working directory")
+@click.option('--force', is_flag=True, help="Forces file reset")
+@click.option('--live', is_flag=True, help="Uploads on ENA. Omitting this allows validation only")
+@click.option('--tpa', is_flag=True, help="Select if uploading TPA-generated genomes")
+@click.option('--webin', type=str, help="Webin id")
+@click.option('--password', type=str, help="Webin password")
+@click.option('--centre_name', type=str, help="Centre name for submission")
+
+
+def run(upload_study, genome_info, mags, bins, out, force, live, tpa, webin, password, centre_name):
+    if not (mags or bins):
+        raise click.UsageError("Must specify either --mags or --bins.")
+
+    args = {
+        "upload_study": upload_study,
+        "genome_info": genome_info,
+        "mags": mags,
+        "bins": bins,
+        "out": out,
+        "force": force,
+        "live": live,
+        "tpa": tpa,
+        "webin": webin,
+        "password": password,
+        "centre_name": centre_name
+    }
+    ENA_uploader = GenomeUpload(args)
+
+    if not ENA_uploader.live:
+        logger.warning("Warning: genome submission is not in live mode, " +
+            "files will be validated, but not uploaded.")
+
+    ENA_uploader.folders_creator()
+    ENA_uploader.file_generation_selection()
+
+
 if __name__ == "__main__":
-    main()
+    run()
     logger.info('Completed')

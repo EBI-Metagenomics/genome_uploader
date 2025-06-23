@@ -20,6 +20,7 @@ import requests
 import json
 import logging
 from time import sleep
+import re
 
 import xml.dom.minidom as minidom
 
@@ -246,7 +247,19 @@ class ENA():
         else:
             return submittable, taxid
 
-    def handle_genomes_registration(self, sample_xml, submission_xml, webin, password, live=False):
+    def identify_registered_mags(self, message):
+        alias_dict = {}
+        pattern = r'alias: "([^"]+)"[^:]+accession: "([^"]+)"'
+        for line in message.split('\n'):
+            match = re.search(pattern, line)
+            if match:
+                alias = match.group(1)
+                accession = match.group(2)
+                alias_dict[alias] = accession
+                logger.info(f"Found genome {alias} registered with {accession}")
+        return alias_dict
+
+    def handle_genomes_registration(self, sample_xml, submission_xml, webin, password, number_of_genomes, live=False,):
         liveSub, mode = "", "live"
 
         if not live:
@@ -275,22 +288,29 @@ class ENA():
         receiptXml = minidom.parseString((submissionResponse.content).decode("utf-8"))
         receipt = receiptXml.getElementsByTagName("RECEIPT")
         success = receipt[0].attributes["success"].value
-        if success == "true":
-            aliasDict = {}
+        aliasDict = {}
+        try:
             samples = receiptXml.getElementsByTagName("SAMPLE")
             for s in samples:
                 sraAcc = s.attributes["accession"].value
                 alias = s.attributes["alias"].value
                 aliasDict[alias] = sraAcc
-        elif success == "false":
+            logger.info(f'{len(aliasDict)} genome samples successfully registered.')
+        except:
+            logger.info("No newly registered samples")
+        # check errors and search for existing accessions
+        if success == "false":
             errors = receiptXml.getElementsByTagName("ERROR")
-            finalError = "\tSome genomes could not be submitted to ENA. Please, check the errors below."
+            finalError = ""
             for error in errors:
                 finalError += "\n\t" + error.firstChild.data
-            finalError += "\n\tIf you wish to validate again your data and metadata, "
-            finalError += "please use the --force option."
-            raise Exception(finalError)
-        
-        logger.info('{} genome samples successfully registered.'.format(str(len(aliasDict))))
-
+            submitted_genomes = self.identify_registered_mags(finalError)
+            if submitted_genomes:
+                aliasDict.update(submitted_genomes)
+            else:
+                logger.info('No already submitted genomes retrieved')
+        if len(aliasDict) == number_of_genomes:
+            logger.info("All genomes were registered")
+        else:
+            logger.info("Need to exclude registered genomes from xml")
         return aliasDict

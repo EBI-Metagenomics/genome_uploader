@@ -24,7 +24,8 @@ dependencies = [
     "requests==2.26.0",
     "pandas==1.4.1",
     "python-dotenv==1.0.1",
-    "numpy==1.24.4"
+    "numpy==1.24.4",
+    "click==8.1.7"
 ]
 
 [project.urls]
