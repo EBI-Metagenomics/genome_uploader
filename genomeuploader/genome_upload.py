@@ -154,8 +154,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
             metadata["unique_genome_name"] = timestamp_names
             genomeInfo = metadata.set_index("unique_genome_name").transpose().to_dict()
         else:
-        # TODO: add tab
-        genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
+            genomeInfo = metadata.set_index("genome_name").transpose().to_dict()
     else:
         raise ValueError("Duplicate names found in genome names")
 
