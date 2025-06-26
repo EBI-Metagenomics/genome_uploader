@@ -312,5 +312,5 @@ class ENA():
         if len(aliasDict) == number_of_genomes:
             logger.info("All genomes were registered")
         else:
-            logger.info("Need to exclude registered genomes from xml")
+            logger.info("For the re-registration some genomes will be excluded from the XML receipt.")
         return aliasDict
