@@ -543,16 +543,6 @@ def combine_ENA_info(genomeInfo, ENADict):
 
         genomeInfo[g]["accessions"] = ','.join(genomeInfo[g]["accessions"])
 
-def getAccessions(accessionsFile):
-    accessionDict = {}
-    with open(accessionsFile, 'r') as f:
-        for line in f:
-            line = line.split('\t')
-            alias = line[0]
-            accession = line[1].rstrip('\n')
-            accessionDict[alias] = accession
-
-    return accessionDict
 
 def saveAccessions(aliasAccessionDict, accessionsFile):
     with open(accessionsFile, 'a') as f:
@@ -956,8 +946,8 @@ __version__ = importlib.metadata.version("genome_uploader")
 
 
 def run(upload_study, genome_info, mags, bins, out, force, live, tpa, webin, password, centre_name):
-    if not (mags or bins):
-        raise click.UsageError("Must specify either --mags or --bins.")
+    if mags == bins:
+        raise click.UsageError("Must specify either --mags or --bins (not both or neither).")
 
     args = {
         "upload_study": upload_study,

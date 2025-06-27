@@ -247,7 +247,7 @@ class ENA():
         else:
             return submittable, taxid
 
-    def identify_registered_mags(self, message):
+    def identify_registered_genomes(self, message):
         alias_dict = {}
         pattern = r'alias: "([^"]+)"[^:]+accession: "([^"]+)"'
         for line in message.split('\n'):
@@ -291,24 +291,30 @@ class ENA():
         aliasDict = {}
         try:
             samples = receiptXml.getElementsByTagName("SAMPLE")
+        except:
+            logger.info("Error on registering samples from XML. See errors below.")
+        if success == "true":
             for s in samples:
                 sraAcc = s.attributes["accession"].value
                 alias = s.attributes["alias"].value
                 aliasDict[alias] = sraAcc
             logger.info(f'{len(aliasDict)} genome samples successfully registered.')
-        except:
-            logger.info("No newly registered samples")
         # check errors and search for existing accessions
-        if success == "false":
+        elif success == "false":
             errors = receiptXml.getElementsByTagName("ERROR")
             finalError = ""
             for error in errors:
                 finalError += "\n\t" + error.firstChild.data
-            submitted_genomes = self.identify_registered_mags(finalError)
-            if submitted_genomes:
-                aliasDict.update(submitted_genomes)
+            # check are there already registered genomes
+            registered_genomes = self.identify_registered_genomes(finalError)
+            if registered_genomes:
+                aliasDict.update(registered_genomes)
             else:
+<<<<<<< Updated upstream
                 logger.info('No previously submitted genomes retrieved from the receipt')
+=======
+                logger.info('No already registered genomes retrieved')
+>>>>>>> Stashed changes
         if len(aliasDict) == number_of_genomes:
             logger.info("All genomes were registered")
         else:
