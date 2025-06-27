@@ -928,7 +928,7 @@ class GenomeUpload:
                 else:
                     raise Exception("Errors did occur on newly registration step.")
             else:
-                raise Exception("Some genomes could not be submitted to ENA. Please, check the errors.")
+                raise Exception("Some genomes could not be submitted to ENA. Please, check the errors above.")
 
         logger.info("Generating manifest files...")
 
