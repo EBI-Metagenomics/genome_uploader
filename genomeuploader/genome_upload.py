@@ -913,9 +913,14 @@ class GenomeUpload:
                 write_genomes_xml(filtered_genomeInfo, self.samples_xml, self.genomeType,
                                   self.centre_name, self.tpa)
                 logger.info("Registering new genome samples XMLs...")
-                newAliasAccessionMap = ena.handle_genomes_registration(self.samples_xml,
-                                                                    self.submission_xml, self.username, self.password,
-                                                                    len(filtered_genomeInfo), self.live)
+                newAliasAccessionMap = ena.handle_genomes_registration(
+                    self.samples_xml,
+                    self.submission_xml,
+                    self.username,
+                    self.password,
+                    len(filtered_genomeInfo),
+                    self.live
+                )
                 if len(newAliasAccessionMap) == len(filtered_genomeInfo):
                     # all new genomes were registered
                     saveAccessions(newAliasAccessionMap, self.accessions_file)
