@@ -891,9 +891,14 @@ class GenomeUpload:
         # register all genomes
         # ! do not re-register samples if they have already been registered in live mode
         logger.info("Registering genome samples XMLs...")
-        aliasAccessionMap = ena.handle_genomes_registration(self.samples_xml,
-                                                            self.submission_xml, self.username, self.password,
-                                                            len(genomeInfo), self.live)
+        aliasAccessionMap = ena.handle_genomes_registration(
+            self.samples_xml,
+            self.submission_xml,
+            self.username,
+            self.password,
+            len(genomeInfo),
+            self.live
+        )
         if len(aliasAccessionMap) == len(genomeInfo):
             # all genomes were registered
             saveAccessions(aliasAccessionMap, self.accessions_file)
