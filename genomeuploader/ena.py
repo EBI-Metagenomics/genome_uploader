@@ -308,7 +308,7 @@ class ENA():
             if submitted_genomes:
                 aliasDict.update(submitted_genomes)
             else:
-                logger.info('No already submitted genomes retrieved')
+                logger.info('No previously submitted genomes retrieved from the receipt')
         if len(aliasDict) == number_of_genomes:
             logger.info("All genomes were registered")
         else:
