@@ -62,7 +62,7 @@ Input table: expects the following parameters:
     genome_coverage : genome coverage
     genome_path: path to genome to upload
 '''
-def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
+def read_and_cleanse_metadata_tsv(inputFile, genomeType, live, test_unique_submission):
     logger.info('Retrieving info for genomes to submit...')
 
     binMandatoryFields = ["genome_name", "accessions",
@@ -148,7 +148,7 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live):
     if uniqueness:
         # for test submissions we add a timestamp to allow for more
         # than one submission a day (ENA would block them otherwise)
-        if not live:
+        if not live and test_unique_submission:
             timestamp = str(int(dt.timestamp(dt.now())))
             timestamp_names = [row["genome_name"] + '_' + timestamp for index, row in metadata.iterrows()]
             metadata["unique_genome_name"] = timestamp_names
@@ -315,8 +315,8 @@ def extract_Archaea_info(name, rank):
 
     return submittable, name, taxid
 
-def extract_genomes_info(inputFile, genomeType, live):
-    genomeInfo = read_and_cleanse_metadata_tsv(inputFile, genomeType, live)
+def extract_genomes_info(inputFile, genomeType, live, test_unique_submission):
+    genomeInfo = read_and_cleanse_metadata_tsv(inputFile, genomeType, live, test_unique_submission)
     for gen in genomeInfo:
         genomeInfo[gen]["accessions"] = genomeInfo[gen]["accessions"].split(',')
         accessionType = "run"
@@ -544,8 +544,8 @@ def combine_ENA_info(genomeInfo, ENADict):
         genomeInfo[g]["accessions"] = ','.join(genomeInfo[g]["accessions"])
 
 
-def saveAccessions(aliasAccessionDict, accessionsFile):
-    with open(accessionsFile, 'a') as f:
+def saveAccessions(aliasAccessionDict, accessionsFile, mode):
+    with open(accessionsFile, mode) as f:
         for elem in aliasAccessionDict:
             f.write("{}\t{}\n".format(elem, aliasAccessionDict[elem]))
 
@@ -575,69 +575,6 @@ def compute_manifests(genomes):
 
     return manifestInfo
 
-def get_study_from_xml(sample):
-    description = sample.childNodes[5].childNodes[0].data
-    study = description.split(' ')[-1][:-1]
-
-    return study
-
-def recover_info_from_xml(genomeDict, sample_xml, live_mode):
-    logger.info("Retrieving data for genome submission...")
-
-    # extract list of genomes (samples) to be registered
-    xml_structure = minidom.parse(sample_xml)
-    samples = xml_structure.getElementsByTagName("SAMPLE")
-
-    for s in samples:
-        study = get_study_from_xml(s)
-
-        # extract alias from xml and find a match with genomes the user is uploading
-        XMLalias = s.attributes["alias"].value
-        if not live_mode:         # remove time stamp if test mode is selected
-            aliasSplit = XMLalias.split("_")
-            XMLalias = '_'.join(aliasSplit[:-1])
-        for gen in genomeDict:
-            # if match is found, associate attributes listed in the xml file
-            # with genomes to upload
-            if XMLalias == gen:
-                if not live_mode:
-                    currentTimestamp = str(int(dt.timestamp(dt.now())))
-                    XMLalias = gen + '_' + currentTimestamp
-                    s.attributes["alias"].value = XMLalias
-                    sampleTitle = s.getElementsByTagName("TITLE")[0]
-                    sampleTitleValue = sampleTitle.firstChild.nodeValue.split("_")
-                    sampleTitleValue[-1] = currentTimestamp
-                    newSampleTitle = '_'.join(sampleTitleValue)
-                    s.getElementsByTagName("TITLE")[0].firstChild.replaceWholeText(newSampleTitle)
-                attributes = s.childNodes[7].getElementsByTagName("SAMPLE_ATTRIBUTE")
-                seqMethod, assSoftware = "", ""
-                for a in attributes:
-                    tagElem = a.getElementsByTagName("TAG")
-                    tag = tagElem[0].childNodes[0].nodeValue
-                    if tag == "sequencing method":
-                        seqMethodElem = a.getElementsByTagName("VALUE")
-                        seqMethod = seqMethodElem[0].childNodes[0].nodeValue
-                    elif tag == "assembly software":
-                        assSoftwareElem = a.getElementsByTagName("VALUE")
-                        assSoftware = assSoftwareElem[0].childNodes[0].nodeValue
-                    if not seqMethod == "" and not assSoftware == "":
-                        break
-
-                genomeDict[gen]["accessions"] = ','.join(genomeDict[gen]["accessions"])
-                genomeDict[gen]["alias"] = XMLalias
-                genomeDict[gen]["assembly_software"] = assSoftware
-                genomeDict[gen]["sequencingMethod"] = seqMethod
-                genomeDict[gen]["study"] = study
-                break
-
-    if not live_mode:
-        for s in samples:
-            xml_structure.firstChild.appendChild(s)
-
-        with open(sample_xml, 'wb') as f:
-            dom_string = xml_structure.toprettyxml().encode("utf-8")
-            dom_string = b'\n'.join([s for s in dom_string.splitlines() if s.strip()])
-            f.write(dom_string)
 
 def create_sample_attribute(sample_attributes, data_list, mag_data=None):
     tag = data_list[0]
@@ -800,6 +737,7 @@ class GenomeUpload:
         self.genomeMetadata = args['genome_info']
         self.genomeType = "bins" if args['bins'] else "MAGs"
         self.live = args['live']
+        self.test_unique_submission = args['test_unique_submission']
 
         # credentials
         if args['webin'] and args['password']:
@@ -868,7 +806,7 @@ class GenomeUpload:
 
         logger.info('Retrieving data for MAG submission...')
 
-        genomeInfo = extract_genomes_info(self.genomeMetadata, self.genomeType, self.live)
+        genomeInfo = extract_genomes_info(self.genomeMetadata, self.genomeType, self.live, self.test_unique_submission)
 
         extract_ENA_info(genomeInfo, self.upload_dir, self.username, self.password, self.force)
         logger.info("Writing genome registration XML...")
@@ -891,7 +829,7 @@ class GenomeUpload:
         )
         if len(aliasAccessionMap) == len(genomeInfo):
             # all genomes were registered
-            saveAccessions(aliasAccessionMap, self.accessions_file)
+            saveAccessions(aliasAccessionMap, self.accessions_file, mode='w')
         else:
             # are there already registered genomes?
             if len(aliasAccessionMap) > 0:
@@ -913,7 +851,7 @@ class GenomeUpload:
                 )
                 if len(newAliasAccessionMap) == len(filtered_genomeInfo):
                     # all new genomes were registered
-                    saveAccessions(newAliasAccessionMap, self.accessions_file)
+                    saveAccessions(newAliasAccessionMap, self.accessions_file, mode='a')
                     aliasAccessionMap.update(newAliasAccessionMap)
                 else:
                     raise Exception("Errors did occur on newly registration step.")
@@ -939,13 +877,15 @@ __version__ = importlib.metadata.version("genome_uploader")
 @click.option('--out', type=click.Path(), help="Output folder. Default: working directory")
 @click.option('--force', is_flag=True, help="Forces file reset")
 @click.option('--live', is_flag=True, help="Uploads on ENA. Omitting this allows validation only")
+@click.option('--test-unique-submission', is_flag=True,
+              help="Use timestamp to generate different submissions to test server. Use only without --live")
 @click.option('--tpa', is_flag=True, help="Select if uploading TPA-generated genomes")
 @click.option('--webin', type=str, help="Webin id")
 @click.option('--password', type=str, help="Webin password")
 @click.option('--centre_name', type=str, help="Centre name for submission")
 
 
-def run(upload_study, genome_info, mags, bins, out, force, live, tpa, webin, password, centre_name):
+def run(upload_study, genome_info, mags, bins, out, force, live, tpa, webin, password, centre_name, test_unique_submission):
     if mags == bins:
         raise click.UsageError("Must specify either --mags or --bins (not both or neither).")
 
@@ -960,7 +900,8 @@ def run(upload_study, genome_info, mags, bins, out, force, live, tpa, webin, pas
         "tpa": tpa,
         "webin": webin,
         "password": password,
-        "centre_name": centre_name
+        "centre_name": centre_name,
+        "test_unique_submission": test_unique_submission
     }
     ENA_uploader = GenomeUpload(args)
 
