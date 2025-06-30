@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -33,75 +32,49 @@ class NoDataException(ValueError):
     pass
 
 
-RUN_DEFAULT_FIELDS = ','.join([
-    'study_accession',
-    'secondary_study_accession',
-    'instrument_model',
-    'run_accession',
-    'sample_accession'
-])
+RUN_DEFAULT_FIELDS = ",".join(["study_accession", "secondary_study_accession", "instrument_model", "run_accession", "sample_accession"])
 
-ASSEMBLY_DEFAULT_FIELDS = 'sample_accession'
+ASSEMBLY_DEFAULT_FIELDS = "sample_accession"
 
-SAMPLE_DEFAULT_FIELDS = ','.join([
-    'sample_accession',
-    'secondary_sample_accession',
-    'collection_date',
-    'country',
-    'location'
-])
+SAMPLE_DEFAULT_FIELDS = ",".join(["sample_accession", "secondary_sample_accession", "collection_date", "country", "location"])
 
-STUDY_DEFAULT_FIELDS = ','.join([
-    'study_accession',
-    'secondary_study_accession',
-    'study_description',
-    'study_title'
-])
+STUDY_DEFAULT_FIELDS = ",".join(["study_accession", "secondary_study_accession", "study_description", "study_title"])
 
 RETRY_COUNT = 5
 
 
-class ENA():
+class ENA:
     def get_default_params(self):
-        return {
-            'format': 'json',
-            'includeMetagenomes': True,
-            'dataPortal': 'ena'
-        }
+        return {"format": "json", "includeMetagenomes": True, "dataPortal": "ena"}
 
     def post_request(self, data, webin, password):
         url = "https://www.ebi.ac.uk/ena/portal/api/search"
         auth = (webin, password)
-        default_connection_headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "*/*"
-        }
+        default_connection_headers = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "*/*"}
         response = requests.post(url, data=data, auth=auth, headers=default_connection_headers)
-        
+
         return response
 
     def get_run(self, run_accession, webin, password, attempt=0, search_params=None):
         data = self.get_default_params()
-        data['result'] = 'read_run'
-        data['fields'] = RUN_DEFAULT_FIELDS
-        data['query'] = 'run_accession=\"{}\"'.format(run_accession)
+        data["result"] = "read_run"
+        data["fields"] = RUN_DEFAULT_FIELDS
+        data["query"] = 'run_accession="{}"'.format(run_accession)
 
         if search_params:
             data.update(search_params)
 
         response = self.post_request(data, webin, password)
-        
+
         if not response.ok and attempt > 2:
-            raise ValueError("Could not retrieve run with accession {}, returned "
-                "message: {}".format(run_accession, response.text))
+            raise ValueError("Could not retrieve run with accession {}, returned " "message: {}".format(run_accession, response.text))
         elif response.status_code == 204:
             if attempt < 2:
                 attempt += 1
                 sleep(1)
                 return self.get_run(run_accession, webin, password, attempt)
             else:
-                raise ValueError("Could not find run {} in ENA after {}"
-                    " attempts".format(run_accession, RETRY_COUNT))
+                raise ValueError("Could not find run {} in ENA after {}" " attempts".format(run_accession, RETRY_COUNT))
         try:
             run = json.loads(response.text)[0]
         except (IndexError, TypeError, ValueError):
@@ -112,22 +85,20 @@ class ENA():
         return run
 
     def get_run_from_assembly(self, assembly_name):
-        manifestXml = minidom.parseString(requests.get("https://www.ebi.ac.uk" +
-            "/ena/browser/api/xml/" + assembly_name).text)
+        manifestXml = minidom.parseString(requests.get("https://www.ebi.ac.uk" + "/ena/browser/api/xml/" + assembly_name).text)
 
         run_ref = manifestXml.getElementsByTagName("RUN_REF")
         run = run_ref[0].attributes["accession"].value
-        
+
         return run
 
     def get_study(self, webin, password, study_accession):
         data = self.get_default_params()
-        data['result'] = "study"
-        data['fields'] = STUDY_DEFAULT_FIELDS
-        data['query'] = 'study_accession="{}" OR secondary_study_accession="{}"' \
-            .format(study_accession, study_accession)
+        data["result"] = "study"
+        data["fields"] = STUDY_DEFAULT_FIELDS
+        data["query"] = 'study_accession="{}" OR secondary_study_accession="{}"'.format(study_accession, study_accession)
 
-        data['dataPortal'] = "ena"
+        data["dataPortal"] = "ena"
 
         try:
             response = self.post_request(data, webin, password)
@@ -145,91 +116,86 @@ class ENA():
         except (IndexError, TypeError, ValueError, KeyError):
             print("Failed to fetch study {}, returned error: {}".format(study_accession, response.text))
 
-        raise ValueError('Could not find study {} in ENA.'.format(study_accession))
+        raise ValueError("Could not find study {} in ENA.".format(study_accession))
 
     def get_study_runs(self, study_acc, webin, password, fields=None, search_params=None):
         data = self.get_default_params()
-        data['result'] = 'read_run'
-        data['fields'] = fields or RUN_DEFAULT_FIELDS
-        data['query'] = '(study_accession=\"{}\" OR secondary_study_accession=\"{}\")'.format(study_acc, study_acc)
+        data["result"] = "read_run"
+        data["fields"] = fields or RUN_DEFAULT_FIELDS
+        data["query"] = '(study_accession="{}" OR secondary_study_accession="{}")'.format(study_acc, study_acc)
 
         if search_params:
             data.update(search_params)
 
         response = self.post_request(data, webin, password)
-        
+
         if not response.ok:
             raise ValueError("Could not retrieve runs for study %s.", study_acc)
-        
+
         if response.status_code == 204:
             return []
 
         try:
             runs = response.json()
         except:
-            raise ValueError("Query against ENA API did not work. Returned "
-                "message: {}".format(response.text))
+            raise ValueError("Query against ENA API did not work. Returned " "message: {}".format(response.text))
 
         return runs
 
     def get_sample(self, sample_accession, webin, password, fields=None, search_params=None, attempt=0):
         data = self.get_default_params()
-        data['result'] = 'sample'
-        data['fields'] = fields or SAMPLE_DEFAULT_FIELDS
-        data['query'] = ('(sample_accession=\"{acc}\" OR secondary_sample_accession'
-            '=\"{acc}\") ').format(acc=sample_accession)
+        data["result"] = "sample"
+        data["fields"] = fields or SAMPLE_DEFAULT_FIELDS
+        data["query"] = ('(sample_accession="{acc}" OR secondary_sample_accession' '="{acc}") ').format(acc=sample_accession)
 
         if search_params:
             data.update(search_params)
 
         response = self.post_request(data, webin, password)
-        
+
         if response.status_code == 200:
             sample = response.json()
-            assert len(sample) == 1 
+            assert len(sample) == 1
             return sample[0]
 
         if response.status_code == 204:
             if attempt < 2:
-                new_params = {'dataPortal': 'metagenome' if data['dataPortal'] == 'ena' else 'ena'}
+                new_params = {"dataPortal": "metagenome" if data["dataPortal"] == "ena" else "ena"}
                 attempt += 1
-                return self.get_sample(sample_accession, webin, password, fields=fields, 
-                    search_params=new_params, attempt=attempt)
+                return self.get_sample(sample_accession, webin, password, fields=fields, search_params=new_params, attempt=attempt)
             else:
-                raise ValueError("Could not find sample {} in ENA after "
-                    "{} attempts.".format(sample_accession, RETRY_COUNT))
+                raise ValueError("Could not find sample {} in ENA after " "{} attempts.".format(sample_accession, RETRY_COUNT))
         else:
-            raise ValueError("Could not retrieve sample with accession {}. "
-                "Returned message: {}".format(sample_accession, response.text))
+            raise ValueError("Could not retrieve sample with accession {}. " "Returned message: {}".format(sample_accession, response.text))
 
     def query_taxid(self, taxid):
         url = "https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{}".format(taxid)
         response = requests.get(url)
 
         try:
-            # Will raise exception if response status code is non-200 
+            # Will raise exception if response status code is non-200
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
             print("Request failed {} with error {}".format(url, e))
             return False
-        
+
         res = response.json()
-        
+
         return res.get("scientificName", "")
 
     def query_scientific_name(self, scientificName, searchRank=False):
         url = "https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{}".format(scientificName)
         response = requests.get(url)
-        
+
         try:
-            # Will raise exception if response status code is non-200 
+            # Will raise exception if response status code is non-200
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
             if searchRank:
                 return False, "", ""
             else:
                 return False, ""
-        
+
         try:
             res = response.json()[0]
         except IndexError:
@@ -250,7 +216,7 @@ class ENA():
     def identify_registered_genomes(self, message):
         alias_dict = {}
         pattern = r'alias: "([^"]+)"[^:]+accession: "([^"]+)"'
-        for line in message.split('\n'):
+        for line in message.split("\n"):
             match = re.search(pattern, line)
             if match:
                 alias = match.group(1)
@@ -259,7 +225,15 @@ class ENA():
                 logger.info(f"Found genome {alias} registered with {accession}")
         return alias_dict
 
-    def handle_genomes_registration(self, sample_xml, submission_xml, webin, password, number_of_genomes, live=False,):
+    def handle_genomes_registration(
+        self,
+        sample_xml,
+        submission_xml,
+        webin,
+        password,
+        number_of_genomes,
+        live=False,
+    ):
         liveSub, mode = "", "live"
 
         if not live:
@@ -268,22 +242,17 @@ class ENA():
 
         url = "https://www{}.ebi.ac.uk/ena/submit/drop-box/submit/".format(liveSub)
 
-        logger.info('Registering sample xml in {} mode.'.format(mode))
+        logger.info("Registering sample xml in {} mode.".format(mode))
 
-        f = {
-            'SUBMISSION': open(submission_xml, 'r'),
-            'SAMPLE': open(sample_xml, 'r')
-        }
+        f = {"SUBMISSION": open(submission_xml, "r"), "SAMPLE": open(sample_xml, "r")}
 
-        submissionResponse = requests.post(url, files = f, auth = (webin, password))
+        submissionResponse = requests.post(url, files=f, auth=(webin, password))
 
         if submissionResponse.status_code != 200:
-            if str(submissionResponse.status_code).startswith('5'):
-                raise Exception("Genomes could not be submitted to ENA as the server " +
-                    "does not respond. Please again try later.")
+            if str(submissionResponse.status_code).startswith("5"):
+                raise Exception("Genomes could not be submitted to ENA as the server " + "does not respond. Please again try later.")
             else:
-                raise Exception("Genomes could not be submitted to ENA. HTTP response: " +
-                    submissionResponse.reason)
+                raise Exception("Genomes could not be submitted to ENA. HTTP response: " + submissionResponse.reason)
 
         receiptXml = minidom.parseString((submissionResponse.content).decode("utf-8"))
         receipt = receiptXml.getElementsByTagName("RECEIPT")
@@ -298,7 +267,7 @@ class ENA():
                 sraAcc = s.attributes["accession"].value
                 alias = s.attributes["alias"].value
                 aliasDict[alias] = sraAcc
-            logger.info(f'{len(aliasDict)} genome samples successfully registered.')
+            logger.info(f"{len(aliasDict)} genome samples successfully registered.")
         # check errors and search for existing accessions
         elif success == "false":
             errors = receiptXml.getElementsByTagName("ERROR")
@@ -310,7 +279,7 @@ class ENA():
             if registered_genomes:
                 aliasDict.update(registered_genomes)
             else:
-                logger.info('No previously submitted genomes retrieved from the receipt')
+                logger.info("No previously submitted genomes retrieved from the receipt")
         if len(aliasDict) == number_of_genomes:
             logger.info("All genomes were registered")
         else:
