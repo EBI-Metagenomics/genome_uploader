@@ -261,7 +261,7 @@ class ENA:
         try:
             samples = receiptXml.getElementsByTagName("SAMPLE")
         except:
-            logger.info("Error on registering samples from XML. See errors below.")
+            logger.info("Error while registering samples using the XML. See errors below.")
         if success == "true":
             for s in samples:
                 sraAcc = s.attributes["accession"].value
