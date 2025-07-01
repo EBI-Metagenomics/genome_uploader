@@ -67,20 +67,20 @@ class ENA:
         response = self.post_request(data, webin, password)
 
         if not response.ok and attempt > 2:
-            raise ValueError("Could not retrieve run with accession {}, returned " "message: {}".format(run_accession, response.text))
+            raise ValueError(f"Could not retrieve run with accession {run_accession}, returned message: {response.text}")
         elif response.status_code == 204:
             if attempt < 2:
                 attempt += 1
                 sleep(1)
                 return self.get_run(run_accession, webin, password, attempt)
             else:
-                raise ValueError("Could not find run {} in ENA after {}" " attempts".format(run_accession, RETRY_COUNT))
+                raise ValueError(f"Could not find run {run_accession} in ENA after {RETRY_COUNT} attempts")
         try:
             run = json.loads(response.text)[0]
         except (IndexError, TypeError, ValueError):
-            raise ValueError("Could not find run {} in ENA.".format(run_accession))
+            raise ValueError(f"Could not find run {run_accession} in ENA.")
         except:
-            raise Exception("Could not query ENA API for run {}: {}".format(run_accession, response.text))
+            raise Exception(f"Could not query ENA API for run {run_accession}: {response.text}")
 
         return run
 
@@ -138,7 +138,7 @@ class ENA:
         try:
             runs = response.json()
         except:
-            raise ValueError("Query against ENA API did not work. Returned " "message: {}".format(response.text))
+            raise ValueError(f"Query against ENA API did not work. Returned message: {response.text}")
 
         return runs
 
@@ -164,9 +164,9 @@ class ENA:
                 attempt += 1
                 return self.get_sample(sample_accession, webin, password, fields=fields, search_params=new_params, attempt=attempt)
             else:
-                raise ValueError("Could not find sample {} in ENA after " "{} attempts.".format(sample_accession, RETRY_COUNT))
+                raise ValueError(f"Could not find sample {sample_accession} in ENA after {RETRY_COUNT} attempts.")
         else:
-            raise ValueError("Could not retrieve sample with accession {}. " "Returned message: {}".format(sample_accession, response.text))
+            raise ValueError(f"Could not retrieve sample with accession {sample_accession}. Returned message: {response.text}")
 
     def query_taxid(self, taxid):
         url = "https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{}".format(taxid)
@@ -250,9 +250,9 @@ class ENA:
 
         if submissionResponse.status_code != 200:
             if str(submissionResponse.status_code).startswith("5"):
-                raise Exception("Genomes could not be submitted to ENA as the server " + "does not respond. Please again try later.")
+                raise Exception("Genomes could not be submitted to ENA as the server does not respond. Please again try later.")
             else:
-                raise Exception("Genomes could not be submitted to ENA. HTTP response: " + submissionResponse.reason)
+                raise Exception(f"Genomes could not be submitted to ENA. HTTP response: {submissionResponse.reason}")
 
         receiptXml = minidom.parseString((submissionResponse.content).decode("utf-8"))
         receipt = receiptXml.getElementsByTagName("RECEIPT")
@@ -278,6 +278,7 @@ class ENA:
             registered_genomes = self.identify_registered_genomes(finalError)
             if registered_genomes:
                 aliasDict.update(registered_genomes)
+                logger.info("Some previously submitted genomes were retrieved from the receipt")
             else:
                 logger.info("No previously submitted genomes retrieved from the receipt")
         if len(aliasDict) == number_of_genomes:

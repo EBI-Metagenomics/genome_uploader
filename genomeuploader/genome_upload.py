@@ -28,7 +28,6 @@ from pathlib import Path
 
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
-import requests
 
 from ena import ENA
 
@@ -96,7 +95,8 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live, test_suffix):
         missingValues = [item for item in binMandatoryFields if item not in cleanColumns]
 
     if missingValues:
-        raise ValueError("The following mandatory fields have missing values in " + "the input file: {}".format(", ".join(missingValues)))
+
+        raise ValueError(f'The following mandatory fields have missing values in the input file: {", ".join(missingValues)}')
 
     # check amount of genomes to register at the same time
     if len(metadata) >= 5000:
@@ -673,9 +673,7 @@ def write_genomes_xml(genomes, xml_path, genomeType, centreName, tpa):
         plural = ""
         if genomes[g]["co-assembly"]:
             plural = "s"
-        description = "This sample represents a {}{} assembled from the " "metagenomic run{} {} of study {}.".format(
-            tpaDescription, assemblyType, plural, genomes[g]["accessions"], genomes[g]["study"]
-        )
+        description = f'This sample represents a {tpaDescription} {assemblyType} assembled from the metagenomic run {plural} {genomes[g]["accessions"]} of study {genomes[g]["study"]}.'
 
         sample = ET.SubElement(sample_set, "SAMPLE")
         sample.set("alias", genomes[g]["alias"])
@@ -877,7 +875,7 @@ class GenomeUpload:
                     saveAccessions(newAliasAccessionMap, self.accessions_file, mode="a")
                     aliasAccessionMap.update(newAliasAccessionMap)
                 else:
-                    raise Exception("Errors did occur on newly registration step.")
+                    raise Exception("An error occurred during the registration step.")
             else:
                 raise Exception("Some genomes could not be submitted to ENA. Please, check the errors above.")
 
