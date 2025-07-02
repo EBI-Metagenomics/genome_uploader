@@ -10,3 +10,4 @@ dependencies:
   - numpy=1.24.4
   - ena-webin-cli
   - python-dotenv=1.0.1
+  - click==8.1.7
