@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
-from datetime import date, datetime as dt
-
+from datetime import datetime as dt
+import os
 
 class Tests:
     def test_genomeuploader_end_to_end(tmp_path):
@@ -23,6 +23,10 @@ class Tests:
             f"end-to-end-{timestamp}",
             "--centre_name",
             "EMG",
+            "--webin",
+            os.environ.get("ENA_WEBIN"),
+            "--password",
+            os.environ.get("ENA_WEBIN_PASSWORD")
         ]
 
         result = subprocess.run(command, capture_output=True, text=True)
@@ -66,6 +70,10 @@ class Tests:
             f"registered-{timestamp}",
             "--centre_name",
             "EMG",
+            "--webin",
+            os.environ.get("ENA_WEBIN"),
+            "--password",
+            os.environ.get("ENA_WEBIN_PASSWORD")
         ]
         result1 = subprocess.run(command, capture_output=True, text=True)
         assert result1.returncode == 0, f"First run failed: {result1.stderr}"
@@ -87,6 +95,10 @@ class Tests:
             f"registered-{timestamp}",
             "--centre_name",
             "EMG",
+            "--webin",
+            os.environ.get("ENA_WEBIN"),
+            "--password",
+            os.environ.get("ENA_WEBIN_PASSWORD")
         ]
         result2 = subprocess.run(command, capture_output=True, text=True)
         assert result2.returncode == 0, f"Second run failed: {result2.stderr}"
