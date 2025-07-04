@@ -29,9 +29,9 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 
-from ena import ENA
+from genomeuploader.ena import ENA
 
-from constants import METAGENOMES, GEOGRAPHIC_LOCATIONS, MQ, HQ
+from genomeuploader.constants import METAGENOMES, GEOGRAPHIC_LOCATIONS, MQ, HQ
 
 logging.basicConfig(level=logging.DEBUG)
 
