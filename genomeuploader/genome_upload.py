@@ -936,7 +936,10 @@ def run(upload_study, genome_info, mags, bins, out, force, live, tpa, webin, pas
     ENA_uploader.folders_creator()
     ENA_uploader.file_generation_selection()
 
-
+def main()
+    run()
+    logger.info("Completed")
+    
 if __name__ == "__main__":
     run()
     logger.info("Completed")
