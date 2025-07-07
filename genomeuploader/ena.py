@@ -40,7 +40,9 @@ SAMPLE_DEFAULT_FIELDS = ",".join(["sample_accession", "secondary_sample_accessio
 
 STUDY_DEFAULT_FIELDS = ",".join(["study_accession", "secondary_study_accession", "study_description", "study_title"])
 
-RETRY_COUNT = 5
+RETRY_COUNT = 2
+
+RETRY_DELAY = 5  # seconds
 
 
 class ENA:
@@ -59,30 +61,31 @@ class ENA:
         data = self.get_default_params()
         data["result"] = "read_run"
         data["fields"] = RUN_DEFAULT_FIELDS
-        data["query"] = 'run_accession="{}"'.format(run_accession)
+        data["query"] = f'run_accession="{run_accession}"'
 
         if search_params:
             data.update(search_params)
 
         response = self.post_request(data, webin, password)
 
-        if not response.ok and attempt > 2:
-            raise ValueError(f"Could not retrieve run with accession {run_accession}, returned message: {response.text}")
-        elif response.status_code == 204:
-            if attempt < 2:
-                attempt += 1
-                sleep(1)
-                return self.get_run(run_accession, webin, password, attempt)
-            else:
-                raise ValueError(f"Could not find run {run_accession} in ENA after {RETRY_COUNT} attempts")
+        if not response.ok or response.status_code == 204:   # 204 means success but no data
+            if attempt < RETRY_COUNT:
+                sleep(RETRY_DELAY)
+                return self.get_run(run_accession, webin, password, attempt + 1, search_params)
+
+            raise ValueError(
+                f"Could not find run {run_accession} in ENA  after {attempt + 1} attempts: "
+                f"{response.status_code} {response.text}"
+            )
+
         try:
             run = json.loads(response.text)[0]
-        except (IndexError, TypeError, ValueError):
-            raise ValueError(f"Could not find run {run_accession} in ENA.")
-        except:
-            raise Exception(f"Could not query ENA API for run {run_accession}: {response.text}")
+            return run
+        except (IndexError, TypeError, ValueError) as e:
+            raise ValueError(f"Could not parse response for run {run_accession}: {e} - Raw response: {response.text}")
+        except Exception as e:
+            raise Exception(f"Unexpected error querying ENA API for run {run_accession}: {e} - Raw response: {response.text}")
 
-        return run
 
     def get_run_from_assembly(self, assembly_name):
         manifestXml = minidom.parseString(requests.get("https://www.ebi.ac.uk" + "/ena/browser/api/xml/" + assembly_name).text)
