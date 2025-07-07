@@ -103,23 +103,27 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live, test_suffix):
         raise ValueError("Genomes need to be registered in batches of 5000 genomes or smaller.")
 
     # check whether accessions follow the right format
-    accessions_regExp = re.compile(r"([E|S|D]R[R|Z]\d{6,})")
+    run_accession_re = re.compile(r"\b[ESD]RR\d{6,}\b")
+    primary_accession_re = re.compile(r"\b[ESD]RZ\d{6,}\b")
 
-    accessionComparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", "correct", "mismatching", "co-assembly"])
+    accessionComparison = pd.DataFrame(columns=["genome_name", "attemptive_accessions", "run_accession_count", "primary_accession_count", "mismatching", "co-assembly"])
     accessionComparison["genome_name"] = metadata["genome_name"]
 
     accessionComparison["attemptive_accessions"] = metadata["accessions"].map(lambda a: len(a.split(",")))
 
-    accessionComparison["correct"] = metadata["accessions"].map(lambda a: len(accessions_regExp.findall(a)))
+    accessionComparison["run_accession_count"] = metadata["accessions"].map(lambda a: len(run_accession_re.findall(a)))
+    accessionComparison["primary_accession_count"] = metadata["accessions"].map(lambda a: len(primary_accession_re.findall(a)))
 
     accessionComparison["mismatching"] = accessionComparison.apply(
-        lambda row: True if row["attemptive_accessions"] == row["correct"] else None, axis=1
-    ).isna()
+        lambda row: (row["run_accession_count"] + row["primary_accession_count"]) != row["attemptive_accessions"],
+        axis=1
+    )
 
     mismatchingAccessions = accessionComparison[accessionComparison["mismatching"]]["genome_name"]
     if not mismatchingAccessions.empty:
         raise ValueError(
-            "Run accessions are not correctly formatted for the following " + "genomes: " + ",".join(mismatchingAccessions.values)
+            "Accessions are not correctly formatted for the following genomes: "
+            ",".join(mismatchingAccessions.values)
         )
 
     # check whether completeness and contamination are floats
@@ -127,19 +131,26 @@ def read_and_cleanse_metadata_tsv(inputFile, genomeType, live, test_suffix):
         pd.to_numeric(metadata["completeness"])
         pd.to_numeric(metadata["contamination"])
         pd.to_numeric(metadata["genome_coverage"])
-    except:
+    except Exception:
         raise ValueError("Completeness, contamination or coverage values should be formatted as floats")
 
     # check whether all co-assemblies have more than one run associated and viceversa
     accessionComparison["co-assembly"] = metadata["co-assembly"]
-    coassemblyDiscrepancy = metadata[
-        ((accessionComparison["correct"] < 2) & (accessionComparison["co-assembly"]))
-        | ((accessionComparison["correct"] > 1) & (~accessionComparison["co-assembly"]))
+    coassemblyDiscrepancy = accessionComparison[
+        (
+            (accessionComparison["run_accession_count"] < 2)
+            & (accessionComparison["co-assembly"])
+            & (accessionComparison["primary_accession_count"] == 0)
+        )
+        | (
+            (accessionComparison["run_accession_count"] > 1)
+            & (~accessionComparison["co-assembly"])
+        )
     ]["genome_name"]
     if not coassemblyDiscrepancy.empty:
         raise ValueError(
-            "The following genomes show discrepancy between number of runs "
-            "involved and co-assembly status: " + ",".join(coassemblyDiscrepancy.values)
+            "The following genomes show discrepancy between number of runs involved and co-assembly status: "
+            ",".join(coassemblyDiscrepancy.values)
         )
 
     # are provided metagenomes part of the accepted metagenome list?
