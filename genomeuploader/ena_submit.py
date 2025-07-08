@@ -1,3 +1,14 @@
+import logging
+import requests
+import xml.dom.minidom as minidom
+
+
+from genomeuploader.ena import configure_credentials
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+
 class EnaSubmit:
     def __init__(self, sample_xml, submission_xml, live=False):
         self.sample_xml = sample_xml
@@ -22,15 +33,13 @@ class EnaSubmit:
 
         logger.info("Registering sample xml in {} mode.".format(mode))
 
-        f = {"SUBMISSION": open(self.submission_xml, "r"), "SAMPLE": open(self.sample_xml, "r")}
-
-        submission_response = requests.post(url, files=f, auth=self.auth)
-
-        if submission_response.status_code != 200:
-            if str(submission_response.status_code).startswith("5"):
-                raise Exception("Genomes could not be submitted to ENA as the server " + "does not respond. Please again try later.")
-            else:
-                raise Exception("Genomes could not be submitted to ENA. HTTP response: " + submission_response.reason)
+        try:
+            with open(self.submission_xml, "r") as sub_file, open(self.sample_xml, "r") as sample_file:
+                f = {"SUBMISSION": sub_file, "SAMPLE": sample_file}
+                submission_response = requests.post(url, files=f, auth=self.auth)
+                submission_response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to submit genomes to ENA: {e}")
 
         receipt_xml = minidom.parseString((submission_response.content).decode("utf-8"))
         receipt = receipt_xml.getElementsByTagName("RECEIPT")

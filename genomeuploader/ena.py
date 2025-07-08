@@ -18,7 +18,6 @@
 import json
 import logging
 import os
-import sys
 import xml.dom.minidom as minidom
 from pathlib import Path
 from time import sleep
@@ -26,8 +25,11 @@ from time import sleep
 import requests
 from dotenv import load_dotenv
 from requests.exceptions import ConnectionError, HTTPError, RequestException, Timeout
-from .config import ACCESSION_MAP, USER_ENV_FILE_PATH, RUN_KEY_RENAME_MAP, SAMPLE_ATTRIBUTE_MAP, RETRY_COUNT, ENA_SUBMISSION_URL, ENA_SEARCH_URL, ENA_BROWSER_URL,
-RUN_DEFAULT_FIELDS, STUDY_RUN_DEFAULT_FIELDS, ASSEMBLY_DEFAULT_FIELDS, SAMPLE_DEFAULT_FIELDS, STUDY_DEFAULT_FIELDS
+
+from .config import ACCESSION_MAP, USER_ENV_FILE_PATH, RUN_KEY_RENAME_MAP, SAMPLE_ATTRIBUTE_MAP, RETRY_COUNT, \
+    ENA_SUBMISSION_URL, ENA_SEARCH_URL, ENA_BROWSER_URL, SAMPLE_DEFAULT_FIELDS, STUDY_DEFAULT_FIELDS, \
+    STUDY_RUN_DEFAULT_FIELDS
+from .exceptions import EnaEmptyResponseError, EnaParseError, InvalidAccessionError
 
 logging.basicConfig(level=logging.INFO)
 
