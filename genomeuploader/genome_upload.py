@@ -400,13 +400,27 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, force):
             tag = attribute.find('TAG').text
             value = attribute.find('VALUE').text
 
-            if tag == 'geographic location (country and/or sea)':
+            if tag == 'geographic location (country and/or sea)' or tag == "geo_loc_name":
                 sample_data['country'] = value
             elif tag == 'geographic location (latitude)':
                 sample_data['latitude'] = value
             elif tag == 'geographic location (longitude)':
                 sample_data['longitude'] = value
-            elif tag == 'collection date':
+            elif tag == "lat_lon":
+                location = value.split()  # Split on whitespace
+                if len(location) == 4:  # Format: "38.984652 N 77.094709 W"
+                    lat_value, lat_dir, lon_value, lon_dir = location
+
+                    # Process latitude
+                    latitude = lat_value if lat_dir == "N" else f"-{lat_value}"
+
+                    # Process longitude
+                    longitude = lon_value if lon_dir == "E" else f"-{lon_value}"
+
+                    sample_data['latitude'] = latitude
+                    sample_data['longitude'] = longitude
+
+            elif tag == 'collection date' or tag == 'collection_date':
                 sample_data['collection_date'] = value
             elif tag == 'project name':
                 sample_data['study'] = value
@@ -460,23 +474,40 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, force):
 
         raise ValueError(f"No ENA-STUDY ID found for run accession {run_accession}")
 
+    enaData_cache = {}
     for g in genomeInfo:
         if genomeInfo[g]["accessionType"] == "assembly" and genomeInfo[g]["co-assembly"]:
-                accession = genomeInfo[g]["accessions"][0]  
-                assemblyData = fetch_metadata_from_assembly_xml(accession)
-                sample_accession = assemblyData["sample"]
-                runs = assemblyData["runs"]
-                genomeInfo[g]["run"] = runs
-                genomeInfo[g]["sample_accessions"] = sample_accession
-                genomeInfo[g]["study"] = set(fetch_study_from_run_xml(run) for run in runs)
-                genomeInfo[g]["sequencingMethod"] = assemblyData["sequencing_technology"]
+            accession = genomeInfo[g]["accessions"][0]
 
+            if accession not in enaData_cache:
+                assemblyData = fetch_metadata_from_assembly_xml(accession)
+                enaData_cache[accession] = assemblyData
+            else:
+                assemblyData = enaData_cache[accession]
+
+            sample_accession = assemblyData["sample"]
+            runs = assemblyData["runs"]
+            genomeInfo[g]["run"] = runs
+            genomeInfo[g]["sample_accessions"] = sample_accession
+            genomeInfo[g]["sequencingMethod"] = assemblyData["sequencing_technology"]
+
+            if enaData_cache[accession].get("study") is None:
+                enaData_cache[accession]["study"] = set(fetch_study_from_run_xml(run) for run in runs)
+
+            genomeInfo[g]["study"] = enaData_cache[accession]["study"]
+
+            if sample_accession not in enaData_cache:
                 sampleData = fetch_sample_metadata_from_ena(sample_accession)
-                genomeInfo[g]["country"] = sampleData["country"]
-                genomeInfo[g]["latitude"] = sampleData["latitude"]
-                genomeInfo[g]["longitude"] = sampleData["longitude"]
-                genomeInfo[g]["collectionDate"] = sampleData["collection_date"]
-                genomeInfo[g]["description"] = "Metagenomic assemblies and bins underlying the Skin Microbial Genome Catalogue"
+                enaData_cache[sample_accession] = sampleData
+            else:
+                sampleData = enaData_cache[sample_accession]
+
+            genomeInfo[g]["country"] = sampleData["country"]
+            genomeInfo[g]["latitude"] = sampleData["latitude"]
+            genomeInfo[g]["longitude"] = sampleData["longitude"]
+            genomeInfo[g]["collectionDate"] = sampleData["collection_date"]
+            genomeInfo[g][
+                "description"] = "Metagenomic assemblies and bins underlying the Skin Microbial Genome Catalogue"
 
     return
 
