@@ -476,7 +476,7 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, force):
 
     enaData_cache = {}
     for g in genomeInfo:
-        if genomeInfo[g]["accessionType"] == "assembly" and genomeInfo[g]["co-assembly"]:
+        if genomeInfo[g]["accessionType"] == "assembly":
             accession = genomeInfo[g]["accessions"][0]
 
             if accession not in enaData_cache:
