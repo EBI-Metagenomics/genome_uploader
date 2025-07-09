@@ -380,6 +380,106 @@ def extract_genomes_info(inputFile, genomeType, live, test_suffix):
 
 
 def extract_ENA_info(genomeInfo, uploadDir, webin, password, force):
+    import requests
+    def fetch_sample_metadata_from_ena(accession):
+        """Fetch sample metadata from ENA API for a sample accession"""
+        xml_url = f"https://www.ebi.ac.uk/ena/browser/api/xml/{accession}"
+        response = requests.get(xml_url)
+
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch metadata for {accession} from ENA API")
+
+        root = ET.fromstring(response.content)
+
+        # Extract attributes from XML
+        sample = root.find('SAMPLE')
+        sample_attributes = sample.find('SAMPLE_ATTRIBUTES')
+
+        sample_data = {}
+        for attribute in sample_attributes.findall('SAMPLE_ATTRIBUTE'):
+            tag = attribute.find('TAG').text
+            value = attribute.find('VALUE').text
+
+            if tag == 'geographic location (country and/or sea)':
+                sample_data['country'] = value
+            elif tag == 'geographic location (latitude)':
+                sample_data['latitude'] = value
+            elif tag == 'geographic location (longitude)':
+                sample_data['longitude'] = value
+            elif tag == 'collection date':
+                sample_data['collection_date'] = value
+            elif tag == 'project name':
+                sample_data['study'] = value
+
+        return sample_data
+
+
+    def fetch_metadata_from_assembly_xml(accession):
+        """Fetch sample metadata from ENA API for an assembly accession"""
+        xml_url = f"https://www.ebi.ac.uk/ena/browser/api/xml/{accession}"
+        response = requests.get(xml_url)
+
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch metadata for {accession} from ENA API")
+
+        root = ET.fromstring(response.content)
+
+        # Extract relevant fields from XML
+        sample = root.find(".//SAMPLE_REF").get("accession")
+        runs = [run.get("accession") for run in root.findall(".//RUN_REF")]
+        platform = root.find(".//PLATFORM").text
+
+        return {
+            "sample": sample,
+            "runs": runs,
+            "sequencing_technology": platform
+        }
+
+    def fetch_study_from_run_xml(run_accession: str):
+        """
+        Fetch ENA-STUDY ID from the ENA API for a given run accession.
+        """
+        url = f"https://www.ebi.ac.uk/ena/browser/api/xml/{run_accession}"
+
+        response = requests.get(url, timeout=30)
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch metadata for {run_accession} from ENA API")
+
+        root = ET.fromstring(response.content)
+
+        run_links = root.findall(".//RUN_LINK")
+
+        for link in run_links:
+            xref_link = link.find("XREF_LINK")
+            if xref_link is not None:
+                db = xref_link.find("DB")
+                if db is not None and db.text == "ENA-STUDY":
+                    id_element = xref_link.find("ID")
+                    if id_element is not None:
+                        return id_element.text
+
+        raise ValueError(f"No ENA-STUDY ID found for run accession {run_accession}")
+
+    for g in genomeInfo:
+        if genomeInfo[g]["accessionType"] == "assembly" and genomeInfo[g]["co-assembly"]:
+                accession = genomeInfo[g]["accessions"][0]  
+                assemblyData = fetch_metadata_from_assembly_xml(accession)
+                sample_accession = assemblyData["sample"]
+                runs = assemblyData["runs"]
+                genomeInfo[g]["run"] = runs
+                genomeInfo[g]["sample_accessions"] = sample_accession
+                genomeInfo[g]["study"] = set(fetch_study_from_run_xml(run) for run in runs)
+                genomeInfo[g]["sequencingMethod"] = assemblyData["sequencing_technology"]
+
+                sampleData = fetch_sample_metadata_from_ena(sample_accession)
+                genomeInfo[g]["country"] = sampleData["country"]
+                genomeInfo[g]["latitude"] = sampleData["latitude"]
+                genomeInfo[g]["longitude"] = sampleData["longitude"]
+                genomeInfo[g]["collectionDate"] = sampleData["collection_date"]
+                genomeInfo[g]["description"] = "Metagenomic assemblies and bins underlying the Skin Microbial Genome Catalogue"
+
+    return
+
     logger.info("Retrieving project and run info from ENA (this might take a while)...")
 
     # retrieving metadata from runs (and runs from assembly accessions if provided)
@@ -587,15 +687,16 @@ def saveAccessions(aliasAccessionDict, accessionsFile, mode):
             f.write("{}\t{}\n".format(elem, aliasAccessionDict[elem]))
 
 
-def create_manifest_dictionary(run, alias, assemblySoftware, sequencingMethod, MAGpath, gen, study, coverage, isCoassembly):
+def create_manifest_dictionary(source_acc, alias, assemblySoftware, sequencingMethod, MAGpath, gen, study, run, coverage, isCoassembly):
     manifestDict = {
-        "accessions": run,
+        "accessions": source_acc,
         "alias": alias,
         "assembler": assemblySoftware,
         "sequencingMethod": sequencingMethod,
         "genome_path": MAGpath,
         "genome_name": gen,
         "study": study,
+        "run": run,
         "coverageDepth": coverage,
         "co-assembly": isCoassembly,
     }
@@ -614,6 +715,7 @@ def compute_manifests(genomes):
             genomes[g]["genome_path"],
             g,
             genomes[g]["study"],
+            genomes[g]["run"],
             genomes[g]["genome_coverage"],
             genomes[g]["co-assembly"],
         )
@@ -681,10 +783,15 @@ def write_genomes_xml(genomes, xml_path, genomeType, centreName, tpa):
     sample_set = ET.Element("SAMPLE_SET")
 
     for g in genomes:
-        plural = ""
-        if genomes[g]["co-assembly"]:
-            plural = "s"
-        description = f'This sample represents a {tpaDescription} {assemblyType} assembled from the metagenomic run {plural} {genomes[g]["accessions"]} of study {genomes[g]["study"]}.'
+        run = "runs" if genomes[g]["co-assembly"] else "run"
+        study = "studies" if len(genomes[g]["study"]) > 1 else "study"
+        runs_accessions = ", ".join(genomes[g]["run"])
+        studies_accessions = ", ".join(genomes[g]["study"])
+
+        description = (
+            f"This sample represents a {tpaDescription}{assemblyType} assembled from "
+            f"the metagenomic {run} {runs_accessions} of {study} {studies_accessions}."
+        )
 
         sample = ET.SubElement(sample_set, "SAMPLE")
         sample.set("alias", genomes[g]["alias"])
@@ -745,6 +852,7 @@ def generate_genome_manifest(genomeInfo, study, manifestsRoot, aliasToSample, ge
     assemblyType = "Metagenome-Assembled Genome (MAG)"
     if genomeType == "bins":
         assemblyType = "binned metagenome"
+    multiple_studies = "s" if len(genomeInfo["study"]) > 1 else ""
 
     values = (
         ("STUDY", study),
@@ -758,12 +866,12 @@ def generate_genome_manifest(genomeInfo, study, manifestsRoot, aliasToSample, ge
         (
             "DESCRIPTION",
             (
-                "This is a {}bin derived from the primary whole genome "
-                "shotgun (WGS) data set {}. This sample represents a {} from the "
-                "metagenomic run{} {}.".format(tpaAddition, genomeInfo["study"], assemblyType, multipleRuns, genomeInfo["accessions"])
+                f"This is a {tpaAddition}bin derived from the primary whole genome "
+                f"shotgun (WGS) data set{multiple_studies} {', '.join(list(genomeInfo['study']))}. This sample represents a {assemblyType} from the "
+                f"metagenomic run{multipleRuns} {', '.join(genomeInfo['run'])}."
             ),
         ),
-        ("RUN_REF", genomeInfo["accessions"]),
+        ("RUN_REF", ','.join(genomeInfo['run'])),
         ("FASTA", os.path.abspath(genomeInfo["genome_path"])),
     )
     logger.info("Writing manifest file (.manifest) for {}.".format(genomeInfo["alias"]))
@@ -779,6 +887,7 @@ class GenomeUpload:
     def __init__(self, args):
         self.upStudy = args["upload_study"]
         self.genomeMetadata = args["genome_info"]
+        # TODO: is flag --mags really used?
         self.genomeType = "bins" if args["bins"] else "MAGs"
         self.live = args["live"]
         self.test_suffix = args["test_suffix"]
