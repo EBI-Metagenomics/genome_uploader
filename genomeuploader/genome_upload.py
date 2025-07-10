@@ -414,6 +414,10 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, force, cache_path="
             value = attribute.find('VALUE').text
 
             if tag == 'geographic location (country and/or sea)' or tag == "geo_loc_name":
+                if value in ["NA"]:
+                    value = "missing: third party data"
+                elif ":" in value:
+                    value = value.split(":")[0]
                 sample_data['country'] = value
             elif tag == 'geographic location (latitude)':
                 sample_data['latitude'] = value

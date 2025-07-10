@@ -258,6 +258,7 @@ class ENA:
                 raise Exception(f"Genomes could not be submitted to ENA. HTTP response: {submissionResponse.reason}")
 
         receiptXml = minidom.parseString((submissionResponse.content).decode("utf-8"))
+        logger.info(f"Receipt XML: {receiptXml.toxml()}")
         receipt = receiptXml.getElementsByTagName("RECEIPT")
         success = receipt[0].attributes["success"].value
         aliasDict = {}
