@@ -379,8 +379,21 @@ def extract_genomes_info(inputFile, genomeType, live, test_suffix):
     return genomeInfo
 
 
-def extract_ENA_info(genomeInfo, uploadDir, webin, password, force):
+def extract_ENA_info(genomeInfo, uploadDir, webin, password, force, cache_path="ena_cache.json"):
     import requests
+    import pickle
+
+    def load_cache(path):
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                return pickle.load(f)
+        return {}
+
+
+    def save_cache(cache, path):
+        with open(path, "wb") as f:
+            pickle.dump(cache, f)
+
     def fetch_sample_metadata_from_ena(accession):
         """Fetch sample metadata from ENA API for a sample accession"""
         xml_url = f"https://www.ebi.ac.uk/ena/browser/api/xml/{accession}"
@@ -419,12 +432,19 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, force):
 
                     sample_data['latitude'] = latitude
                     sample_data['longitude'] = longitude
+                elif value in ["not collected", "not applicable", "NA", "not provided", "missing: third party data"]:
+                    sample_data['latitude'] = sample_data['longitude'] = "missing: third party data"
 
             elif tag == 'collection date' or tag == 'collection_date':
                 sample_data['collection_date'] = value
             elif tag == 'project name':
                 sample_data['study'] = value
-
+    
+        for key in ["country", "latitude", "longitude", "collection_date"]:
+            if key not in sample_data:
+                raise ValueError(
+                    f"Failed to fetch metadata for {accession}, sample {sample_accession} from ENA API. Missing key: {key}"
+                )
         return sample_data
 
 
@@ -443,6 +463,11 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, force):
         runs = [run.get("accession") for run in root.findall(".//RUN_REF")]
         platform = root.find(".//PLATFORM").text
 
+        if not all([sample, runs, platform]):
+            raise ValueError(
+                f"Failed to fetch metadata for {accession} from ENA API. Sample, runs, or platform not found."
+            )
+                    
         return {
             "sample": sample,
             "runs": runs,
@@ -474,41 +499,45 @@ def extract_ENA_info(genomeInfo, uploadDir, webin, password, force):
 
         raise ValueError(f"No ENA-STUDY ID found for run accession {run_accession}")
 
-    enaData_cache = {}
-    for g in genomeInfo:
-        if genomeInfo[g]["accessionType"] == "assembly":
-            accession = genomeInfo[g]["accessions"][0]
+    ena_cache = load_cache(cache_path)
+    for genome_id, info in genomeInfo.items():
+        try:
+            if info["accessionType"] == "assembly":
+                accession = info["accessions"][0]
 
-            if accession not in enaData_cache:
-                assemblyData = fetch_metadata_from_assembly_xml(accession)
-                enaData_cache[accession] = assemblyData
-            else:
-                assemblyData = enaData_cache[accession]
+                if accession not in ena_cache:
+                    ena_cache[accession] = fetch_metadata_from_assembly_xml(accession)
+                
+                assembly_data = ena_cache[accession]
+                sample_accession = assembly_data["sample"]
+                runs = assembly_data["runs"]
 
-            sample_accession = assemblyData["sample"]
-            runs = assemblyData["runs"]
-            genomeInfo[g]["run"] = runs
-            genomeInfo[g]["sample_accessions"] = sample_accession
-            genomeInfo[g]["sequencingMethod"] = assemblyData["sequencing_technology"]
+                info.update({
+                "run": runs,
+                "sample_accessions": sample_accession,
+                "sequencingMethod": assembly_data["sequencing_technology"],
+                })
 
-            if enaData_cache[accession].get("study") is None:
-                enaData_cache[accession]["study"] = set(fetch_study_from_run_xml(run) for run in runs)
+                if "study" not in assembly_data:
+                    assembly_data["study"] = set(fetch_study_from_run_xml(run) for run in runs)
 
-            genomeInfo[g]["study"] = enaData_cache[accession]["study"]
+                info["study"] = assembly_data["study"]
 
-            if sample_accession not in enaData_cache:
-                sampleData = fetch_sample_metadata_from_ena(sample_accession)
-                enaData_cache[sample_accession] = sampleData
-            else:
-                sampleData = enaData_cache[sample_accession]
+                if sample_accession not in ena_cache:
+                    ena_cache[sample_accession] = fetch_sample_metadata_from_ena(sample_accession)
 
-            genomeInfo[g]["country"] = sampleData["country"]
-            genomeInfo[g]["latitude"] = sampleData["latitude"]
-            genomeInfo[g]["longitude"] = sampleData["longitude"]
-            genomeInfo[g]["collectionDate"] = sampleData["collection_date"]
-            genomeInfo[g][
-                "description"] = "Metagenomic assemblies and bins underlying the Skin Microbial Genome Catalogue"
+                sample_data = ena_cache[sample_accession]
 
+                info.update({
+                "country": sample_data.get("country"),
+                "latitude": sample_data.get("latitude"),
+                "longitude": sample_data.get("longitude"),
+                "collectionDate": sample_data.get("collection_date"),
+                "description": "Metagenomic assemblies and bins underlying the Skin Microbial Genome Catalogue"
+                })
+
+        finally:
+            save_cache(ena_cache, cache_path)
     return
 
     logger.info("Retrieving project and run info from ENA (this might take a while)...")
