@@ -179,25 +179,6 @@ class EnaQuery:
         except Exception as e:
             raise EnaParseError(f"{self.accession}: Failed to parse response as {mode}: {e}")
 
-        data_txt = response.text.strip()
-        if not data_txt:
-            msg = f"{self.accession} {'private' if self.private else 'public'} data is empty or missing"
-            logging.error(msg)
-            return None
-        parsers = {
-            "xml": lambda txt: minidom.parseString(txt),
-            "full_json": lambda txt: json.loads(txt),
-            "single_json": lambda txt: json.loads(txt)[0]
-        }
-
-        try:
-            if mode not in parsers:
-                raise ValueError(f"Unknown mode: {mode}")
-            return parsers[mode][data_txt]
-        except (IndexError, TypeError, ValueError, KeyError):
-            logging.error(f"Failed to parse {self.accession} response in mode '{mode}': {e}")
-            logging.debug(f"Response text: {data_txt}")
-            return None
 
     def retry_or_handle_request_error(self, request, *args, **kwargs):
         attempt = 0
