@@ -29,9 +29,9 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 import xml.dom.minidom as minidom
 
-from ena import ENA
+from genomeuploader.ena import ENA
 
-from constants import METAGENOMES, GEOGRAPHIC_LOCATIONS, MQ, HQ
+from genomeuploader.constants import METAGENOMES, GEOGRAPHIC_LOCATIONS, MQ, HQ
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -935,6 +935,11 @@ def run(upload_study, genome_info, mags, bins, out, force, live, tpa, webin, pas
 
     ENA_uploader.folders_creator()
     ENA_uploader.file_generation_selection()
+
+
+def main():
+    run()
+    logger.info("Completed")
 
 
 if __name__ == "__main__":
