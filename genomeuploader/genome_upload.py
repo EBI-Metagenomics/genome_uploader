@@ -940,8 +940,3 @@ def run(upload_study, genome_info, mags, bins, out, force, live, tpa, webin, pas
 def main():
     run()
     logger.info("Completed")
-
-
-if __name__ == "__main__":
-    run()
-    logger.info("Completed")
