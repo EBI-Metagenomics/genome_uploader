@@ -79,28 +79,6 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-"""
-Input table: expects the following parameters:
-    genome_name: genome file name
-    accessions: run(s) or assembly(ies) the genome was generated from
-    assembly_software: assembler_vX.X
-    binning_software: binner_vX.X
-    binning_parameters: binning parameters
-    stats_generation_software: software_vX.X
-    completeness: float
-    contamination: float
-    rRNA_presence: True/False if 5S, 16S, and 23S genes have been detected in the genome
-    NCBI_lineage: full NCBI lineage, either in tax id or strings
-    broad_environment: string
-    local_environment: string
-    environmental_medium: string
-    metagenome: string
-    co-assembly: True/False, whether the genome was generated from a co-assembly
-    genome_coverage : genome coverage
-    genome_path: path to genome to upload
-"""
-
-
 def round_stats(stats):
     new_stat = round(float(stats), 2)
     if new_stat == 100.0:
@@ -214,17 +192,17 @@ def extract_eukaryota_info(name, rank):
 def extract_bacteria_info(name, rank):
     if rank == "species":
         name = name
-    elif rank == "superkingdom":
-        name = "uncultured bacterium".format()
+    elif rank == "domain":
+        name = "uncultured bacterium"
     elif rank in ["family", "order", "class", "phylum"]:
-        name = "uncultured {} bacterium".format(name)
+        name = f"uncultured {name} bacterium"
     elif rank == "genus":
-        name = "uncultured {} sp.".format(name)
+        name = f"uncultured {name} sp."
 
     submittable, taxid, rank = ena.query_scientific_name(name, search_rank=True)
     if not submittable:
         if rank in ["species", "genus"] and name.lower().endswith("bacteria"):
-            name = "uncultured {}".format(name.lower().replace("bacteria", "bacterium"))
+            name = f"uncultured {name.lower().replace('bacteria', 'bacterium')}"
         elif rank == "family":
             if name.lower() == "deltaproteobacteria":
                 name = "uncultured delta proteobacterium"
@@ -236,19 +214,19 @@ def extract_bacteria_info(name, rank):
 def extract_archaea_info(name, rank):
     if rank == "species":
         name = name
-    elif rank == "superkingdom":
+    elif rank == "domain":
         name = "uncultured archaeon"
     elif rank == "phylum":
         if "Euryarchaeota" in name:
             name = "uncultured euryarchaeote"
         elif "Candidatus" in name:
-            name = "{} archaeon".format(name)
+            name = f"{name} archaeon"
         else:
-            name = "uncultured {} archaeon".format(name)
+            name = f"uncultured {name} archaeon"
     elif rank in ["family", "order", "class"]:
-        name = "uncultured {} archaeon".format(name)
+        name = f"uncultured {name} archaeon"
     elif rank == "genus":
-        name = "uncultured {} sp.".format(name)
+        name = f"uncultured {name} sp."
 
     submittable, taxid, rank = ena.query_scientific_name(name, search_rank=True)
     if not submittable:
@@ -344,7 +322,7 @@ def get_accessions(accessions_file):
 def save_accessions(alias_accession_dict, accessions_file, write_mode):
     with open(accessions_file, write_mode) as f:
         for elem in alias_accession_dict:
-            f.write("{}\t{}\n".format(elem, alias_accession_dict[elem]))
+            f.write(f"{elem}\t{alias_accession_dict[elem]}\n")
 
 
 def create_manifest_dictionary(run, alias, assembly_software, sequencing_method, mag_path, gen, study, coverage, is_coassembly):
@@ -510,15 +488,13 @@ def write_genomes_xml(genomes, xml_path, genome_type, centre_name, tpa):
         plural = ""
         if genomes[g]["co-assembly"]:
             plural = "s"
-        description = "This sample represents a {}{} assembled from the " "metagenomic run{} {} of study {}.".format(
-            tpa_description, assembly_type, plural, genomes[g]["accessions"], genomes[g]["study"]
-        )
+        description = f"This sample represents a {tpa_description}{assembly_type} assembled from the metagenomic run{plural} {genomes[g]['accessions']} of study {genomes[g]['study']}."
 
         sample = ET.SubElement(sample_set, "SAMPLE")
         sample.set("alias", genomes[g]["alias"])
         sample.set("center_name", centre_name)
 
-        ET.SubElement(sample, "TITLE").text = "{}: {}".format(assembly_type, genomes[g]["alias"])
+        ET.SubElement(sample, "TITLE").text = f"{assembly_type}: {genomes[g]['alias']}"
         sample_name = ET.SubElement(sample, "SAMPLE_NAME")
         ET.SubElement(sample_name, "TAXON_ID").text = genomes[g]["taxID"]
         ET.SubElement(sample_name, "SCIENTIFIC_NAME").text = genomes[g]["scientific_name"]
@@ -588,15 +564,15 @@ def generate_genome_manifest(genome_info, study, manifests_root, alias_to_sample
         (
             "DESCRIPTION",
             (
-                "This is a {}bin derived from the primary whole genome "
-                "shotgun (WGS) data set {}. This sample represents a {} from the "
-                "metagenomic run{} {}.".format(tpa_addition, genome_info["study"], assembly_type, multiple_runs, genome_info["accessions"])
+                f"This is a {tpa_addition}bin derived from the primary whole genome shotgun (WGS) data set "
+                f"{genome_info['study']}. This sample represents a {assembly_type} from the metagenomic run{multiple_runs} "
+                f"{genome_info['accessions']}."
             ),
         ),
         ("RUN_REF", genome_info["accessions"]),
         ("FASTA", os.path.abspath(genome_info["genome_path"])),
     )
-    logger.info("Writing manifest file (.manifest) for {}.".format(genome_info["alias"]))
+    logger.info(f"Writing manifest file (.manifest) for {genome_info['alias']}.")
     with open(manifest_path, "w") as outfile:
         for k, v in values:
             manifest = f"{k}\t{v}\n"
@@ -640,11 +616,8 @@ class GenomeUpload:
         self.centre_name = centre_name
         self.force = force
 
-        self.work_dir = out if out is not None else os.getcwd()
+        self.work_dir = out if out else os.getcwd()
         self.upload_dir = self.generate_genomes_upload_dir()
-
-        if not upload_study:
-            raise ValueError("No project selected for genome upload [-u, --upload_study].")
         self.upload_study = upload_study
 
         if not os.path.exists(genome_info):
@@ -652,6 +625,27 @@ class GenomeUpload:
         self.genome_metadata = genome_info
 
     def validate_metadata_tsv(self):
+        """
+        Input table: expects the following parameters:
+            genome_name: genome file name
+            accessions: run(s) or assembly(ies) the genome was generated from
+            assembly_software: assembler_vX.X
+            binning_software: binner_vX.X
+            binning_parameters: binning parameters
+            stats_generation_software: software_vX.X
+            completeness: float
+            contamination: float
+            rRNA_presence: True/False if 5S, 16S, and 23S genes have been detected in the genome
+            NCBI_lineage: full NCBI lineage, either in tax id or strings
+            broad_environment: string
+            local_environment: string
+            environmental_medium: string
+            metagenome: string
+            co-assembly: True/False, whether the genome was generated from a co-assembly
+            genome_coverage : genome coverage
+            genome_path: path to genome to upload
+        """
+
         logger.info("Retrieving info for genomes to submit...")
 
         all_fields = MAG_MANDATORY_FIELDS + BIN_MANDATORY_FIELDS
@@ -665,9 +659,7 @@ class GenomeUpload:
             missing_values = [item for item in BIN_MANDATORY_FIELDS if item not in clean_columns]
 
         if missing_values:
-            raise ValueError(
-                "The following mandatory fields have missing values in " + "the input file: {}".format(", ".join(missing_values))
-            )
+            raise ValueError(f"The following mandatory fields have missing values in the input file: {', '.join(missing_values)}")
 
         # check amount of genomes to register at the same time
         if len(metadata) >= 5000:
@@ -690,7 +682,7 @@ class GenomeUpload:
         mismatching_accessions = accession_comparison[accession_comparison["mismatching"]]["genome_name"]
         if not mismatching_accessions.empty:
             raise ValueError(
-                "Run accessions are not correctly formatted for the following " + "genomes: " + ",".join(mismatching_accessions.values)
+                f"Run accessions are not correctly formatted for the following genomes: {', '.join(mismatching_accessions.values)}"
             )
 
         # check whether completeness and contamination are floats
@@ -699,7 +691,7 @@ class GenomeUpload:
             pd.to_numeric(metadata["contamination"])
             pd.to_numeric(metadata["genome_coverage"])
         except ValueError:
-            raise ValueError("Completeness, contamination or coverage values should be formatted as floats")
+            raise ValueError("Completeness, contamination and coverage values should be formatted as floats")
 
         # check whether all co-assemblies have more than one run associated and viceversa
         accession_comparison["co-assembly"] = metadata["co-assembly"]
@@ -715,19 +707,16 @@ class GenomeUpload:
 
         # are provided metagenomes part of the accepted metagenome list?
         if False in metadata.apply(lambda row: True if row["metagenome"] in METAGENOMES else False, axis=1).unique():
-            raise ValueError("Metagenomes associated with each genome need to belong to ENA's " + "approved metagenomes list.")
+            raise ValueError("Metagenomes associated with each genome need to belong to ENA's approved metagenomes list.")
 
         # do provided file paths exist?
         if False in metadata.apply(lambda row: True if os.path.exists(row["genome_path"]) else False, axis=1).unique():
             raise FileNotFoundError("Some genome paths do not exist.")
 
-        # check genome name lengths
-        # if not (metadata["genome_name"].map(lambda a: len(a) < 20).all()):
-        #    raise ValueError("Genome names must be shorter than 20 characters.")
-
         # create dictionary while checking genome name uniqueness
         uniqueness = metadata["genome_name"].nunique() == metadata["genome_name"].size
         if uniqueness:
+            # for test submissions we add a timestamp to allow for more than one submission a day (ENA would block them otherwise)
             if not self.live:
                 timestamp = str(int(dt.timestamp(dt.now())))
                 timestamp_names = [row["genome_name"] + "_" + timestamp for index, row in metadata.iterrows()]
@@ -804,7 +793,7 @@ class GenomeUpload:
 
         backup_file = os.path.join(self.upload_dir, "ENA_backup.json")
         counter = 0
-        if not os.path.exists(backup_file):
+        if not os.path.exists(backup_file) or self.force:
             with open(backup_file, "w") as file:
                 pass
         with open(backup_file, "r+") as file:
@@ -819,10 +808,13 @@ class GenomeUpload:
                 study_info = ena_query.build_query()
                 project_description = study_info["study_description"]
 
+                if not project_description:
+                    project_description = study_info["study_title"]
+
                 ena_query = EnaQuery(s, "study_runs", self.private)
                 ena_info = ena_query.build_query()
                 if ena_info == []:
-                    raise IOError("No runs found on ENA for project {}.".format(s))
+                    raise IOError(f"No runs found on ENA for project {s}.")
 
                 for run, item in enumerate(ena_info):
                     run_accession = ena_info[run]["run_accession"]
@@ -832,12 +824,10 @@ class GenomeUpload:
                             ena_query = EnaQuery(sample_accession, "sample", self.private)
                             sample_info = ena_query.build_query()
 
-                            if "latitude" in sample_info and "longitude" in sample_info:
-                                latitude = sample_info["latitude"]
-                                longitude = sample_info["longitude"]
-                            else:
-                                location = sample_info["location"]
-                                latitude, longitude = None, None
+                            location = sample_info["location"]
+                            latitude, longitude = "missing: third party data", "missing: third party data"
+
+                            if location:
                                 if "N" in location:
                                     latitude = location.split("N")[0].strip()
                                     longitude = location.split("N")[1].strip()
@@ -850,15 +840,19 @@ class GenomeUpload:
                                 elif longitude.endswith("E"):
                                     longitude = longitude.split("E")[0].strip()
 
-                            if latitude:
-                                latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
-                            else:
-                                latitude = "not provided"
+                                if latitude != "missing: third party data":
+                                    try:
+                                        latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
+                                    except ValueError:
+                                        raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(run_accession))
 
-                            if longitude:
-                                longitude = "{:.{}f}".format(round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
-                            else:
-                                longitude = "not provided"
+                                if longitude != "missing: third party data":
+                                    try:
+                                        longitude = "{:.{}f}".format(
+                                            round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS
+                                        )
+                                    except ValueError:
+                                        raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(run_accession))
 
                             country = sample_info["country"].split(":")[0]
                             if country not in GEOGRAPHIC_LOCATIONS:
@@ -919,7 +913,7 @@ class GenomeUpload:
         genomes, manifest_info = {}, {}
 
         # submission xml existence
-        if not os.path.exists(submission_xml):
+        if not os.path.exists(submission_xml) or self.force:
             submission_xml = write_submission_xml(self.upload_dir, self.centre_name, False)
 
         # sample xml generation or recovery
