@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+  <SAMPLE_SET>
+    <SAMPLE alias="SA01_02C1a_metaG" center_name="UNIVERSITY OF COPENHAGEN" accession="ERS5444411">
+      <IDENTIFIERS>
+        <PRIMARY_ID>ERS5444411</PRIMARY_ID>
+        <SUBMITTER_ID namespace="UNIVERSITY OF COPENHAGEN">SA01_02C1a_metaG</SUBMITTER_ID>
+      </IDENTIFIERS>
+      <TITLE>SA01.02C1a</TITLE>
+      <SAMPLE_NAME>
+        <TAXON_ID>1602388</TAXON_ID>
+        <SCIENTIFIC_NAME>fish gut metagenome</SCIENTIFIC_NAME>
+      </SAMPLE_NAME>
+      <DESCRIPTION>Salmon metagenomic DNA data from Distal gut content; animal SA01.02 from tank SA01 with treatment Tiger</DESCRIPTION>
+      <SAMPLE_ATTRIBUTES>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>adapters</TAG>
+          <VALUE>AAGTCGGAGGCCAAGCGGTCTTAGGAAGACAA;GAACGACATGGCTACGATCCGACTT</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>collection date</TAG>
+          <VALUE>2019-06-11</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>geographic location (country and/or sea)</TAG>
+          <VALUE>Norway</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>geographic location (latitude)</TAG>
+          <VALUE>66.079905</VALUE>
+          <UNITS>DD</UNITS>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>geographic location (longitude)</TAG>
+          <VALUE>12.587848</VALUE>
+          <UNITS>DD</UNITS>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>geographic location (region and locality)</TAG>
+          <VALUE>Dønna; Nordland county</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host body site</TAG>
+          <VALUE>Distal gut content</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host common name</TAG>
+          <VALUE>Atlantic salmon</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host diet</TAG>
+          <VALUE>Fermented algae meal (added in in oil coating)</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host diet treatment</TAG>
+          <VALUE>Tiger: SA Control</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host disease status</TAG>
+          <VALUE>Wounded:-</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host scientific name</TAG>
+          <VALUE>Salmo salar</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host subject id</TAG>
+          <VALUE>SA01.02</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host taxid</TAG>
+          <VALUE>8030</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host total mass</TAG>
+          <VALUE>290.4</VALUE>
+          <UNITS>g</UNITS>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>nucleic acid extraction</TAG>
+          <VALUE>D-rex protocol</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>pcr primers</TAG>
+          <VALUE>N/A</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>project name</TAG>
+          <VALUE>HoloFood Salmon - Metagenomic DNA</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>reference host genome for decontamination</TAG>
+          <VALUE>GCA_000000000.0</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>sample storage buffer</TAG>
+          <VALUE>Shield</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>sample storage container</TAG>
+          <VALUE>2ml E-matrix</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>sample storage location</TAG>
+          <VALUE>UCPH</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>sample storage temperature</TAG>
+          <VALUE>-20</VALUE>
+          <UNITS>°C</UNITS>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>sample volume or weight for DNA extraction</TAG>
+          <VALUE>0.2</VALUE>
+          <UNITS>mL</UNITS>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>sequencing method</TAG>
+          <VALUE>MGISEQ-2000</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>trial timepoint</TAG>
+          <VALUE>0</VALUE>
+          <UNITS>days</UNITS>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host storage container temperature</TAG>
+          <VALUE>12.76</VALUE>
+          <UNITS>°C</UNITS>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host storage container pH</TAG>
+          <VALUE>7.05</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host gutted mass</TAG>
+          <VALUE>246.6</VALUE>
+          <UNITS>g</UNITS>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host length</TAG>
+          <VALUE>29.5</VALUE>
+          <UNITS>cm</UNITS>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host diet treatment concentration</TAG>
+          <VALUE>0</VALUE>
+          <UNITS>% mass</UNITS>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>host storage container</TAG>
+          <VALUE>LetSea Tank: Tiger</VALUE>
+        </SAMPLE_ATTRIBUTE>
+        <SAMPLE_ATTRIBUTE>
+          <TAG>ENA-CHECKLIST</TAG>
+          <VALUE>ERC000052</VALUE>
+        </SAMPLE_ATTRIBUTE>
+      </SAMPLE_ATTRIBUTES>
+    </SAMPLE>
+  </SAMPLE_SET>

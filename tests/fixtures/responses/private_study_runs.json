@@ -1,0 +1,152 @@
+[
+  {
+    "report": {
+      "id": "ERR4918752",
+      "alias": "webin-reads-SB06_18C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:32:19",
+      "firstPublic": "2022-08-02T17:24:21",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783661",
+      "sampleId": "ERS5444665"
+    },
+    "links": []
+  },
+  {
+    "report": {
+      "id": "ERR4918751",
+      "alias": "webin-reads-SB06_13C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:31:46",
+      "firstPublic": "2022-08-02T17:24:21",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783660",
+      "sampleId": "ERS5444660"
+    },
+    "links": []
+  },
+  {
+    "report": {
+      "id": "ERR4918750",
+      "alias": "webin-reads-SB10_16C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:31:17",
+      "firstPublic": "2022-08-02T17:25:05",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783659",
+      "sampleId": "ERS5444722"
+    },
+    "links": []
+  },
+  {
+    "report": {
+      "id": "ERR4918749",
+      "alias": "webin-reads-SB10_30C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:30:42",
+      "firstPublic": "2022-08-02T17:24:20",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783658",
+      "sampleId": "ERS5444736"
+    },
+    "links": []
+  },
+  {
+    "report": {
+      "id": "ERR4918748",
+      "alias": "webin-reads-SB11_25C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:30:20",
+      "firstPublic": "2022-08-02T17:25:03",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783657",
+      "sampleId": "ERS5444756"
+    },
+    "links": []
+  },
+  {
+    "report": {
+      "id": "ERR4918747",
+      "alias": "webin-reads-SB11_13C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:30:12",
+      "firstPublic": "2022-08-02T17:25:04",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783656",
+      "sampleId": "ERS5444744"
+    },
+    "links": []
+  },
+  {
+    "report": {
+      "id": "ERR4918746",
+      "alias": "webin-reads-SB11_29C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:29:52",
+      "firstPublic": "2022-08-02T17:24:21",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783655",
+      "sampleId": "ERS5444760"
+    },
+    "links": []
+  },
+  {
+    "report": {
+      "id": "ERR4918745",
+      "alias": "webin-reads-SA09_02C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:29:29",
+      "firstPublic": "2022-08-02T17:24:20",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783654",
+      "sampleId": "ERS5444529"
+    },
+    "links": []
+  },
+  {
+    "report": {
+      "id": "ERR4918744",
+      "alias": "webin-reads-SB08_05C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:29:27",
+      "firstPublic": "2022-08-02T17:24:21",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783653",
+      "sampleId": "ERS5444707"
+    },
+    "links": []
+  },
+  {
+    "report": {
+      "id": "ERR4918743",
+      "alias": "webin-reads-SB11_28C1a_metaG",
+      "instrumentModel": "DNBSEQ-G400",
+      "firstCreated": "2020-12-04T12:29:25",
+      "firstPublic": "2022-08-02T17:25:05",
+      "releaseStatus": "PUBLIC",
+      "submissionAccountId": "Webin-51990",
+      "studyId": "ERP125469",
+      "experimentId": "ERX4783652",
+      "sampleId": "ERS5444759"
+    },
+    "links": []
+  }
+]
