@@ -20,6 +20,7 @@ def read_xml(path):
         return xpath.read()
 
 
+@responses.activate
 def test_ena_study(public_study_data, private_study_data, public_study_json, private_study_xml):
     responses.add(responses.POST, "https://www.ebi.ac.uk/ena/portal/api/search", json=read_json(public_study_json))
 
@@ -41,6 +42,7 @@ def test_ena_study(public_study_data, private_study_data, public_study_json, pri
     assert ena_study_private.build_query() == private_study_data
 
 
+@responses.activate
 def test_ena_run(public_run_data, private_run_data, public_run_json, private_run_json):
     responses.add(responses.POST, "https://www.ebi.ac.uk/ena/portal/api/search", json=read_json(public_run_json))
 
@@ -53,6 +55,7 @@ def test_ena_run(public_run_data, private_run_data, public_run_json, private_run
     assert ena_run_private.build_query() == private_run_data
 
 
+@responses.activate
 def test_ena_run_from_assembly(public_run_from_assembly_xml, private_run_from_assembly_xml):
     responses.add(
         responses.GET,
@@ -75,6 +78,7 @@ def test_ena_run_from_assembly(public_run_from_assembly_xml, private_run_from_as
     assert ena_run_from_assembly_public.build_query() and ena_run_from_assembly_public.build_query() == "ERR4918394"
 
 
+@responses.activate
 def test_ena_study_runs(public_study_runs_json, private_study_runs_json):
     """response mock limited to 10 runs for the study, need to check if there is page limit"""
     responses.add(responses.POST, "https://www.ebi.ac.uk/ena/portal/api/search", json=read_json(public_study_runs_json))
@@ -85,9 +89,10 @@ def test_ena_study_runs(public_study_runs_json, private_study_runs_json):
 
     ena_study_runs_private = EnaQuery(accession="ERP125469", query_type="study_runs", private=True)
 
-    assert len(ena_study_runs_public.build_query()) and len(ena_study_runs_private.build_query()) == 10
+    assert len(ena_study_runs_public.build_query()) == 10 and len(ena_study_runs_private.build_query()) == 10
 
 
+@responses.activate
 def test_ena_sample(public_sample_data, private_sample_data, public_sample_json, private_sample_xml):
     responses.add(responses.POST, "https://www.ebi.ac.uk/ena/portal/api/search", json=read_json(public_sample_json))
 
@@ -101,6 +106,7 @@ def test_ena_sample(public_sample_data, private_sample_data, public_sample_json,
     assert ena_sample_private.build_query() == private_sample_data
 
 
+@responses.activate
 def test_ena_exceptions(monkeypatch):
     monkeypatch.setenv(ENA_WEBIN, "fake-webin-999")
     monkeypatch.setenv(ENA_WEBIN_PASSWORD, "fakewebinpw")

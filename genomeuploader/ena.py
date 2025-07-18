@@ -26,7 +26,7 @@ import requests
 from dotenv import load_dotenv
 from requests.exceptions import ConnectionError, HTTPError, RequestException, Timeout
 
-from .config import (
+from genomeuploader.config import (
     ACCESSION_MAP,
     ENA_BROWSER_URL,
     ENA_SEARCH_URL,
@@ -39,7 +39,7 @@ from .config import (
     STUDY_RUN_DEFAULT_FIELDS,
     USER_ENV_FILE_PATH,
 )
-from .exceptions import (
+from genomeuploader.exceptions import (
     CredentialsNotSetError,
     EnaEmptyResponseError,
     EnaParseError,
@@ -73,7 +73,7 @@ def parse_accession(accession):
 
 
 def configure_credentials(env_filename=USER_ENV_FILE_PATH):
-    search_paths = [Path.home() / env_filename, Path.cwd() / env_filename, Path.cwd / ".env"]
+    search_paths = [Path.home() / env_filename, Path.cwd() / env_filename, Path.cwd() / ".env"]
 
     for env_path in search_paths:
         if env_path.exists():

@@ -25,9 +25,10 @@ import xml.etree.ElementTree as ET
 from datetime import date
 from datetime import datetime as dt
 
-import ena
 import pandas as pd
-from constants import (
+
+import genomeuploader.ena as ena
+from genomeuploader.constants import (
     BIN_MANDATORY_FIELDS,
     GEOGRAPHIC_LOCATIONS,
     GEOGRAPHY_DIGIT_COORDS,
@@ -36,7 +37,8 @@ from constants import (
     METAGENOMES,
     MQ,
 )
-from ena import EnaQuery, EnaSubmit
+from genomeuploader.ena import EnaQuery
+from genomeuploader.ena_submit import EnaSubmit
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -454,7 +456,7 @@ def write_genomes_xml(genomes, xml_path, genome_type, centre_name, tpa):
         ["completeness software", "stats_generation_software"],
         ["completeness score", "completeness", "%"],
         ["contamination score", "contamination", "%"],
-        ["isolation source", "isolationSource"],
+        ["isolation_source", "isolationSource"],
         ["collection date", "collectionDate"],
         ["geographic location (country and/or sea)", "country"],
         ["geographic location (latitude)", "latitude", "DD"],
