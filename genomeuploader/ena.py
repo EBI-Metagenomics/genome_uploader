@@ -39,7 +39,12 @@ from .config import (
     STUDY_RUN_DEFAULT_FIELDS,
     USER_ENV_FILE_PATH,
 )
-from .exceptions import EnaEmptyResponseError, EnaParseError, InvalidAccessionError
+from .exceptions import (
+    CredentialsNotSetError,
+    EnaEmptyResponseError,
+    EnaParseError,
+    InvalidAccessionError,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -83,6 +88,7 @@ def configure_credentials(env_filename=USER_ENV_FILE_PATH):
 
     if not username or not password:
         logger.warning("ENA_WEBIN and/or ENA_WEBIN_PASSWORD not found in environment variables.")
+        return None, None
 
     return username, password
 
@@ -139,8 +145,9 @@ class CredentialsManager:
     def get_credentials():
         username, password = configure_credentials()
         if not username or not password:
-            logging.error("ENA_WEBIN and ENA_WEBIN_PASSWORD are not set.")
-            return None
+            raise CredentialsNotSetError(
+                "Credentials for ENA are not set. Please set ENA_WEBIN and ENA_WEBIN_PASSWORD environment variables."
+            )
         return (username, password)
 
 

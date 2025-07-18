@@ -2,6 +2,10 @@ class EnaQueryError(Exception):
     pass
 
 
+class CredentialsNotSetError(EnaQueryError):
+    pass
+
+
 class InvalidAccessionError(EnaQueryError):
     pass
 

@@ -41,19 +41,47 @@ Files to be uploaded will need to be compressed (e.g. already in .gz format).
 
 No more than 5000 genomes can be submitted at the same time.
 
-## Register samples and generate pre-upload files
-The script needs `python`, `pandas`, `requests`, and `ena-webin-cli` to run. We provide a yaml file for the generation of a conda environment:
+
+## Installation and setup
+
+You can install **genome_uploader** with:
 
 ```bash
-# Create environment and install requirements
-conda env create -f requirements.yml
-conda activate genome_uploader
+pip install genome_uploader
+```
+
+Next download webin-cli for upload to **ENA** with:
+
+```bash
+download_webin_cli -v 8.2.0
+```
+
+## Setting ENA Credentials
+
+This tool requires your ENA Webin credentials to function. You can provide these by setting environment variables or using an environment file.
+
+### Using an environment file
+
+Create a file named `.env` in your home directory (`~/.env`), your current working directory (`./.env`), or specify a custom file (default is `.env`).
+
+Add the following lines with your credentials:
+
+```env
+ENA_WEBIN=your_username_here
+ENA_WEBIN_PASSWORD=your_password_here
+```
+
+### Alternatively, set the environment variables directly in your shell
+
+```bash
+export ENA_WEBIN=your_username_here
+export ENA_WEBIN_PASSWORD=your_password_here
 ```
 
 You can generate pre-upload files with:
 
 ```bash
-python genomeuploader/genome_upload.py -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --webin WEBIN_ID --password PASSWORD --centre_name CENTRE_NAME [--out] [--force] [--live] [--tpa]
+genome_upload -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --centre_name CENTRE_NAME [--out] [--force] [--live] [--tpa]
 ```
 
 where
@@ -63,10 +91,9 @@ where
   * `--out`: output folder (default: working directory)
   * `--force`: forces reset of sample xmls generation
   * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand (it will need the `-test` option in the upload command for the test submission to work)
-  * `--webin WEBIN_ID`: webin id (format: Webin_XXXXX)
-  * `--password PASSWORD`: webin password
   * `--centre_name CENTRE_NAME`: name of the centre generating and uploading genomes
   * `--tpa`: if uploading TPA (Third PArty) generated genomes
+  * `--private`: if data is private
 
 It is recommended to validate your genomes in test mode (i.e. without `--live` in the registration step and with `-test` during the upload) before attempting the final upload. Launching the registration in test mode will add a timestamp to the genome name to allow multiple executions of the test process.
 
@@ -92,7 +119,7 @@ To test your submission (i.e. you registered your samples without the `--live` o
 
 A live execution example within this repo is the following:
 ```bash
-ena-webin-cli \
+java -jar ./webin-cli.jar \
   -context=genome \
   -manifest=ERR123456_bin.1.manifest \
   -userName="Webin-XXX" \
