@@ -1,0 +1,52 @@
+[
+  {
+    "run_accession": "ERR4918394",
+    "sample_accession": "SAMEA7687881",
+    "instrument_model": "DNBSEQ-G400"
+  },
+  {
+    "run_accession": "ERR4918397",
+    "sample_accession": "SAMEA7687882",
+    "instrument_model": "DNBSEQ-G400"
+  },
+  {
+    "run_accession": "ERR4918398",
+    "sample_accession": "SAMEA7678309",
+    "instrument_model": "DNBSEQ-G400"
+  },
+  {
+    "run_accession": "ERR4918404",
+    "sample_accession": "SAMEA7687910",
+    "instrument_model": "DNBSEQ-G400"
+  },
+  {
+    "run_accession": "ERR4918405",
+    "sample_accession": "SAMEA7687902",
+    "instrument_model": "DNBSEQ-G400"
+  },
+  {
+    "run_accession": "ERR4918406",
+    "sample_accession": "SAMEA7687895",
+    "instrument_model": "DNBSEQ-G400"
+  },
+  {
+    "run_accession": "ERR4918408",
+    "sample_accession": "SAMEA7687899",
+    "instrument_model": "DNBSEQ-G400"
+  },
+  {
+    "run_accession": "ERR4918413",
+    "sample_accession": "SAMEA7687903",
+    "instrument_model": "DNBSEQ-G400"
+  },
+  {
+    "run_accession": "ERR4918414",
+    "sample_accession": "SAMEA7687912",
+    "instrument_model": "DNBSEQ-G400"
+  },
+  {
+    "run_accession": "ERR4918416",
+    "sample_accession": "SAMEA7687892",
+    "instrument_model": "DNBSEQ-G400"
+  }
+]

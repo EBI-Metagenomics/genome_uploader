@@ -1,6 +1,6 @@
 [project]
 name = "genome_uploader"
-version = "2.1.1"
+version = "2.3.4"
 readme = "README.md"
 authors = [
   {name = "MGnify team", email = "metagenomics-help@ebi.ac.uk"},
@@ -8,10 +8,8 @@ authors = [
 license = {text = "Apache Software License 2.0"}
 keywords = ["bioinformatics", "tool", "metagenomics"]
 description = "Python script to upload bins and MAGs in fasta format to ENA (European Nucleotide Archive). This script generates xmls and manifests necessary for submission with webin-cli."
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
@@ -21,10 +19,11 @@ classifiers = [
 ]
 
 dependencies = [
-    "requests==2.26.0",
-    "pandas==1.4.1",
-    "python-dotenv==1.0.1",
-    "numpy==1.24.4"
+    "requests>=2.26",
+    "pandas>=1.4",
+    "numpy>=1.21",
+    "python-dotenv>=1.0",
+    "click>=8.1",
 ]
 
 [project.urls]
@@ -52,6 +51,7 @@ test = [
     "pytest-md==0.2.0",
     "pytest-workflow==2.0.1",
     "pytest-cov==3.0.0",
+    "responses==0.23.1"
 ]
 
 [build-system]
@@ -63,6 +63,7 @@ packages = ["genomeuploader"]
 
 [project.scripts]
 genome_upload = "genomeuploader.genome_upload:main"
+download_webin_cli = "genomeuploader.download_webin_cli:main"
 
 [tool.ruff]
 ignore = [

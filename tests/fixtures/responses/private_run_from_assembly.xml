@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+  <ANALYSIS_SET>
+    <ANALYSIS alias="webin-genome-ERR4918394_62952e961c26f0859b4ebdd83d93e4e7" center_name="UNIVERSITY OF COPENHAGEN" accession="ERZ2626953">
+      <IDENTIFIERS>
+        <PRIMARY_ID>ERZ2626953</PRIMARY_ID>
+        <SUBMITTER_ID namespace="UNIVERSITY OF COPENHAGEN">webin-genome-ERR4918394_62952e961c26f0859b4ebdd83d93e4e7</SUBMITTER_ID>
+      </IDENTIFIERS>
+      <TITLE>Genome assembly: ERR4918394_62952e961c26f0859b4ebdd83d93e4e7</TITLE>
+      <STUDY_REF accession="ERP125469">
+        <IDENTIFIERS>
+          <PRIMARY_ID>ERP125469</PRIMARY_ID>
+          <SECONDARY_ID>PRJEB41657</SECONDARY_ID>
+        </IDENTIFIERS>
+      </STUDY_REF>
+      <SAMPLE_REF accession="ERS5444411">
+        <IDENTIFIERS>
+          <PRIMARY_ID>ERS5444411</PRIMARY_ID>
+        </IDENTIFIERS>
+      </SAMPLE_REF>
+      <RUN_REF accession="ERR4918394">
+        <IDENTIFIERS>
+          <PRIMARY_ID>ERR4918394</PRIMARY_ID>
+        </IDENTIFIERS>
+      </RUN_REF>
+      <ANALYSIS_TYPE>
+        <SEQUENCE_ASSEMBLY>
+          <NAME>ERR4918394_62952e961c26f0859b4ebdd83d93e4e7</NAME>
+          <TYPE>primary metagenome</TYPE>
+          <PARTIAL>false</PARTIAL>
+          <COVERAGE>17.0</COVERAGE>
+          <PROGRAM>metaSPAdes v3.14.1</PROGRAM>
+          <PLATFORM>DNBSEQ-G400</PLATFORM>
+          <MOL_TYPE>genomic DNA</MOL_TYPE>
+        </SEQUENCE_ASSEMBLY>
+      </ANALYSIS_TYPE>
+      <FILES>
+        <FILE checksum="62952e961c26f0859b4ebdd83d93e4e7" checksum_method="MD5" filename="ERZ262/ERZ2626953/ERR4918394.fasta.gz" filetype="fasta"/>
+      </FILES>
+    </ANALYSIS>
+  </ANALYSIS_SET>

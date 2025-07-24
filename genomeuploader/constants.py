@@ -14,14 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-HQ = (
-    "Multiple fragments where gaps span repetitive regions. Presence of the "
-    "23S, 16S, and 5S rRNA genes and at least 18 tRNAs."
-)
-MQ = (
-    "Many fragments with little to no review of assembly other than reporting "
-    "of standard assembly statistics."
-)
+HQ = "Multiple fragments where gaps span repetitive regions. Presence of the 23S, 16S, and 5S rRNA genes and at least 18 tRNAs"
+MQ = "Many fragments with little to no review of assembly other than reporting of standard assembly statistics"
 
 METAGENOMES = [
     "activated carbon metagenome",
@@ -635,3 +629,24 @@ GEOGRAPHIC_LOCATIONS = [
     "Zambia",
     "Zimbabwe",
 ]
+
+BIN_MANDATORY_FIELDS = [
+    "genome_name",
+    "accessions",
+    "assembly_software",
+    "binning_software",
+    "binning_parameters",
+    "stats_generation_software",
+    "NCBI_lineage",
+    "broad_environment",
+    "local_environment",
+    "environmental_medium",
+    "metagenome",
+    "co-assembly",
+    "genome_coverage",
+    "genome_path",
+]
+
+MAG_MANDATORY_FIELDS = ["rRNA_presence", "completeness", "contamination"]
+
+GEOGRAPHY_DIGIT_COORDS = 8

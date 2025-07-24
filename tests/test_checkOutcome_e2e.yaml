@@ -1,5 +1,5 @@
 - name: genomeuploader end to end test
-  command: "python genomeuploader/genome_upload.py -u ERP159782 --genome_info tests/fixtures/input_fixture.tsv --out tests/fixtures/ --bins --centre_name EMG"
+  command: "genome_upload -u ERP159782 --genome_info tests/fixtures/input_fixture.tsv --out tests/fixtures/ --bins --centre_name EMG"
   files:
     - path: "tests/fixtures/bin_upload/manifests/"
     - path: "tests/fixtures/bin_upload/genome_samples.xml"
