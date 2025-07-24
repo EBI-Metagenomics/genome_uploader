@@ -3,7 +3,7 @@ import xml.dom.minidom as minidom
 
 import requests
 
-from genomeuploader.ena import configure_credentials
+from genomeuploader.ena import CredentialsManager
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -14,13 +14,8 @@ class EnaSubmit:
         self.sample_xml = sample_xml
         self.submission_xml = submission_xml
         self.live = live
-        username, password = configure_credentials()
-        if not username or not password:
-            logging.error("ENA_WEBIN and ENA_WEBIN_PASSWORD are not set")
-        if username and password:
-            self.auth = (username, password)
-        else:
-            self.auth = None
+        self.auth = CredentialsManager.get_credentials()
+
 
     def handle_genomes_registration(self):
         live_sub, mode = "", "live"
