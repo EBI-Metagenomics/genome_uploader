@@ -148,7 +148,7 @@ class CredentialsManager:
             raise CredentialsNotSetError(
                 "Credentials for ENA are not set. Please set ENA_WEBIN and ENA_WEBIN_PASSWORD environment variables."
             )
-        return (username, password)
+        return username, password
 
 
 class EnaQuery:

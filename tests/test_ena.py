@@ -6,10 +6,6 @@ from requests.exceptions import ConnectionError, HTTPError
 
 from genomeuploader.ena import EnaQuery
 
-ENA_WEBIN = "ENA_WEBIN"
-ENA_WEBIN_PASSWORD = "ENA_WEBIN_PASSWORD"
-
-
 def read_json(path):
     with open(path, "r") as jpath:
         return json.load(jpath)
@@ -110,8 +106,6 @@ def test_ena_sample(public_sample_data, private_sample_data, public_sample_json,
 
 @responses.activate
 def test_ena_exceptions(monkeypatch):
-    monkeypatch.setenv(ENA_WEBIN, "fake-webin-999")
-    monkeypatch.setenv(ENA_WEBIN_PASSWORD, "fakewebinpw")
 
     ena_query = EnaQuery(
         accession="ERP125469",

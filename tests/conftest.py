@@ -2,13 +2,6 @@ from pathlib import Path
 
 import pytest
 
-
-@pytest.fixture(autouse=True)
-def set_fake_ena_credentials(monkeypatch):
-    monkeypatch.setenv("ENA_WEBIN", "fake-webin-999")
-    monkeypatch.setenv("ENA_WEBIN_PASSWORD", "fakewebinpw")
-
-
 @pytest.fixture(scope="module")
 def test_file_dir():
     return Path(__file__).resolve().parent / Path("fixtures/responses")
