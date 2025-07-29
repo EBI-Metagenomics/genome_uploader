@@ -202,10 +202,9 @@ def extract_archaea_info(name, rank):
 
     return submittable, name, taxid
 
-
+# NOT PRESENT IN MAIN
 def multiple_element_set(metadata_list):
     return len(set(metadata_list)) > 1
-
 
 def combine_ena_info(genome_info, ena_dict):
     for g in genome_info:
@@ -274,19 +273,6 @@ def combine_ena_info(genome_info, ena_dict):
 
         genome_info[g]["accessions"] = ",".join(genome_info[g]["accessions"])
 
-
-def get_accessions(accessions_file):
-    accession_dict = {}
-    with accessions_file.open("r") as f:
-        for line in f:
-            line = line.split("\t")
-            alias = line[0]
-            accession = line[1].rstrip("\n")
-            accession_dict[alias] = accession
-
-    return accession_dict
-
-
 def save_accessions(alias_accession_dict, accessions_file, write_mode):
     with accessions_file.open(write_mode) as f:
         for elem in alias_accession_dict:
@@ -325,72 +311,6 @@ def compute_manifests(genomes):
         )
 
     return manifest_info
-
-
-def get_study_from_xml(sample):
-    description = sample.childNodes[5].childNodes[0].data
-    study = description.split(" ")[-1][:-1]
-
-    return study
-
-
-def recover_info_from_xml(genome_dict, sample_xml, live_mode):
-    logger.info("Retrieving data for genome submission...")
-
-    # extract list of genomes (samples) to be registered
-    xml_structure = minidom.parse(str(sample_xml))
-    samples = xml_structure.getElementsByTagName("SAMPLE")
-
-    for s in samples:
-        study = get_study_from_xml(s)
-
-        # extract alias from xml and find a match with genomes the user is uploading
-        xml_alias = s.attributes["alias"].value
-        if not live_mode:  # remove time stamp if test mode is selected
-            alias_split = xml_alias.split("_")
-            xml_alias = "_".join(alias_split[:-1])
-        for gen in genome_dict:
-            # if match is found, associate attributes listed in the xml file
-            # with genomes to upload
-            if xml_alias == gen:
-                if not live_mode:
-                    current_time_stamp = str(int(dt.timestamp(dt.now())))
-                    xml_alias = gen + "_" + current_time_stamp
-                    s.attributes["alias"].value = xml_alias
-                    sample_title = s.getElementsByTagName("TITLE")[0]
-                    sample_title_value = sample_title.firstChild.nodeValue.split("_")
-                    sample_title_value[-1] = current_time_stamp
-                    new_sample_title = "_".join(sample_title_value)
-                    s.getElementsByTagName("TITLE")[0].firstChild.nodeValue(new_sample_title)
-                attributes = s.childNodes[7].getElementsByTagName("SAMPLE_ATTRIBUTE")
-                seq_method, ass_software = "", ""
-                for a in attributes:
-                    tag_elem = a.getElementsByTagName("TAG")
-                    tag = tag_elem[0].childNodes[0].nodeValue
-                    if tag == "sequencing method":
-                        seq_method_elem = a.getElementsByTagName("VALUE")
-                        seq_method = seq_method_elem[0].childNodes[0].nodeValue
-                    elif tag == "assembly software":
-                        ass_software_elem = a.getElementsByTagName("VALUE")
-                        ass_software = ass_software_elem[0].childNodes[0].nodeValue
-                    if not seq_method == "" and not ass_software == "":
-                        break
-                genome_dict[gen]["accessions"] = ",".join(genome_dict[gen]["accessions"])
-                genome_dict[gen]["alias"] = xml_alias
-                genome_dict[gen]["assembly_software"] = ass_software
-                genome_dict[gen]["sequencingMethod"] = seq_method
-                genome_dict[gen]["study"] = study
-                break
-
-    if not live_mode:
-        for s in samples:
-            xml_structure.firstChild.appendChild(s)
-
-        with sample_xml.open("wb") as f:
-            dom_string = xml_structure.toprettyxml().encode("utf-8")
-            dom_string = b"\n".join([s for s in dom_string.splitlines() if s.strip()])
-            f.write(dom_string)
-
 
 def create_sample_attribute(sample_attributes, data_list, mag_data=None):
     tag = data_list[0]
@@ -562,6 +482,7 @@ class GenomeUpload:
         self.upload_dir = self.generate_genomes_upload_dir()
         self.upload_study = args["upload_study"]
         self.genome_metadata = Path(args["genome_info"])
+        self.test_suffix = args["test_suffix"]
 
     def validate_metadata_tsv(self):
         """
@@ -662,9 +583,13 @@ class GenomeUpload:
         if uniqueness:
             # for test submissions we add a timestamp to allow for more than one submission a day (ENA would block them otherwise)
             if not self.live:
-                timestamp = str(int(dt.timestamp(dt.now())))
-                timestamp_names = [row["genome_name"] + "_" + timestamp for index, row in metadata.iterrows()]
-                metadata["unique_genome_name"] = timestamp_names
+                if self.test_suffix:
+                    unique_test_identifier = self.test_suffix
+                else:
+                    timestamp = str(int(dt.timestamp(dt.now())))
+                    unique_test_identifier = timestamp
+                unique_names = [row["genome_name"] + "_" + unique_test_identifier for index, row in metadata.iterrows()]
+                metadata["unique_genome_name"] = unique_names
                 genome_info = metadata.set_index("unique_genome_name").transpose().to_dict()
             else:
                 genome_info = metadata.set_index("genome_name").transpose().to_dict()
@@ -736,22 +661,25 @@ class GenomeUpload:
             raise ValueError("No study corresponding to runs found.")
 
         backup_file = self.upload_dir / "ENA_backup.json"
-        counter = 0
+        write_mode = "r+"
         if not backup_file.exists() or self.force:
-            with backup_file.open("w") as file:
-                pass
-        with backup_file.open("r+") as file:
-            try:
-                backup_dict = json.load(file)
-                temp_dict = dict(backup_dict)
-                logger.info(f"A backup file {backup_file} for ENA sample metadata has been found.")
-            except json.decoder.JSONDecodeError:
-                backup_dict = {}
+            write_mode = "w"
+
+        counter = 0
+
+        with backup_file.open(write_mode) as file:
+            backup_dict = {}
+            if not write_mode == "w":
+                try:
+                    backup_dict = json.load(file)
+                    temp_dict = dict(backup_dict)
+                    logger.info(f"A backup file {backup_file} for ENA sample metadata has been found.")
+                except json.decoder.JSONDecodeError:
+                    pass
             for s in study_set:
                 ena_query = EnaQuery(s, "study", self.private)
                 study_info = ena_query.build_query()
                 project_description = study_info["study_description"]
-
                 if not project_description:
                     project_description = study_info["study_title"]
 
@@ -803,8 +731,24 @@ class GenomeUpload:
                                 country = "not provided"
 
                             collection_date = sample_info["collection_date"]
-                            if collection_date == "" or collection_date == "missing":
-                                collection_date = "not provided"
+                            if collection_date.lower() in [
+                                "not collected",
+                                "not provided",
+                                "restricted access",
+                                "missing: control sample",
+                                "missing: sample group",
+                                "missing: synthetic construct",
+                                "missing: lab stock",
+                                "missing: third party data",
+                                "missing: data agreement established pre-2023",
+                                "missing: endangered species",
+                                "missing: human-identifiable",
+                            ]:
+                                collection_date = collection_date.lower()
+                            if not collection_date or collection_date.lower() == "missing" or collection_date.lower() in [
+                                "not available", "na"]:
+                                collection_date = "missing: third party data"
+
 
                             temp_dict[run_accession] = {
                                 "instrumentModel": ena_info[run]["instrument_model"],
@@ -838,14 +782,11 @@ class GenomeUpload:
 
         genome_info = self.extract_genomes_info()
 
-        if not samples_xml.exists() or self.force:
-            self.extract_ena_info(genome_info)
-            logger.info("Writing genome registration XML...")
+        self.extract_ena_info(genome_info)
+        logger.info("Writing genome registration XML...")
 
-            write_genomes_xml(genome_info, samples_xml, self.genome_type, self.centre_name, self.tpa)
-            logger.info("All files have been written to " + str(self.upload_dir))
-        else:
-            recover_info_from_xml(genome_info, samples_xml, self.live)
+        write_genomes_xml(genome_info, samples_xml, self.genome_type, self.centre_name, self.tpa)
+        logger.info("All files have been written to " + str(self.upload_dir))
 
         return genome_info
 
@@ -854,52 +795,64 @@ class GenomeUpload:
             logger.warning("Warning: genome submission is not in live mode, " + "files will be validated, but not uploaded.")
         samples_xml = self.upload_dir / "genome_samples.xml"
         submission_xml = self.upload_dir / "submission.xml"
-        genomes, manifest_info = {}, {}
+        genome_info, manifest_info = {}, {}
 
         # submission xml existence
         if not submission_xml.exists()  or self.force:
             submission_xml = write_submission_xml(self.upload_dir, self.centre_name, False)
 
         # sample xml generation or recovery
-        genomes = self.create_genome_dictionary(samples_xml)
+        genome_info = self.create_genome_dictionary(samples_xml)
+
+        accessions_gen = "registered_MAGs.tsv"
+        if self.genome_type == "bins":
+            accessions_gen = accessions_gen.replace("MAG", "bin")
+        if not self.live:
+            accessions_gen = accessions_gen.replace(".tsv", "_test.tsv")
+
+        accessions_file = self.upload_dir / accessions_gen
+
+        logger.info("Registering genome samples XMLs...")
+        ena_submit = EnaSubmit(samples_xml, submission_xml, len(genome_info), self.live)
+        alias_accession_map = ena_submit.handle_genomes_registration()
+
+        if len(alias_accession_map) == len(genome_info):
+            # all genomes were registered
+            save_accessions(alias_accession_map, accessions_file, "w")
+        else:
+            if len(alias_accession_map) > 0:
+                # exclude those from XML
+                if samples_xml.exists():
+                    samples_xml.unlink(missing_ok=True)
+                filtered_genome_info = {k: v for k, v in genome_info.items() if k not in alias_accession_map}
+                logger.info("Re-writing genome registration XML...")
+                write_genomes_xml(filtered_genome_info, samples_xml, self.genome_type, self.centre_name, self.tpa)
+                logger.info("Registering new genome samples XMLs...")
+                ena_submit_new = EnaSubmit(samples_xml, submission_xml, len(filtered_genome_info), self.live)
+                new_alias_accession_map = ena_submit_new.handle_genomes_registration()
+                if len(new_alias_accession_map) == len(filtered_genome_info):
+                    # all new genomes were registered
+                    save_accessions(new_alias_accession_map, accessions_file, "a")
+                    alias_accession_map.update(new_alias_accession_map)
+                else:
+                    raise Exception("An error occurred during the registration step.")
+            else:
+                raise Exception("Some genomes could not be submitted to ENA. Please, check the errors above.")
 
         # manifests creation
-        manifest_dir = self.upload_dir / "manifests"
-        manifest_dir.mkdir(parents=True, exist_ok=True)
-
-        accessionsgen = "registered_MAGs.tsv"
-        if self.genome_type == "bins":
-            accessionsgen = accessionsgen.replace("MAG", "bin")
         if not self.live:
-            accessionsgen = accessionsgen.replace(".tsv", "_test.tsv")
-
-        accessions_file = self.upload_dir / accessionsgen
-        save = False
-        write_mode = "a"
-        if accessions_file.exists():
-            if not self.live:
-                save = True
-                if self.force:
-                    write_mode = "w"
-            if not save:
-                logger.info("Genome samples already registered, reading ERS accessions...")
-                alias_to_new_sample_accession = get_accessions(accessions_file)
+            manifest_dir = self.upload_dir / "manifests_test"
         else:
-            save = True
-
-        if save:
-            logger.info("Registering genome samples XMLs...")
-            ena_submit = EnaSubmit(samples_xml, submission_xml, len(genomes), self.live)
-            alias_to_new_sample_accession = ena_submit.handle_genomes_registration()
-            save_accessions(alias_to_new_sample_accession, accessions_file, write_mode)
+            manifest_dir = self.upload_dir / "manifests"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info("Generating manifest files...")
 
-        manifest_info = compute_manifests(genomes)
+        manifest_info = compute_manifests(genome_info)
 
         for m in manifest_info:
             generate_genome_manifest(
-                manifest_info[m], self.upload_study, manifest_dir, alias_to_new_sample_accession, self.genome_type, self.tpa
+                manifest_info[m], self.upload_study, manifest_dir, alias_accession_map, self.genome_type, self.tpa
             )
 
 __version__ = importlib.metadata.version("genome_uploader")
