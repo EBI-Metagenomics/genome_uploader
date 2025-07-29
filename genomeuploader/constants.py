@@ -650,3 +650,8 @@ BIN_MANDATORY_FIELDS = [
 MAG_MANDATORY_FIELDS = ["rRNA_presence", "completeness", "contamination"]
 
 GEOGRAPHY_DIGIT_COORDS = 8
+
+BIN_CHECKLIST = "ERC000050"
+BIN_CHECKLIST_TYPE = "binned_metagenome"
+MAG_CHECKLIST = "ERC000047"
+MAG_CHECKLIST_TYPE = "Metagenome-assembled genome"

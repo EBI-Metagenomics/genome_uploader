@@ -1,11 +1,12 @@
+import argparse
+import logging
 import os
 import urllib.request
-import logging
-import argparse
 
 logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
+
 
 def download_webin_cli(version, dest_dir):
     jar_url = f"https://github.com/enasequence/webin-cli/releases/download/{version}/webin-cli-{version}.jar"
@@ -19,7 +20,6 @@ def download_webin_cli(version, dest_dir):
 
 
 def main():
-
     parser = argparse.ArgumentParser(description="Download the ENA webin-cli executable file")
     parser.add_argument("-d", "--dest-dir", default=".", help="Destination directory to save webin-cli.jar")
     parser.add_argument("-v", "--version", required=True, help="Release version/tag to download (default: latest)")

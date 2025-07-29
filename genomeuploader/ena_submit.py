@@ -1,6 +1,6 @@
 import logging
-import xml.dom.minidom as minidom
 import re
+import xml.dom.minidom as minidom
 
 import requests
 
@@ -30,7 +30,6 @@ class EnaSubmit:
         self.live = live
         self.auth = CredentialsManager.get_credentials()
         self.number_of_genomes = number_of_genomes
-
 
     def handle_genomes_registration(self):
         live_sub, mode = "", "live"

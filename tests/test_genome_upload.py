@@ -1,7 +1,7 @@
 import subprocess
-from pathlib import Path
 from datetime import datetime as dt
-import os
+from pathlib import Path
+
 
 class Tests:
     def test_genomeuploader_end_to_end(tmp_path):

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+
 @pytest.fixture(scope="module")
 def test_file_dir():
     return Path(__file__).resolve().parent / Path("fixtures/responses")

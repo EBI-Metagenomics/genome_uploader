@@ -6,6 +6,7 @@ from requests.exceptions import ConnectionError, HTTPError
 
 from genomeuploader.ena import EnaQuery
 
+
 def read_json(path):
     with open(path, "r") as jpath:
         return json.load(jpath)
@@ -85,11 +86,9 @@ def test_ena_study_runs(public_study_runs_json, private_study_runs_json):
 
     ena_study_runs_private = EnaQuery(accession="ERP125469", query_type="study_runs", private=True)
 
-    assert (
-        len(ena_study_runs_public.build_query()) == 10
-        and len(ena_study_runs_private.build_query()) == 10
-    )
-    
+    assert len(ena_study_runs_public.build_query()) == 10 and len(ena_study_runs_private.build_query()) == 10
+
+
 @responses.activate
 def test_ena_sample(public_sample_data, private_sample_data, public_sample_json, private_sample_xml):
     responses.add(responses.POST, "https://www.ebi.ac.uk/ena/portal/api/search", json=read_json(public_sample_json))
@@ -106,7 +105,6 @@ def test_ena_sample(public_sample_data, private_sample_data, public_sample_json,
 
 @responses.activate
 def test_ena_exceptions(monkeypatch):
-
     ena_query = EnaQuery(
         accession="ERP125469",
         query_type="study",
