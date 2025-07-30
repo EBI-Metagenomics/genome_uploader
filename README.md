@@ -98,7 +98,6 @@ where
 It is recommended to validate your genomes in test mode (i.e. without `--live` in the registration step and with `-test` during the upload) before attempting the final upload. Launching the registration in test mode will add a timestamp to the genome name to allow multiple executions of the test process.
 
 Sample xmls won't be regenerated automatically if a previous xml already exists. If any metadata or value in the tsv table changes, `--force` will allow xml regeneration.
-`submission.xml` and `ENA_backup.json` won't be regenerated automatically if a previous run already exists,. To regenerate them, select `--force`.
 
 ### Produced files:
 The script produces the following files and folders:
