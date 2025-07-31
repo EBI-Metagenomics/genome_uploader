@@ -840,8 +840,6 @@ class GenomeUpload:
                 outfile.write("TPA\ttrue\n")
 
     def genome_upload(self):
-        if not self.live:
-            logger.warning("Warning: genome submission is not in live mode, " + "files will be validated, but not uploaded.")
         genome_info, manifest_info = {}, {}
 
         # submission xml existence
