@@ -15,274 +15,349 @@
 # limitations under the License.
 
 
-import requests
 import json
 import logging
-from time import sleep
-import re
-
+import os
 import xml.dom.minidom as minidom
+from pathlib import Path
+from time import sleep
+
+import requests
+from dotenv import load_dotenv
+from requests.exceptions import ConnectionError, HTTPError, RequestException, Timeout
+
+from genomeuploader.config import (
+    ACCESSION_MAP,
+    ENA_BROWSER_URL,
+    ENA_SEARCH_URL,
+    ENA_SUBMISSION_URL,
+    RETRY_COUNT,
+    RUN_KEY_RENAME_MAP,
+    SAMPLE_ATTRIBUTE_MAP,
+    SAMPLE_DEFAULT_FIELDS,
+    STUDY_DEFAULT_FIELDS,
+    STUDY_RUN_DEFAULT_FIELDS,
+    USER_ENV_FILE_PATH,
+)
+from genomeuploader.exceptions import (
+    CredentialsNotSetError,
+    EnaEmptyResponseError,
+    EnaParseError,
+    InvalidAccessionError,
+)
 
 logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
 
-class NoDataException(ValueError):
-    pass
+def get_default_connection_headers():
+    return {
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "*/*",
+        }
+    }
 
 
-RUN_DEFAULT_FIELDS = ",".join(["study_accession", "secondary_study_accession", "instrument_model", "run_accession", "sample_accession"])
-
-ASSEMBLY_DEFAULT_FIELDS = "sample_accession"
-
-SAMPLE_DEFAULT_FIELDS = ",".join(["sample_accession", "secondary_sample_accession", "collection_date", "country", "location"])
-
-STUDY_DEFAULT_FIELDS = ",".join(["study_accession", "secondary_study_accession", "study_description", "study_title"])
-
-RETRY_COUNT = 5
+def get_default_params():
+    return {"format": "json", "includeMetagenomes": True, "dataPortal": "ena"}
 
 
-class ENA:
-    def get_default_params(self):
-        return {"format": "json", "includeMetagenomes": True, "dataPortal": "ena"}
+def parse_accession(accession):
+    for prefix, acc_type in ACCESSION_MAP.items():
+        if accession.startswith(prefix):
+            return acc_type
+    logging.error(f"Unrecognized accession format: '{accession}'")
+    raise InvalidAccessionError("Invalid accession: {accession}")
 
-    def post_request(self, data, webin, password):
-        url = "https://www.ebi.ac.uk/ena/portal/api/search"
-        auth = (webin, password)
-        default_connection_headers = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "*/*"}
-        response = requests.post(url, data=data, auth=auth, headers=default_connection_headers)
 
+def configure_credentials(env_filename=USER_ENV_FILE_PATH):
+    search_paths = [Path.home() / env_filename, Path.cwd() / env_filename, Path.cwd() / ".env"]
+
+    for env_path in search_paths:
+        if env_path.exists():
+            logger.debug(f"Loading environment variables from {env_path}")
+            load_dotenv(dotenv_path=env_path)
+            break
+    else:
+        logger.debug("No environment file found; relying on system environment variables.")
+
+    username = os.getenv("ENA_WEBIN")
+    password = os.getenv("ENA_WEBIN_PASSWORD")
+
+    if not username or not password:
+        logger.warning("ENA_WEBIN and/or ENA_WEBIN_PASSWORD not found in environment variables.")
+        return None, None
+
+    return username, password
+
+
+def query_taxid(taxid):
+    url = f"https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{taxid}"
+    response = requests.get(url)
+
+    try:
+        # Will raise exception if response status code is non-200
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        logging.error(f"Request failed {url} with error {e}")
+        return False
+
+    res = response.json()
+
+    return res.get("scientificName", "")
+
+
+def query_scientific_name(scientific_name, search_rank=False):
+    url = f"https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{scientific_name}"
+    response = requests.get(url)
+
+    try:
+        # Will raise exception if response status code is non-200
+        response.raise_for_status()
+    except requests.exceptions.HTTPError:
+        if search_rank:
+            return False, "", ""
+        else:
+            return False, ""
+
+    try:
+        res = response.json()[0]
+    except IndexError:
+        if search_rank:
+            return False, "", ""
+        else:
+            return False, ""
+
+    submittable = res.get("submittable", "").lower() == "true"
+    taxid = res.get("taxId", "")
+    rank = res.get("rank", "")
+
+    if search_rank:
+        return submittable, taxid, rank
+    else:
+        return submittable, taxid
+
+
+class CredentialsManager:
+    @staticmethod
+    def get_credentials():
+        username, password = configure_credentials()
+        if not username or not password:
+            raise CredentialsNotSetError(
+                "Credentials for ENA are not set. Please set ENA_WEBIN and ENA_WEBIN_PASSWORD environment variables."
+            )
+        return username, password
+
+
+class EnaQuery:
+    def __init__(self, accession, query_type, private=False):
+        self.private_url = ENA_SUBMISSION_URL
+        self.public_url = ENA_SEARCH_URL
+        self.browser_url = ENA_BROWSER_URL
+        self.accession = accession
+        self.acc_type = parse_accession(accession)
+        self.auth = CredentialsManager.get_credentials()
+        self.private = private
+        self.query_type = query_type
+
+    def post_request(self, data):
+        response = requests.post(self.public_url, data=data, **get_default_connection_headers())
         return response
 
-    def get_run(self, run_accession, webin, password, attempt=0, search_params=None):
-        data = self.get_default_params()
-        data["result"] = "read_run"
-        data["fields"] = RUN_DEFAULT_FIELDS
-        data["query"] = 'run_accession="{}"'.format(run_accession)
+    def get_request(self, url):
+        if self.private:
+            response = requests.get(url, auth=self.auth)
+        else:
+            response = requests.get(url)
+        return response
 
-        if search_params:
-            data.update(search_params)
+    def get_data_or_raise(self, response, mode="single_json"):
+        data_txt = response.text.strip()
+        if not data_txt:
+            raise EnaEmptyResponseError(f"{self.accession}: Empty or missing response text.")
 
-        response = self.post_request(data, webin, password)
+        parsers = {
+            "xml": lambda txt: minidom.parseString(txt),
+            "full_json": lambda txt: json.loads(txt),
+            "single_json": lambda txt: json.loads(txt)[0],
+        }
 
-        if not response.ok and attempt > 2:
-            raise ValueError(f"Could not retrieve run with accession {run_accession}, returned message: {response.text}")
-        elif response.status_code == 204:
-            if attempt < 2:
-                attempt += 1
-                sleep(1)
-                return self.get_run(run_accession, webin, password, attempt)
-            else:
-                raise ValueError(f"Could not find run {run_accession} in ENA after {RETRY_COUNT} attempts")
-        try:
-            run = json.loads(response.text)[0]
-        except (IndexError, TypeError, ValueError):
-            raise ValueError(f"Could not find run {run_accession} in ENA.")
-        except:
-            raise Exception(f"Could not query ENA API for run {run_accession}: {response.text}")
-
-        return run
-
-    def get_run_from_assembly(self, assembly_name):
-        manifestXml = minidom.parseString(requests.get("https://www.ebi.ac.uk" + "/ena/browser/api/xml/" + assembly_name).text)
-
-        run_ref = manifestXml.getElementsByTagName("RUN_REF")
-        run = run_ref[0].attributes["accession"].value
-
-        return run
-
-    def get_study(self, webin, password, study_accession):
-        data = self.get_default_params()
-        data["result"] = "study"
-        data["fields"] = STUDY_DEFAULT_FIELDS
-        data["query"] = 'study_accession="{}" OR secondary_study_accession="{}"'.format(study_accession, study_accession)
-
-        data["dataPortal"] = "ena"
+        if mode not in parsers:
+            raise EnaParseError(f"Unknown mode: {mode}")
 
         try:
-            response = self.post_request(data, webin, password)
-            if response.status_code == 204:
-                raise NoDataException()
+            return parsers[mode](data_txt)
+        except Exception as e:
+            raise EnaParseError(f"{self.accession}: Failed to parse response as {mode}: {e}")
+
+    def retry_or_handle_request_error(self, request, *args, **kwargs):
+        attempt = 0
+        while attempt < RETRY_COUNT:
             try:
-                studyList = response.json()
-                assert len(studyList) == 1
-                study = studyList[0]
-            except (IndexError, TypeError, ValueError, KeyError) as e:
-                raise e
-            return study
-        except NoDataException:
-            print("No info found to fetch study {}".format(study_accession))
-        except (IndexError, TypeError, ValueError, KeyError):
-            print("Failed to fetch study {}, returned error: {}".format(study_accession, response.text))
-
-        raise ValueError("Could not find study {} in ENA.".format(study_accession))
-
-    def get_study_runs(self, study_acc, webin, password, fields=None, search_params=None):
-        data = self.get_default_params()
-        data["result"] = "read_run"
-        data["fields"] = fields or RUN_DEFAULT_FIELDS
-        data["query"] = '(study_accession="{}" OR secondary_study_accession="{}")'.format(study_acc, study_acc)
-
-        if search_params:
-            data.update(search_params)
-
-        response = self.post_request(data, webin, password)
-
-        if not response.ok:
-            raise ValueError("Could not retrieve runs for study %s.", study_acc)
-
-        if response.status_code == 204:
-            return []
-
-        try:
-            runs = response.json()
-        except:
-            raise ValueError(f"Query against ENA API did not work. Returned message: {response.text}")
-
-        return runs
-
-    def get_sample(self, sample_accession, webin, password, fields=None, search_params=None, attempt=0):
-        data = self.get_default_params()
-        data["result"] = "sample"
-        data["fields"] = fields or SAMPLE_DEFAULT_FIELDS
-        data["query"] = ('(sample_accession="{acc}" OR secondary_sample_accession' '="{acc}") ').format(acc=sample_accession)
-
-        if search_params:
-            data.update(search_params)
-
-        response = self.post_request(data, webin, password)
-
-        if response.status_code == 200:
-            sample = response.json()
-            assert len(sample) == 1
-            return sample[0]
-
-        if response.status_code == 204:
-            if attempt < 2:
-                new_params = {"dataPortal": "metagenome" if data["dataPortal"] == "ena" else "ena"}
+                response = request(*args, **kwargs)
+                response.raise_for_status()
+                return response
+            #   all other RequestExceptions are raised below
+            except (Timeout, ConnectionError) as retry_err:
                 attempt += 1
-                return self.get_sample(sample_accession, webin, password, fields=fields, search_params=new_params, attempt=attempt)
-            else:
-                raise ValueError(f"Could not find sample {sample_accession} in ENA after {RETRY_COUNT} attempts.")
+                if attempt >= RETRY_COUNT:
+                    raise ValueError(f"Could not find {self.accession} in ENA after {attempt} attempts. Error: {retry_err}")
+                sleep(1)
+            except HTTPError as http_err:
+                logging.error(f"HTTP response has an error status: {http_err}")
+                raise
+            except RequestException as req_err:
+                logging.error(f"Network-related error status: {req_err}")
+                raise
+            #   should hopefully encompass all other issues...
+            except Exception as e:
+                logging.error(f"An unexpected error occurred: {e}")
+                raise
+
+    def _fetch_ena_data(self, *, url=None, data=None, method="get", mode="single_json", reformatter=None):
+        request_func = self.get_request if method == "get" else self.post_request
+        request_input = url or data
+        response = self.retry_or_handle_request_error(request_func, request_input)
+        try:
+            parsed = self.get_data_or_raise(response, mode=mode)
+        except (EnaEmptyResponseError, EnaParseError) as e:
+            logging.error(e)
+            return None
+        return reformatter(parsed) if reformatter else parsed
+
+    def _get_private_run(self):
+        url = f"{self.private_url}/runs/{self.accession}"
+
+        def reformatter(run):
+            run_data = run["report"]
+            return {
+                "run_accession": run_data["id"],
+                "secondary_study_accession": run_data["studyId"],
+                "sample_accession": run_data["sampleId"],
+            }
+
+        data = self._fetch_ena_data(url=url, mode="single_json", reformatter=reformatter)
+        logging.info(f"{self.accession} private run returned from ENA")
+        return data
+
+    def _get_public_run(self):
+        data = get_default_params()
+        data.update(
+            {"result": "read_run", "query": f'run_accession="{self.accession}"', "fields": "secondary_study_accession,sample_accession"}
+        )
+        result = self._fetch_ena_data(data=data, method="post", mode="single_json")
+        logging.info(f"{self.accession} public run returned from ENA")
+        return result
+
+    def _get_private_study(self):
+        url = f"{self.private_url}/studies/xml/{self.accession}"
+
+        def reformatter(xml_doc):
+            desc = xml_doc.getElementsByTagName("STUDY_DESCRIPTION")[0].firstChild.nodeValue
+            return {"study_accession": self.accession, "study_description": desc}
+
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
+        logging.info(f"{self.accession} private study returned from ENA")
+        return result
+
+    def _get_public_study(self):
+        data = get_default_params()
+        data.update({"result": "study", "query": f'{self.acc_type}="{self.accession}"', "fields": STUDY_DEFAULT_FIELDS})
+        result = self._fetch_ena_data(data=data, method="post", mode="single_json")
+        logging.info(f"{self.accession} public study returned from ENA")
+        return result
+
+    def _get_private_run_from_assembly(self):
+        url = f"{self.private_url}/analyses/xml/{self.accession}"
+
+        def reformatter(xml_doc):
+            return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
+
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
+        logging.info(f"private run from the assembly {self.accession} returned from ENA")
+        return result
+
+    def _get_public_run_from_assembly(self):
+        url = f"{self.browser_url}/analyses/xml/{self.accession}"
+
+        def reformatter(xml_doc):
+            return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
+
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
+        logging.info(f"public run from the assembly {self.accession} returned from ENA")
+        return result
+
+    def _get_private_study_runs(self):
+        #   Pagination documentation unclear - offest not working. Using hardcoded max 2000 default. TO MODIFY
+        url = f"{self.private_url}/runs/{self.accession}?format=json&max-results=2000"
+
+        def reformatter(runs):
+            result = []
+            for run in runs:
+                run_data = run["report"]
+                updated_data = {RUN_KEY_RENAME_MAP.get(k, k): v for k, v in run_data.items()}
+                result.append(updated_data)
+            return result
+
+        result = self._fetch_ena_data(url=url, mode="full_json", reformatter=reformatter)
+        logging.info(f"found {len(result)} runs for study {self.accession}")
+        logging.info(f"private runs from study {self.accession}, returned from ENA")
+        return result
+
+    def _get_public_study_runs(self):
+        data = get_default_params()
+        data.update({"result": "read_run", "fields": STUDY_RUN_DEFAULT_FIELDS, "query": f"{self.acc_type}={self.accession}"})
+        result = self._fetch_ena_data(data=data, method="post", mode="full_json")
+        logging.info(f"public runs from study {self.accession}, returned from ENA")
+        return result
+
+    def _get_private_sample(self):
+        url = f"{self.private_url}/samples/xml/{self.accession}"
+
+        def reformatter(xml_doc):
+            reformatted = {"sample_accession": self.accession}
+            for attr in xml_doc.getElementsByTagName("SAMPLE_ATTRIBUTE"):
+                tag = attr.getElementsByTagName("TAG")[0].firstChild.nodeValue
+                val = attr.getElementsByTagName("VALUE")[0].firstChild.nodeValue
+                field = SAMPLE_ATTRIBUTE_MAP.get(tag)
+                if field:
+                    reformatted[field] = val
+            return reformatted
+
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
+        logging.info(f"{self.accession} private sample returned from ENA")
+        return result
+
+    def _get_public_sample(self):
+        data = get_default_params()
+        data.update({"result": "sample", "fields": SAMPLE_DEFAULT_FIELDS, "query": f"{self.acc_type}={self.accession}"})
+        result = self._fetch_ena_data(data=data, method="post", mode="single_json")
+        logging.info(f"{self.accession} public sample returned from ENA")
+        return result
+
+    def build_query(self):
+        """If the private flag is given, assume private data and try private APIs.
+        ENA also has cases where a run may be private but the sample may be public etc. Hence always try
+        public if private fails"""
+        api_map = {
+            "study": (self._get_private_study, self._get_public_study),
+            "run": (self._get_private_run, self._get_public_run),
+            "run_assembly": (self._get_private_run_from_assembly, self._get_public_run_from_assembly),
+            "study_runs": (self._get_private_study_runs, self._get_public_study_runs),
+            "sample": (self._get_private_sample, self._get_public_sample),
+        }
+
+        private_api, public_api = api_map.get(self.query_type, (None, None))
+
+        if self.private:
+            try:
+                ena_response = private_api()
+            except Exception:
+                logging.info(f"Private API for {self.query_type} failed, trying public.")
+                ena_response = public_api()
         else:
-            raise ValueError(f"Could not retrieve sample with accession {sample_accession}. Returned message: {response.text}")
+            ena_response = public_api()
 
-    def query_taxid(self, taxid):
-        url = "https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{}".format(taxid)
-        response = requests.get(url)
-
-        try:
-            # Will raise exception if response status code is non-200
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            print("Request failed {} with error {}".format(url, e))
-            return False
-
-        res = response.json()
-
-        return res.get("scientificName", "")
-
-    def query_scientific_name(self, scientificName, searchRank=False):
-        url = "https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{}".format(scientificName)
-        response = requests.get(url)
-
-        try:
-            # Will raise exception if response status code is non-200
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            if searchRank:
-                return False, "", ""
-            else:
-                return False, ""
-
-        try:
-            res = response.json()[0]
-        except IndexError:
-            if searchRank:
-                return False, "", ""
-            else:
-                return False, ""
-
-        submittable = res.get("submittable", "").lower() == "true"
-        taxid = res.get("taxId", "")
-        rank = res.get("rank", "")
-
-        if searchRank:
-            return submittable, taxid, rank
-        else:
-            return submittable, taxid
-
-    def identify_registered_genomes(self, message):
-        alias_dict = {}
-        pattern = r'alias: "([^"]+)"[^:]+accession: "([^"]+)"'
-        for line in message.split("\n"):
-            match = re.search(pattern, line)
-            if match:
-                alias = match.group(1)
-                accession = match.group(2)
-                alias_dict[alias] = accession
-                logger.info(f"Found genome {alias} registered with {accession}")
-        return alias_dict
-
-    def handle_genomes_registration(
-        self,
-        sample_xml,
-        submission_xml,
-        webin,
-        password,
-        number_of_genomes,
-        live=False,
-    ):
-        liveSub, mode = "", "live"
-
-        if not live:
-            liveSub = "dev"
-            mode = "test"
-
-        url = "https://www{}.ebi.ac.uk/ena/submit/drop-box/submit/".format(liveSub)
-
-        logger.info("Registering sample xml in {} mode.".format(mode))
-
-        f = {"SUBMISSION": open(submission_xml, "r"), "SAMPLE": open(sample_xml, "r")}
-
-        submissionResponse = requests.post(url, files=f, auth=(webin, password))
-
-        if submissionResponse.status_code != 200:
-            if str(submissionResponse.status_code).startswith("5"):
-                raise Exception("Genomes could not be submitted to ENA as the server does not respond. Please again try later.")
-            else:
-                raise Exception(f"Genomes could not be submitted to ENA. HTTP response: {submissionResponse.reason}")
-
-        receiptXml = minidom.parseString((submissionResponse.content).decode("utf-8"))
-        receipt = receiptXml.getElementsByTagName("RECEIPT")
-        success = receipt[0].attributes["success"].value
-        aliasDict = {}
-        try:
-            samples = receiptXml.getElementsByTagName("SAMPLE")
-        except:
-            logger.info("Error while registering samples using the XML. See errors below.")
-        if success == "true":
-            for s in samples:
-                sraAcc = s.attributes["accession"].value
-                alias = s.attributes["alias"].value
-                aliasDict[alias] = sraAcc
-            logger.info(f"{len(aliasDict)} genome samples successfully registered.")
-        # check errors and search for existing accessions
-        elif success == "false":
-            errors = receiptXml.getElementsByTagName("ERROR")
-            finalError = ""
-            for error in errors:
-                finalError += "\n\t" + error.firstChild.data
-            # check are there already registered genomes
-            registered_genomes = self.identify_registered_genomes(finalError)
-            if registered_genomes:
-                aliasDict.update(registered_genomes)
-                logger.info("Some previously submitted genomes were retrieved from the receipt")
-            else:
-                logger.info("No previously submitted genomes retrieved from the receipt")
-        if len(aliasDict) == number_of_genomes:
-            logger.info("All genomes were registered")
-        else:
-            logger.info("For the re-registration some genomes will be excluded from the XML receipt.")
-        return aliasDict
+        return ena_response

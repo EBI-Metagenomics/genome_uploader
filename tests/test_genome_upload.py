@@ -1,7 +1,7 @@
 import subprocess
-from pathlib import Path
 from datetime import datetime as dt
-import os
+from pathlib import Path
+
 
 class Tests:
     def test_genomeuploader_end_to_end(tmp_path):
@@ -23,10 +23,6 @@ class Tests:
             f"end-to-end-{timestamp}",
             "--centre_name",
             "EMG",
-            "--webin",
-            os.environ.get("ENA_WEBIN"),
-            "--password",
-            os.environ.get("ENA_WEBIN_PASSWORD")
         ]
 
         result = subprocess.run(command, capture_output=True, text=True)
@@ -70,15 +66,11 @@ class Tests:
             f"registered-{timestamp}",
             "--centre_name",
             "EMG",
-            "--webin",
-            os.environ.get("ENA_WEBIN"),
-            "--password",
-            os.environ.get("ENA_WEBIN_PASSWORD")
         ]
         result1 = subprocess.run(command, capture_output=True, text=True)
         assert result1.returncode == 0, f"First run failed: {result1.stderr}"
 
-        with open("tests/fixtures/input_with_registrered_fixture.tsv", "r") as f:
+        with open("tests/fixtures/input_with_registered_fixture.tsv", "r") as f:
             lines = f.readlines()
         number_of_bins2 = len(lines) - 1
         command = [
@@ -87,7 +79,7 @@ class Tests:
             "-u",
             "ERP159782",
             "--genome_info",
-            "tests/fixtures/input_with_registrered_fixture.tsv",
+            "tests/fixtures/input_with_registered_fixture.tsv",
             "--out",
             "tests/fixtures/",
             "--bins",
@@ -95,10 +87,6 @@ class Tests:
             f"registered-{timestamp}",
             "--centre_name",
             "EMG",
-            "--webin",
-            os.environ.get("ENA_WEBIN"),
-            "--password",
-            os.environ.get("ENA_WEBIN_PASSWORD")
         ]
         result2 = subprocess.run(command, capture_output=True, text=True)
         assert result2.returncode == 0, f"Second run failed: {result2.stderr}"
