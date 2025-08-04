@@ -633,13 +633,13 @@ class GenomeUpload:
                                 except KeyError as e:
                                     pass
 
-                            if latitude != "missing: third party data":
+                            if latitude not in ["missing: third party data", "not provided"]:
                                 try:
                                     latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
                                 except ValueError:
                                     raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(run_accession))
 
-                            if longitude != "missing: third party data":
+                            if longitude not in ["missing: third party data", "not provided"]:
                                 try:
                                     longitude = "{:.{}f}".format(
                                         round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS
