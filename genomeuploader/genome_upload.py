@@ -611,12 +611,9 @@ class GenomeUpload:
                             latitude, longitude = "missing: third party data", "missing: third party data"
                             country = "missing: third party data"
                             if self.private:
-                                try:
-                                    latitude = sample_info["latitude"]
-                                    longitude = sample_info["longitude"]
-                                    country = sample_info["country"]
-                                except KeyError as e:
-                                    raise Exception(f"No available metadata record for run {run_accession}: {e}")
+                                latitude = sample_info.get("latitude", "not provided")
+                                longitude = sample_info.get("longitude", "not provided")
+                                country = sample_info.get("country", "not provided")
                             else:
                                 try:
                                     country = sample_info["country"].split(":")[0]
