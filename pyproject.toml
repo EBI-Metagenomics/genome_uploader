@@ -1,6 +1,6 @@
 [project]
 name = "genome_uploader"
-version = "2.3.4"
+version = "2.4.1"
 readme = "README.md"
 authors = [
   {name = "MGnify team", email = "metagenomics-help@ebi.ac.uk"},
