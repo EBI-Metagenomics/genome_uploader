@@ -608,39 +608,47 @@ class GenomeUpload:
                             ena_query = EnaQuery(sample_accession, "sample", self.private)
                             sample_info = ena_query.build_query()
 
-                            location = sample_info["location"]
                             latitude, longitude = "missing: third party data", "missing: third party data"
+                            country = "missing: third party data"
+                            if self.private:
+                                latitude = sample_info.get("latitude", "not provided")
+                                longitude = sample_info.get("longitude", "not provided")
+                                country = sample_info.get("country", "not provided")
+                            else:
+                                try:
+                                    country = sample_info["country"].split(":")[0]
+                                    location = sample_info["location"]
+                                    if location:
+                                        if "N" in location:
+                                            latitude = location.split("N")[0].strip()
+                                            longitude = location.split("N")[1].strip()
+                                        elif "S" in location:
+                                            latitude = "-" + location.split("S")[0].strip()
+                                            longitude = location.split("S")[1].strip()
 
-                            if location:
-                                if "N" in location:
-                                    latitude = location.split("N")[0].strip()
-                                    longitude = location.split("N")[1].strip()
-                                elif "S" in location:
-                                    latitude = "-" + location.split("S")[0].strip()
-                                    longitude = location.split("S")[1].strip()
+                                        if "W" in longitude:
+                                            longitude = "-" + longitude.split("W")[0].strip()
+                                        elif longitude.endswith("E"):
+                                            longitude = longitude.split("E")[0].strip()
+                                except KeyError as e:
+                                    pass
 
-                                if "W" in longitude:
-                                    longitude = "-" + longitude.split("W")[0].strip()
-                                elif longitude.endswith("E"):
-                                    longitude = longitude.split("E")[0].strip()
+                            if latitude not in ["missing: third party data", "not provided"]:
+                                try:
+                                    latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
+                                except ValueError:
+                                    raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(run_accession))
 
-                                if latitude != "missing: third party data":
-                                    try:
-                                        latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
-                                    except ValueError:
-                                        raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(run_accession))
+                            if longitude not in ["missing: third party data", "not provided"]:
+                                try:
+                                    longitude = "{:.{}f}".format(
+                                        round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS
+                                    )
+                                except ValueError:
+                                    raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(run_accession))
 
-                                if longitude != "missing: third party data":
-                                    try:
-                                        longitude = "{:.{}f}".format(
-                                            round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS
-                                        )
-                                    except ValueError:
-                                        raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(run_accession))
-
-                            country = sample_info["country"].split(":")[0]
                             if country not in GEOGRAPHIC_LOCATIONS:
-                                country = "not provided"
+                                country = "missing: third party data"
 
                             collection_date = sample_info["collection_date"]
                             if collection_date.lower() in [
@@ -829,8 +837,6 @@ class GenomeUpload:
                 outfile.write("TPA\ttrue\n")
 
     def genome_upload(self):
-        if not self.live:
-            logger.warning("Warning: genome submission is not in live mode, " + "files will be validated, but not uploaded.")
         genome_info, manifest_info = {}, {}
 
         # submission xml existence
