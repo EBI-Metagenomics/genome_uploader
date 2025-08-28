@@ -1,7 +1,16 @@
 # Public bins and MAGs uploader
-Python script to upload bins and MAGs in fasta format to ENA (European Nucleotide Archive). This script generates xmls and manifests necessary for submission with webin-cli.
+This repository allows to:
 
-It takes as input one tsv (tab-separated values) table in the following format:
+  * Generate xmls and manifests necessary for genome submission
+  * Link the genomes you want to submit with the samples/runs used to generate them
+  * Upload bins and MAGs in fasta format to ENA (European Nucleotide Archive) with webin-cli 
+
+## How it works
+
+When you submit genomes to the ENA, you need to register a sample for every genome containing all the relevant metadata describing the genome and the sample of origin. The `genome_uploader` acts as the main linker to preserve sample metadata as much as possible. For every genome to register, you need an INSDC run or assembly accession associated to the genome in order for the script to inherit its relevant metadata. On top of those metadata, the script adds metadata specified by the user that are specific to the genome, like taxonomy, statistics, or the tools used to generate it. The metadata that ENA requires are descibed in the checklist for [MAGs](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) and for [bins](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>), respectively. 
+
+### Input tsv and fields
+The genome_uploader takes as input one tsv (tab-separated values) table in the following format:
 
 | genome_name | genome_path | accessions | assembly_software | binning_software | binning_parameters | stats_generation_software | completeness | contamination | genome_coverage | metagenome | co-assembly | broad_environment | local_environment | environmental_medium | rRNA_presence | taxonomy_lineage |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -17,7 +26,9 @@ With columns indicating:
   * _completeness_: `float`
   * _contamination_: `float`
   * _rRNA_presence_: `True/False` if all among 5S, 16S, and 23S genes, and at least 18 tRNA genes, have been detected in the genome
-  * _NCBI_lineage_: full NCBI lineage, either in tax ids (`integers`) or `strings`. Format: x;y;z;...
+  * _NCBI_lineage_: full NCBI lineage - format: `x;y;z;...`. The same organism can be described in two different ways:  either in tax ids (`integers`) or `strings`. For example, the lineage for _E. coli_ can be:
+    * `Bacteria;Pseudomonadati;Pseudomonadota;Gammaproteobacteria;Enterobacterales;Enterobacteriaceae;Escherichia`
+    * `2;1224;1236;91347;543;561;562`
   * _metagenome_: needs to be listed in the taxonomy tree [here](<https://www.ebi.ac.uk/ena/browser/view/408169?show=tax-tree>) (you might need to press "Tax tree - Show" in the right most section of the page)
   * _co-assembly_: `True/False`, whether the genome was generated from a co-assembly. N.B. the script only supports co-assemblies generated from the same project.
   * _genome_coverage_ : genome coverage against raw reads
@@ -26,21 +37,28 @@ With columns indicating:
   * _local_environment_: `string` (explanation following)
   * _environmental_medium_: `string` (explanation following)
 
-According to ENA checklist's guidelines, 'broad_environment' describes the broad ecological context of a sample - desert, taiga, coral reef, ... 'local_environment' is more local - lake, harbour, cliff, ... 'environmental_medium' is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ...
+According to ENA checklist's guidelines, `broad_environment` describes the broad ecological context of a sample - desert, taiga, coral reef, ... `local_environment` is more local - lake, harbour, cliff, ... `environmental_medium` is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ...
 For host-associated metagenomic samples, the three variables can be defined similarly to the following example for the chicken gut metagenome: "chicken digestive system", "digestive tube", "caecum". More information can be found at [ERC000050](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) for bins and [ERC000047](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>) for MAGs under field names "broad-scale environmental context", "local environmental context", "environmental medium"
 
-Another example can be found [here](examples/input_example.tsv)
+An example of input tsv table can be found [here](examples/input_example.tsv)
 
-### Warnings
+## _Warnings_
 
-Raw-read runs from which genomes were generated should already be available on the INSDC (ENA by EBI, GenBank by NCBI, or DDBJ), hence at least one DRR|ERR|SRR accession should be available for every genome to be uploaded. Assembly accessions (ERZ|SRZ|DRZ) are also supported.
+### Mandatory vs Optional Fields
+Depending on whether you are registering bins or MAGs, a few of the fields above can be omitted, namely `completeness`, `contamination` and `rRNA_presence`. These values are used together to determine MAG quality according to MIMAG criteria (described here `TODO`)
+If you already generated these for your bins, our recommendation is to add them to the table anyway, as they describe your sample more accurately for other people to check. 
 
+### Existing accessions in the INSDC
+Raw-read runs or assemblies from which genomes were generated should already be available on the INSDC (ENA by EBI, GenBank by NCBI, or DDBJ) for this script to work. Therefore, at least a DRR|ERR|SRR accession (for runs) or a ERZ|SRZ|DRZ accession (for assemblies) should be available.  
+
+### TPA generation and upload
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.
 
+### Compress your fasta files
 Files to be uploaded will need to be compressed (e.g. already in .gz format).
 
-No more than 5000 genomes can be submitted at the same time.
-
+### Split your input tables
+No more than 5000 genomes can be submitted at the same time. If you have more than 5000, split your table into smaller ones and launch the `genome_uploader` for each table.
 
 ## Installation and setup
 
@@ -54,6 +72,7 @@ Next download webin-cli for upload to **ENA** with:
 
 ```bash
 download_webin_cli -v 8.2.0
+# we recommend using the most recent version of webin-cli
 ```
 
 ## Setting ENA Credentials
@@ -78,6 +97,7 @@ export ENA_WEBIN=your_username_here
 export ENA_WEBIN_PASSWORD=your_password_here
 ```
 
+## Command examples
 You can generate pre-upload files with:
 
 ```bash
@@ -87,9 +107,9 @@ genome_upload -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --ce
 where
   * `-u UPLOAD_STUDY`: study accession for genomes upload to ENA (in format ERPxxxxxx or PRJEBxxxxxx)
   * `---genome_info METADATA_FILE` : genomes metadata file in tsv format
-  * `-m, --mags, --b, --bins`: select for bin or MAG upload. If in doubt, look at [their definition according to ENA](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome.html>)
+  * `-m, --mags, --b, --bins`: select for bin or MAG upload. If in doubt, check [which definition fits best according to ENA](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome.html>)
   * `--out`: output folder (default: working directory)
-  * `--force`: forces reset of sample xmls generation
+  * `--force`: forces reset of sample xmls generation. This is useful if you changed something in your tsv table, or if ENA metadata haven't been downloaded correctly (you can check this in `ENA_backup.json`).
   * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand (it will need the `-test` option in the upload command for the test submission to work)
   * `--centre_name CENTRE_NAME`: name of the centre generating and uploading genomes
   * `--tpa`: if uploading TPA (Third PArty) generated genomes
