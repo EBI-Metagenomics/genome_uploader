@@ -134,6 +134,8 @@ bin_upload/MAG_upload
 └── submission.xml                  # xml used for genome registration on ENA
 ```
 
+An example of output files and folder structure submitted in test mode can be found under the `examples` folder.
+
 ## Upload genomes
 Once manifest files are generated, it is necessary to use ENA's webin-cli resource to upload genomes.
 
