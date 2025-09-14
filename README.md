@@ -152,3 +152,10 @@ java -jar ./webin-cli.jar \
 ```
 
 More information on ENA's webin-cli can be found [here](<https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html>).
+
+## Devs section
+
+### Testing submission in normal mode vs strict submission
+ENA's test servers reset every day. This means that if you try to register the same set of samples more than once in a single day, the request will fail because the automatically generated aliases would result as duplicates on ENA's servers. To prevent this issue, when you register samples in test mode, the `genome_uploader` appends a timestamp to each generated alias. This ensures that you can repeat your tests multiple times without running into duplicate-alias errors.
+
+However, when debugging or checking the script’s behavior in development mode, you might want the aliases to remain consistent across runs, so that repeated submissions refer to the same sample. To allow this, you can use the `--test-suffix` flag when running `genome_upload.py`, which lets you define a custom suffix instead of the automatic timestamp. This gives you more control over how sample aliases are generated during testing.
