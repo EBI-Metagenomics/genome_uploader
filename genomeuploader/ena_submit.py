@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 
 def identify_registered_genomes(message):
+    """
+    Parses an ENA error message to check for already registered genomes.
+
+    Args:
+        message (str): Error message from ENA receipt containing alias and accession info.
+
+    Returns:
+        dict: Dictionary mapping genome alias to accession for already registered genomes.
+    """
     alias_dict = {}
     pattern = r'alias: "([^"]+)"[^:]+accession: "([^"]+)"'
     for line in message.split("\n"):
@@ -32,6 +41,20 @@ class EnaSubmit:
         self.number_of_genomes = number_of_genomes
 
     def handle_genomes_registration(self):
+        """
+        Submits genome sample and submission XML files to ENA and parses the
+        receipt for registration results.
+        Handles both live and test modes, and extracts successfully registered
+        genomes as well as previously registered ones from error messages.
+        Updates and returns a dictionary mapping genome alias to accession for
+        all registered genomes.
+
+        Returns:
+            dict: Dictionary mapping genome alias to accession for all successfully or previously registered genomes.
+
+        Raises:
+            Exception: If the submission request fails.
+        """
         live_sub, mode = "", "live"
 
         if not self.live:

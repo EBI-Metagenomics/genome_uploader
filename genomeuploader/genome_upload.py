@@ -50,6 +50,13 @@ logger = logging.getLogger(__name__)
 
 
 def round_stats(stats: float) -> float:
+    """
+    Rounds a float value to two decimal places for genome statistics to respect ENA's checklists.
+    Args:
+        stats (float): The input statistic value to round.
+    Returns:
+        float: Rounded statistic.
+    """
     new_stat = round(float(stats), 2)
     if new_stat == 100.0:
         new_stat = 100
@@ -60,6 +67,15 @@ def round_stats(stats: float) -> float:
 
 
 def compute_mag_quality(completeness: float, contamination: float, rna_presence: bool) -> tuple[str, float, float]:
+    """
+    Computes the quality of a genome based on MIMAGs criteria.
+    Args:
+        completeness (float): Genome completeness percentage.
+        contamination (float): Genome contamination percentage.
+        rna_presence (bool): Whether rRNA genes are present (5S, 16S, 23S).
+    Returns:
+        tuple[str, float, float]: (quality string, completeness, contamination)
+    """
     rna_presence = str(rna_presence).lower() in ["true", "yes", "y"]
     quality = MQ
     if float(completeness) >= 90 and float(contamination) <= 5 and rna_presence:
@@ -69,8 +85,22 @@ def compute_mag_quality(completeness: float, contamination: float, rna_presence:
 
 
 def extract_tax_info(tax_info: str) -> tuple[int, str]:
-    # if unclassified, block the execution
-    lineage, kingdom_position_lineage, digit_annotation = tax_info.split(";"), 0, False
+    """
+    Extracts taxonomic information from a lineage string and determines
+    a valid scientific name and taxid for ENA submission. This function
+    parses a semicolon-separated lineage string (from NCBI or GTDB),
+    identifies the kingdom, and iteratively searches for a submittable
+    scientific name and taxid using ENA queries. It handles special
+    cases for unclassified lineages and rolls up the taxonomy tree if
+    needed, applying custom rules for Archaea, Bacteria, and Eukaryota.
+    Args:
+        tax_info (str): NCBI or GTDB taxonomic lineage string (semicolon-separated).
+    Returns:
+        tuple[int, str]: (taxid, scientific_name)
+    """
+    lineage = tax_info.split(";")
+
+    # if unclassified, block the execution and get the official name for the kingdom
     lineage_first = lineage[0]
     if "Unclassified " in lineage_first:
         if "Archaea" in lineage_first:
@@ -85,6 +115,14 @@ def extract_tax_info(tax_info: str) -> tuple[int, str]:
     kingdoms = ["Archaea", "Bacteria", "Eukaryota"]
     kingdom_taxa = ["2157", "2", "2759"]
 
+    # If the provided taxonomic annotation is a string, the first element
+    # in the list represents the kingdom. Otherwise, if it was provided as a
+    # list of integers, the first element of the lineage will be the NCBI
+    # root id, and the second element will indicate the kingdom. Once the
+    # kingdom slot is identified in the lineage, the script then checks its
+    # value against the existing kingdom list.
+    digit_annotation = False
+    kingdom_position_lineage = 0
     selected_kingdom, final_kingdom = kingdoms, ""
     if lineage[1].isdigit():
         selected_kingdom = kingdom_taxa
@@ -100,6 +138,8 @@ def extract_tax_info(tax_info: str) -> tuple[int, str]:
                 final_kingdom = selected_kingdom[index]
                 break
 
+    # start iterating from the most specific taxonomic level and roll up a
+    # level in the taxonomy tree if the identified name is unsubmittable
     iterator = len(lineage) - 1
     submittable = False
     rank = ""
@@ -111,6 +151,7 @@ def extract_tax_info(tax_info: str) -> tuple[int, str]:
             else:
                 iterator -= 1
                 continue
+        # format if using GTDB-like format
         elif "__" in scientific_name:
             scientific_name = scientific_name.split("__")[1]
         else:
@@ -130,6 +171,18 @@ def extract_tax_info(tax_info: str) -> tuple[int, str]:
 
 
 def extract_eukaryota_info(name: str, rank: str) -> tuple[bool, str, int]:
+    """
+    Extracts and formats eukaryotic taxonomic information for ENA submission.
+    It tries querying ENA API to verify whether custom names and/or exceptions
+    already exist in the NCBI taxonomy for the queried organism without having to
+    roll up a level in the taxonomy tree. If the name exists, it labels the
+    organism as submittable.
+    Args:
+        name (str): Taxonomic name.
+        rank (str): Taxonomic rank.
+    Returns:
+        tuple[bool, str, int]: (submittable, scientific_name, taxid)
+    """
     non_submittable = (False, "", 0)
 
     # Asterisks in given taxonomy suggest the classification might be not confident enough.
@@ -160,6 +213,18 @@ def extract_eukaryota_info(name: str, rank: str) -> tuple[bool, str, int]:
 
 
 def extract_bacteria_info(name: str, rank: str) -> tuple[bool, str, int]:
+    """
+    Extracts and formats bacterial taxonomic information for ENA submission.
+    It tries querying ENA API to verify whether custom names and/or exceptions
+    already exist in the NCBI taxonomy for the queried organism without having to
+    roll up a level in the taxonomy tree. If the name exists, it labels the
+    organism as submittable.
+    Args:
+        name (str): Taxonomic name.
+        rank (str): Taxonomic rank.
+    Returns:
+        tuple[bool, str, int]: (submittable, scientific_name, taxid)
+    """
     if rank == "species":
         name = name
     elif rank == "domain":
@@ -182,6 +247,18 @@ def extract_bacteria_info(name: str, rank: str) -> tuple[bool, str, int]:
 
 
 def extract_archaea_info(name: str, rank: str) -> tuple[bool, str, int]:
+    """
+    Extracts and formats archaeal taxonomic information for ENA submission.
+    It tries querying ENA API to verify whether custom names and/or exceptions
+    already exist in the NCBI taxonomy for the queried organism without having to
+    roll up a level in the taxonomy tree. If the name exists, it labels the
+    organism as submittable.
+    Args:
+        name (str): Taxonomic name.
+        rank (str): Taxonomic rank.
+    Returns:
+        tuple[bool, str, int]: (submittable, scientific_name, taxid)
+    """
     if rank == "species":
         name = name
     elif rank == "domain":
@@ -211,10 +288,35 @@ def extract_archaea_info(name: str, rank: str) -> tuple[bool, str, int]:
 
 
 def multiple_element_set(metadata_list: list) -> bool:
+    """
+    Checks if a list contains more than one unique element.
+    Args:
+        metadata_list (list): List of metadata values.
+    Returns:
+        bool: True if more than one unique element exists, else False.
+    """
     return len(set(metadata_list)) > 1
 
 
 def combine_ena_info(genome_info: dict, ena_dict: dict):
+    """
+    Combines ENA metadata into genome information dictionary.
+    For each genome, this function merges ENA run metadata into
+    the genome_info dictionary. It handles both co-assembly and
+    single-run genomes, resolving cases where multiple runs have
+    differing metadata by joining or marking fields as 'not provided'
+    or 'not applicable'. This ensures that co-assembly metadata are
+    applied to the newly registered sample only if they match in all
+    samples used to generate the co-assembly.
+    The function also rounds geographic coordinates and ensures
+    all accessions are stored as a comma-separated string.
+    Needs optimisation.
+    Args:
+        genome_info (dict): Dictionary of genome metadata.
+        ena_dict (dict): Dictionary of ENA metadata for runs.
+    Returns:
+        None. Modifies genome_info in place.
+    """
     for g in genome_info:
         # TODO: optimise all the part below
         if genome_info[g]["co-assembly"]:
@@ -283,6 +385,15 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
 
 
 def save_accessions(alias_accession_dict: dict, accessions_file: Path, write_mode: str):
+    """
+    Saves alias-accession mappings to a file.
+    Args:
+        alias_accession_dict (dict): Mapping of alias to accession.
+        accessions_file (Path): Output file path.
+        write_mode (str): File write mode ('w', 'a', etc.).
+    Returns:
+        None
+    """
     with accessions_file.open(write_mode) as f:
         for elem in alias_accession_dict:
             f.write(f"{elem}\t{alias_accession_dict[elem]}\n")
@@ -299,6 +410,21 @@ def create_manifest_dictionary(
     coverage: float,
     is_coassembly: bool,
 ) -> dict:
+    """
+    Creates a manifest dictionary for a genome.
+    Args:
+        run (str): Run accession(s).
+        alias (str): Genome alias.
+        assembly_software (str): Assembler name/version.
+        sequencing_method (str): Sequencing method.
+        mag_path (str): Path to genome file.
+        gen (str): Genome name.
+        study (str): Study accession.
+        coverage (float): Genome coverage depth.
+        is_coassembly (bool): Whether the genome comes from a co-assembly.
+    Returns:
+        dict: Manifest dictionary for the genome.
+    """
     manifest_dict = {
         "accessions": run,
         "alias": alias,
@@ -315,6 +441,13 @@ def create_manifest_dictionary(
 
 
 def compute_manifests(genomes: dict) -> dict:
+    """
+    Computes manifest dictionaries for all genomes.
+    Args:
+        genomes (dict): Dictionary of genome metadata.
+    Returns:
+        dict: Dictionary of manifest information for each genome.
+    """
     manifest_info = {}
     for g in genomes:
         manifest_info[g] = create_manifest_dictionary(
@@ -333,6 +466,15 @@ def compute_manifests(genomes: dict) -> dict:
 
 
 def create_sample_attribute(sample_attributes: Element, data_list: list, mag_data: bool = None):
+    """
+    Creates and appends a SAMPLE_ATTRIBUTE XML element.
+    Args:
+        sample_attributes (Element): Parent XML element for sample attributes.
+        data_list (list): List containing tag, value, and optionally units.
+        mag_data (bool, optional): If provided, value is extracted from mag_data dict.
+    Returns:
+        None
+    """
     tag = data_list[0]
     value = data_list[1]
     if mag_data:
@@ -351,6 +493,11 @@ def create_sample_attribute(sample_attributes: Element, data_list: list, mag_dat
 
 class GenomeUpload:
     def __init__(self, args):
+        """
+        Initialises the GenomeUpload class with user arguments.
+        Args:
+            args (dict): Dictionary of user arguments and options.
+        """
         self.genome_type = "bins" if args["bins"] else "MAGs"
         self.live = args["live"]
         self.private = args["private"]
@@ -373,6 +520,11 @@ class GenomeUpload:
         self.test_suffix = args["test_suffix"]
 
     def generate_files_and_folders(self):
+        """
+        Generates required directories and file paths for upload.
+        Returns:
+            tuple: Paths for upload_dir, backup_file, samples_xml, submission_xml, manifest_dir, accessions_file
+        """
         upload_name = "MAG_upload"
         if self.genome_type == "bins":
             upload_name = upload_name.replace("MAG", "bin")
@@ -399,7 +551,8 @@ class GenomeUpload:
 
     def validate_metadata_tsv(self) -> dict:
         """
-        Input table: expects the following parameters:
+        Validates the input metadata TSV file and returns genome info.
+        The input table expects the following parameters:
             genome_name: genome file name
             accessions: run(s) or assembly(ies) the genome was generated from
             assembly_software: assembler_vX.X
@@ -417,8 +570,11 @@ class GenomeUpload:
             co-assembly: True/False, whether the genome was generated from a co-assembly
             genome_coverage : genome coverage
             genome_path: path to genome to upload
+        Returns:
+            dict: Dictionary of validated genome metadata.
+        Raises:
+            ValueError: If mandatory fields are missing, formats are incorrect, or duplicates exist.
         """
-
         logger.info("Retrieving info for genomes to submit...")
 
         all_fields = MAG_MANDATORY_FIELDS + BIN_MANDATORY_FIELDS
@@ -512,6 +668,11 @@ class GenomeUpload:
         return genome_info
 
     def extract_genomes_info(self) -> dict:
+        """
+        Extracts and processes genome information from validated metadata.
+        Returns:
+            dict: Dictionary of processed genome information.
+        """
         genome_info = self.validate_metadata_tsv()
         for gen in genome_info:
             genome_info[gen]["accessions"] = genome_info[gen]["accessions"].split(",")
@@ -529,8 +690,8 @@ class GenomeUpload:
                     genome_info[gen]["completeness"],
                     genome_info[gen]["contamination"],
                 ) = compute_mag_quality(
-                    str(round_stats(genome_info[gen]["completeness"])),
-                    str(round_stats(genome_info[gen]["contamination"])),
+                    round_stats(genome_info[gen]["completeness"]),
+                    round_stats(genome_info[gen]["contamination"]),
                     genome_info[gen]["rRNA_presence"],
                 )
             except IndexError:
@@ -550,6 +711,24 @@ class GenomeUpload:
         return genome_info
 
     def extract_ena_info(self, genome_info: dict):
+        """
+        Retrieves ENA metadata for genomes and updates genome_info in place.
+        For each genome, this method queries ENA for run, study, and sample
+        metadata, handling both run and assembly accessions. It builds a
+        backup of ENA metadata, parses and normalises geographic and 
+        collection information, and merges all relevant ENA fields into
+        the genome_info dictionary. The method ensures that all runs are
+        mapped to their studies and samples, and handles empty or restricted
+        metadata by labelling them as missing. The final genome_info is
+        enriched with ENA metadata for downstream registration and manifest
+        generation.
+        Args:
+            genome_info (dict): Dictionary of genome metadata to update.
+        Returns:
+            None
+        Raises:
+            ValueError, IOError: If ENA queries fail or no study is found.
+        """
         logger.info("Retrieving project and run info from ENA (this might take a while)...")
 
         # retrieving metadata from runs (and runs from assembly accessions if provided)
@@ -692,6 +871,11 @@ class GenomeUpload:
         combine_ena_info(genome_info, temp_dict)
 
     def create_genome_dictionary(self) -> dict:
+        """
+        Orchestrates extraction and writing of genome metadata and XML files.
+        Returns:
+            dict: Final genome information dictionary.
+        """
         logger.info("Retrieving data for MAG submission...")
 
         genome_info = self.extract_genomes_info()
@@ -705,6 +889,13 @@ class GenomeUpload:
         return genome_info
 
     def write_submission_xml(self, study: bool = True):
+        """
+        Writes the submission XML file for ENA registration.
+        Args:
+            study (bool): If registering a study, include a hold date.
+        Returns:
+            None
+        """
         today = str(date.today())
 
         submission = et.Element("SUBMISSION")
@@ -726,6 +917,13 @@ class GenomeUpload:
             submission_file.write(dom.toprettyxml().encode("utf-8"))
 
     def write_genomes_xml(self, genomes: dict):
+        """
+        Writes the genome samples XML file for ENA registration.
+        Args:
+            genomes (dict): Dictionary of genome metadata.
+        Returns:
+            None
+        """
         map_sample_attributes = [
             # tag - value - unit (optional)
             ["project name", "description"],
@@ -797,6 +995,14 @@ class GenomeUpload:
             f.write(dom.toprettyxml().encode("utf-8"))
 
     def generate_genome_manifest(self, genome_info: dict, alias_to_sample: dict):
+        """
+        Generates a manifest file for a genome.
+        Args:
+            genome_info (dict): Dictionary of genome metadata.
+            alias_to_sample (dict): Mapping of genome alias to sample accession.
+        Returns:
+            None
+        """
         manifest_path = self.manifest_dir / f'{genome_info["genome_name"]}.manifest'
 
         tpa_addition, multiple_runs = "", ""
@@ -837,6 +1043,13 @@ class GenomeUpload:
                 outfile.write("TPA\ttrue\n")
 
     def genome_upload(self):
+        """
+        Main workflow for genome upload: validates, registers, and writes manifests.
+        Returns:
+            None
+        Raises:
+            Exception: If registration fails for any genome.
+        """
         genome_info, manifest_info = {}, {}
 
         # submission xml existence
