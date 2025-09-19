@@ -7,7 +7,7 @@ This repository allows to:
 
 ## How it works
 
-When you submit genomes to the ENA, you need to register a sample for every genome containing all the relevant metadata describing the genome and the sample of origin. The `genome_uploader` acts as the main linker to preserve sample metadata as much as possible. For every genome to register, you need an INSDC run or assembly accession associated to the genome in order for the script to inherit its relevant metadata. On top of those metadata, the script adds metadata specified by the user that are specific to the genome, like taxonomy, statistics, or the tools used to generate it. The metadata that ENA requires are descibed in the checklist for [MAGs](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) and for [bins](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>), respectively. 
+When you submit genomes to the [ENA](https://www.ebi.ac.uk/ena/browser/home), you need to register a sample for every genome containing all the relevant metadata describing the genome and the sample of origin. The `genome_uploader` acts as the main linker to preserve sample metadata as much as possible. For every genome to register, you need an INSDC run or assembly accession associated to the genome in order for the script to inherit its relevant metadata. On top of those metadata, the script adds metadata specified by the user that are specific to the genome, like taxonomy, statistics, or the tools used to generate it. The metadata that ENA requires are descibed in the checklist for [MAGs](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) and for [bins](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>), respectively.
 
 ### Input tsv and fields
 The genome_uploader takes as input one tsv (tab-separated values) table in the following format:
@@ -45,8 +45,9 @@ An example of input tsv table can be found [here](examples/input_example.tsv)
 ## _Warnings_
 
 ### Mandatory vs Optional Fields
-Depending on whether you are registering bins or MAGs, a few of the fields above can be omitted, namely `completeness`, `contamination` and `rRNA_presence`. These values are used together to determine MAG quality according to MIMAG criteria (described here `TODO`)
-If you already generated these for your bins, our recommendation is to add them to the table anyway, as they describe your sample more accurately for other people to check. 
+All fields above are mandatory for MAG submission (see ENA's MAGs checklist [here](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>)). However, if you are registering bins, you cand decide whether to omit the following fields: `completeness`, `contamination` and `rRNA_presence`(see ENA's bins checklist [here](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>)). These values are used together to determine MAG quality according to MIMAG criteria (described [here](https://www.nature.com/articles/nbt.3893/tables/1)).
+
+If you already generated these for your bins, our recommendation is to include them for shareability and to describe your sample more accurately.
 
 ### Existing accessions in the INSDC
 Raw-read runs or assemblies from which genomes were generated should already be available on the INSDC (ENA by EBI, GenBank by NCBI, or DDBJ) for this script to work. Therefore, at least a DRR|ERR|SRR accession (for runs) or a ERZ|SRZ|DRZ accession (for assemblies) should be available.  
