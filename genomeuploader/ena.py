@@ -52,6 +52,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_default_connection_headers():
+    """
+    Returns default HTTP headers for ENA API requests.
+    Returns:
+        dict: Dictionary containing HTTP headers.
+    """
     return {
         "headers": {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -61,18 +66,39 @@ def get_default_connection_headers():
 
 
 def get_default_params():
+    """
+    Returns default parameters for ENA API requests.
+    Returns:
+        dict: Dictionary of default API parameters.
+    """
     return {"format": "json", "includeMetagenomes": True, "dataPortal": "ena"}
 
 
 def parse_accession(accession):
+    """
+    Determines the accession type based on its prefix.
+    Args:
+        accession (str): ENA accession string.
+    Returns:
+        str: Accession type (e.g., 'run', 'study', etc.).
+    Raises:
+        InvalidAccessionError: If the accession format is not recognized.
+    """
     for prefix, acc_type in ACCESSION_MAP.items():
         if accession.startswith(prefix):
             return acc_type
-    logging.error(f"Unrecognized accession format: '{accession}'")
+    logging.error(f"Unrecognised accession format: '{accession}'")
     raise InvalidAccessionError("Invalid accession: {accession}")
 
 
 def configure_credentials(env_filename=USER_ENV_FILE_PATH):
+    """
+    Loads ENA credentials from environment variables or .env files.
+    Args:
+        env_filename (str): Name of the environment file to search for.
+    Returns:
+        tuple: (username, password) for ENA authentication, or (None, None) if not found.
+    """
     search_paths = [Path.home() / env_filename, Path.cwd() / env_filename, Path.cwd() / ".env"]
 
     for env_path in search_paths:
@@ -94,6 +120,13 @@ def configure_credentials(env_filename=USER_ENV_FILE_PATH):
 
 
 def query_taxid(taxid):
+    """
+    Queries ENA taxonomy API for a scientific name given a taxid.
+    Args:
+        taxid (str or int): NCBI taxonomic ID.
+    Returns:
+        str: Scientific name corresponding to the taxid, or empty string if not found.
+    """
     url = f"https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{taxid}"
     response = requests.get(url)
 
@@ -110,6 +143,16 @@ def query_taxid(taxid):
 
 
 def query_scientific_name(scientific_name, search_rank=False):
+    """
+    Queries ENA taxonomy API for a scientific name and optionally its rank.
+    If the name exists, it checks if it's submittable and retrieves its taxid.
+    Args:
+        scientific_name (str): Scientific name to query.
+        search_rank (bool): If True, also return taxonomic rank.
+    Returns:
+        tuple or bool: If search_rank is True, returns (submittable, taxid,
+        rank). Otherwise, returns (submittable, taxid).
+    """
     url = f"https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{scientific_name}"
     response = requests.get(url)
 
@@ -163,10 +206,24 @@ class EnaQuery:
         self.query_type = query_type
 
     def post_request(self, data):
+        """
+        Sends a POST request to the ENA public API.
+        Args:
+            data (dict): Data payload for the POST request.
+        Returns:
+            requests.Response: Response object from the ENA API.
+        """
         response = requests.post(self.public_url, data=data, **get_default_connection_headers())
         return response
 
     def get_request(self, url):
+        """
+        Sends a GET request to the ENA API (private or public).
+        Args:
+            url (str): URL to send the GET request to.
+        Returns:
+            requests.Response: Response object from the ENA API.
+        """
         if self.private:
             response = requests.get(url, auth=self.auth)
         else:
@@ -174,6 +231,17 @@ class EnaQuery:
         return response
 
     def get_data_or_raise(self, response, mode="single_json"):
+        """
+        Parses the response from ENA and raises an error if the response
+        is empty or invalid. It varies parsing based on the input format.
+        Args:
+            response (requests.Response): Response object from ENA API.
+            mode (str): Parsing mode ('xml', 'full_json', 'single_json').
+        Returns:
+            object: Parsed response data (XML document or JSON object).
+        Raises:
+            EnaEmptyResponseError, EnaParseError: If response is empty or cannot be parsed.
+        """
         data_txt = response.text.strip()
         if not data_txt:
             raise EnaEmptyResponseError(f"{self.accession}: Empty or missing response text.")
@@ -193,6 +261,18 @@ class EnaQuery:
             raise EnaParseError(f"{self.accession}: Failed to parse response as {mode}: {e}")
 
     def retry_or_handle_request_error(self, request, *args, **kwargs):
+        """
+        Retries a request to the ENA API up to RETRY_COUNT times on
+        connection or timeout errors.
+        Args:
+            request (callable): Function to call for the request (get or post).
+            *args: Arguments for the request function.
+            **kwargs: Keyword arguments for the request function.
+        Returns:
+            requests.Response: Response object from the ENA API.
+        Raises:
+            ValueError, HTTPError, RequestException: If all retries fail or other errors occur.
+        """
         attempt = 0
         while attempt < RETRY_COUNT:
             try:
@@ -217,6 +297,17 @@ class EnaQuery:
                 raise
 
     def _fetch_ena_data(self, *, url=None, data=None, method="get", mode="single_json", reformatter=None):
+        """
+        Fetches and parses data from ENA using the specified method and mode.
+        Args:
+            url (str, optional): URL for GET requests.
+            data (dict, optional): Data payload for POST requests.
+            method (str): 'get' or 'post'.
+            mode (str): Parsing mode ('xml', 'full_json', 'single_json').
+            reformatter (callable, optional): Function to reformat parsed data.
+        Returns:
+            object: Reformatted or parsed response data from ENA.
+        """
         request_func = self.get_request if method == "get" else self.post_request
         request_input = url or data
         response = self.retry_or_handle_request_error(request_func, request_input)
@@ -290,7 +381,7 @@ class EnaQuery:
         return result
 
     def _get_private_study_runs(self):
-        #   Pagination documentation unclear - offest not working. Using hardcoded max 2000 default. TO MODIFY
+        #   Pagination documentation unclear - offset not working. Using hardcoded max 2000 default. TO MODIFY
         url = f"{self.private_url}/runs/{self.accession}?format=json&max-results=2000"
 
         def reformatter(runs):
@@ -338,9 +429,14 @@ class EnaQuery:
         return result
 
     def build_query(self):
-        """If the private flag is given, assume private data and try private APIs.
-        ENA also has cases where a run may be private but the sample may be public etc. Hence always try
-        public if private fails"""
+        """
+        Executes the appropriate ENA query (private or public) for the specified
+        query type. If the private flag is given, assume private data and try
+        private APIs. ENA also has cases where a run may be private but the
+        sample may be public etc. Hence always try public if private fails
+        Returns:
+            dict or list: ENA response data for the requested query type (study, run, sample, etc.).
+        """
         api_map = {
             "study": (self._get_private_study, self._get_public_study),
             "run": (self._get_private_run, self._get_public_run),
