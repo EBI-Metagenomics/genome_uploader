@@ -28,7 +28,6 @@ from xml.dom.minidom import Element
 import click
 import pandas as pd
 
-import genomeuploader.ena as ena
 from genomeuploader.constants import (
     BIN_CHECKLIST,
     BIN_CHECKLIST_TYPE,
@@ -44,6 +43,7 @@ from genomeuploader.constants import (
 )
 from genomeuploader.ena import EnaQuery
 from genomeuploader.ena_submit import EnaSubmit
+from genomeuploader.taxon_finder import TaxonFinder
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -82,209 +82,6 @@ def compute_mag_quality(completeness: float, contamination: float, rna_presence:
         quality = HQ
 
     return quality, completeness, contamination
-
-
-def extract_tax_info(tax_info: str) -> tuple[int, str]:
-    """
-    Extracts taxonomic information from a lineage string and determines
-    a valid scientific name and taxid for ENA submission. This function
-    parses a semicolon-separated lineage string (from NCBI or GTDB),
-    identifies the kingdom, and iteratively searches for a submittable
-    scientific name and taxid using ENA queries. It handles special
-    cases for unclassified lineages and rolls up the taxonomy tree if
-    needed, applying custom rules for Archaea, Bacteria, and Eukaryota.
-    Args:
-        tax_info (str): NCBI or GTDB taxonomic lineage string (semicolon-separated).
-    Returns:
-        tuple[int, str]: (taxid, scientific_name)
-    """
-    lineage = tax_info.split(";")
-
-    # if unclassified, block the execution and get the official name for the kingdom
-    lineage_first = lineage[0]
-    if "Unclassified " in lineage_first:
-        if "Archaea" in lineage_first:
-            scientific_name = "uncultured archaeon"
-        elif "Bacteria" in lineage_first:
-            scientific_name = "uncultured bacterium"
-        elif "Eukaryota" in lineage_first:
-            scientific_name = "uncultured eukaryote"
-        submittable, taxid, rank = ena.query_scientific_name(scientific_name, search_rank=True)
-        return taxid, scientific_name
-
-    kingdoms = ["Archaea", "Bacteria", "Eukaryota"]
-    kingdom_taxa = ["2157", "2", "2759"]
-
-    # If the provided taxonomic annotation is a string, the first element
-    # in the list represents the kingdom. Otherwise, if it was provided as a
-    # list of integers, the first element of the lineage will be the NCBI
-    # root id, and the second element will indicate the kingdom. Once the
-    # kingdom slot is identified in the lineage, the script then checks its
-    # value against the existing kingdom list.
-    digit_annotation = False
-    kingdom_position_lineage = 0
-    selected_kingdom, final_kingdom = kingdoms, ""
-    if lineage[1].isdigit():
-        selected_kingdom = kingdom_taxa
-        kingdom_position_lineage = 2
-        digit_annotation = True
-    for index, k in enumerate(selected_kingdom):
-        if digit_annotation:
-            if k == lineage[kingdom_position_lineage]:
-                final_kingdom = selected_kingdom[index]
-                break
-        else:
-            if k in lineage[kingdom_position_lineage]:
-                final_kingdom = selected_kingdom[index]
-                break
-
-    # start iterating from the most specific taxonomic level and roll up a
-    # level in the taxonomy tree if the identified name is unsubmittable
-    iterator = len(lineage) - 1
-    submittable = False
-    rank = ""
-    while iterator != -1 and not submittable:
-        scientific_name = lineage[iterator].strip()
-        if digit_annotation:
-            if "*" not in scientific_name:
-                scientific_name = ena.query_taxid(scientific_name)
-            else:
-                iterator -= 1
-                continue
-        # format if using GTDB-like format
-        elif "__" in scientific_name:
-            scientific_name = scientific_name.split("__")[1]
-        else:
-            raise ValueError("Unrecognised taxonomy format: " + scientific_name)
-        submittable, taxid, rank = ena.query_scientific_name(scientific_name, search_rank=True)
-
-        if not submittable:
-            if final_kingdom == "Archaea" or final_kingdom == "2157":
-                submittable, scientific_name, taxid = extract_archaea_info(scientific_name, rank)
-            elif final_kingdom == "Bacteria" or final_kingdom == "2":
-                submittable, scientific_name, taxid = extract_bacteria_info(scientific_name, rank)
-            elif final_kingdom == "Eukaryota" or final_kingdom == "2759":
-                submittable, scientific_name, taxid = extract_eukaryota_info(scientific_name, rank)
-        iterator -= 1
-
-    return taxid, scientific_name
-
-
-def extract_eukaryota_info(name: str, rank: str) -> tuple[bool, str, int]:
-    """
-    Extracts and formats eukaryotic taxonomic information for ENA submission.
-    It tries querying ENA API to verify whether custom names and/or exceptions
-    already exist in the NCBI taxonomy for the queried organism without having to
-    roll up a level in the taxonomy tree. If the name exists, it labels the
-    organism as submittable.
-    Args:
-        name (str): Taxonomic name.
-        rank (str): Taxonomic rank.
-    Returns:
-        tuple[bool, str, int]: (submittable, scientific_name, taxid)
-    """
-    non_submittable = (False, "", 0)
-
-    # Asterisks in given taxonomy suggest the classification might be not confident enough.
-    if "*" in name:
-        return non_submittable
-
-    if rank == "super kingdom":
-        name = "uncultured eukaryote"
-        submittable, taxid = ena.query_scientific_name(name)
-        return submittable, name, taxid
-    else:
-        name = name.capitalize() + " sp."
-        submittable, taxid = ena.query_scientific_name(name)
-        if submittable:
-            return submittable, name, taxid
-        else:
-            name = "uncultured " + name
-            submittable, taxid = ena.query_scientific_name(name)
-            if submittable:
-                return submittable, name, taxid
-            else:
-                name = name.replace(" sp.", "")
-                submittable, taxid = ena.query_scientific_name(name)
-                if submittable:
-                    return submittable, name, taxid
-                else:
-                    return non_submittable
-
-
-def extract_bacteria_info(name: str, rank: str) -> tuple[bool, str, int]:
-    """
-    Extracts and formats bacterial taxonomic information for ENA submission.
-    It tries querying ENA API to verify whether custom names and/or exceptions
-    already exist in the NCBI taxonomy for the queried organism without having to
-    roll up a level in the taxonomy tree. If the name exists, it labels the
-    organism as submittable.
-    Args:
-        name (str): Taxonomic name.
-        rank (str): Taxonomic rank.
-    Returns:
-        tuple[bool, str, int]: (submittable, scientific_name, taxid)
-    """
-    if rank == "species":
-        name = name
-    elif rank == "domain":
-        name = "uncultured bacterium"
-    elif rank in ["family", "order", "class", "phylum"]:
-        name = f"uncultured {name} bacterium"
-    elif rank == "genus":
-        name = f"uncultured {name} sp."
-
-    submittable, taxid, rank = ena.query_scientific_name(name, search_rank=True)
-    if not submittable:
-        if rank in ["species", "genus"] and name.lower().endswith("bacteria"):
-            name = f"uncultured {name.lower().replace('bacteria', 'bacterium')}"
-        elif rank == "family":
-            if name.lower() == "deltaproteobacteria":
-                name = "uncultured delta proteobacterium"
-        submittable, taxid = ena.query_scientific_name(name)
-
-    return submittable, name, taxid
-
-
-def extract_archaea_info(name: str, rank: str) -> tuple[bool, str, int]:
-    """
-    Extracts and formats archaeal taxonomic information for ENA submission.
-    It tries querying ENA API to verify whether custom names and/or exceptions
-    already exist in the NCBI taxonomy for the queried organism without having to
-    roll up a level in the taxonomy tree. If the name exists, it labels the
-    organism as submittable.
-    Args:
-        name (str): Taxonomic name.
-        rank (str): Taxonomic rank.
-    Returns:
-        tuple[bool, str, int]: (submittable, scientific_name, taxid)
-    """
-    if rank == "species":
-        name = name
-    elif rank == "domain":
-        name = "uncultured archaeon"
-    elif rank == "phylum":
-        if "Euryarchaeota" in name:
-            name = "uncultured euryarchaeote"
-        elif "Candidatus" in name:
-            name = f"{name} archaeon"
-        else:
-            name = f"uncultured {name} archaeon"
-    elif rank in ["family", "order", "class"]:
-        name = f"uncultured {name} archaeon"
-    elif rank == "genus":
-        name = f"uncultured {name} sp."
-
-    submittable, taxid, rank = ena.query_scientific_name(name, search_rank=True)
-    if not submittable:
-        if "Candidatus" in name:
-            if rank == "phylum":
-                name = name.replace("Candidatus ", "")
-            elif rank == "family":
-                name = name.replace("uncultured ", "")
-            submittable, taxid = ena.query_scientific_name(name)
-
-    return submittable, name, taxid
 
 
 def multiple_element_set(metadata_list: list) -> bool:
@@ -704,9 +501,9 @@ class GenomeUpload:
 
             genome_info[gen]["alias"] = gen
 
-            tax_id, scientific_name = extract_tax_info(genome_info[gen]["NCBI_lineage"])
-            genome_info[gen]["taxID"] = tax_id
-            genome_info[gen]["scientific_name"] = scientific_name
+            submittable_taxonomy = TaxonFinder(genome_info[gen]["NCBI_lineage"])
+            genome_info[gen]["taxID"] = submittable_taxonomy.taxid
+            genome_info[gen]["scientific_name"] = submittable_taxonomy.scientific_name
 
         return genome_info
 
