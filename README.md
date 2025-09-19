@@ -52,6 +52,8 @@ If you already generated these for your bins, our recommendation is to include t
 ### Existing accessions in the INSDC
 Raw-read runs or assemblies from which genomes were generated should already be available on the INSDC (ENA by EBI, GenBank by NCBI, or DDBJ) for this script to work. Therefore, at least a DRR|ERR|SRR accession (for runs) or a ERZ|SRZ|DRZ accession (for assemblies) should be available.  
 
+If you are working with your own, private data on ENA, you will need to add the `--private` flag to access private metadata through ENA API. This implies that if you are working on public data, you can omit the flag. However, you will need to submit two different batches of data if you are handling both private and public data.
+
 ### TPA generation and upload
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.
 
