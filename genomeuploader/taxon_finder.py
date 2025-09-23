@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2017-2024 EMBL - European Bioinformatics Institute
+# Copyright 2017-2025 EMBL - European Bioinformatics Institute
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,13 +25,14 @@ class TaxonFinder:
         """
         Extracts taxonomic information from a lineage string and determines
         a valid scientific name and taxid for ENA submission. This function
-        parses a semicolon-separated lineage string (from NCBI or GTDB),
+        parses a semicolon-separated lineage string (with taxon names or ids),
         identifies the kingdom, and iteratively searches for a submittable
         scientific name and taxid using ENA queries. It handles special
         cases for unclassified lineages and rolls up the taxonomy tree if
         needed, applying custom rules for Archaea, Bacteria, and Eukaryota.
         Args:
-            tax_info (str): NCBI or GTDB taxonomic lineage string (semicolon-separated).
+            tax_info (str): NCBI taxonomic lineage string (with semicolons
+            separating taxon names or ids i.e. list of strings or integers).
         Returns:
             tuple[int, str]: (taxid, scientific_name)
         """
