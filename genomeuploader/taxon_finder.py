@@ -89,7 +89,7 @@ class TaxonFinder:
                 else:
                     iterator -= 1
                     continue
-            # format if using GTDB-like format
+            # format if using format like "k__;...g__;s__"
             elif "__" in scientific_name:
                 scientific_name = scientific_name.split("__")[1]
             else:
