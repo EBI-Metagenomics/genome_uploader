@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2017-2024 EMBL - European Bioinformatics Institute
+# Copyright 2017-2025 EMBL - European Bioinformatics Institute
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -52,6 +52,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_default_connection_headers():
+    """
+    Returns default HTTP headers for ENA API requests.
+    Returns:
+        dict: Dictionary containing HTTP headers.
+    """
     return {
         "headers": {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -61,18 +66,39 @@ def get_default_connection_headers():
 
 
 def get_default_params():
+    """
+    Returns default parameters for ENA API requests.
+    Returns:
+        dict: Dictionary of default API parameters.
+    """
     return {"format": "json", "includeMetagenomes": True, "dataPortal": "ena"}
 
 
 def parse_accession(accession):
+    """
+    Determines the accession type based on its prefix.
+    Args:
+        accession (str): ENA accession string.
+    Returns:
+        str: Accession type (e.g., 'run', 'study', etc.).
+    Raises:
+        InvalidAccessionError: If the accession format is not recognized.
+    """
     for prefix, acc_type in ACCESSION_MAP.items():
         if accession.startswith(prefix):
             return acc_type
-    logging.error(f"Unrecognized accession format: '{accession}'")
+    logger.error(f"Unrecognised accession format: '{accession}'")
     raise InvalidAccessionError("Invalid accession: {accession}")
 
 
 def configure_credentials(env_filename=USER_ENV_FILE_PATH):
+    """
+    Loads ENA credentials from environment variables or .env files.
+    Args:
+        env_filename (str): Name of the environment file to search for.
+    Returns:
+        tuple: (username, password) for ENA authentication, or (None, None) if not found.
+    """
     search_paths = [Path.home() / env_filename, Path.cwd() / env_filename, Path.cwd() / ".env"]
 
     for env_path in search_paths:
@@ -91,53 +117,6 @@ def configure_credentials(env_filename=USER_ENV_FILE_PATH):
         return None, None
 
     return username, password
-
-
-def query_taxid(taxid):
-    url = f"https://www.ebi.ac.uk/ena/taxonomy/rest/tax-id/{taxid}"
-    response = requests.get(url)
-
-    try:
-        # Will raise exception if response status code is non-200
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        logging.error(f"Request failed {url} with error {e}")
-        return False
-
-    res = response.json()
-
-    return res.get("scientificName", "")
-
-
-def query_scientific_name(scientific_name, search_rank=False):
-    url = f"https://www.ebi.ac.uk/ena/taxonomy/rest/scientific-name/{scientific_name}"
-    response = requests.get(url)
-
-    try:
-        # Will raise exception if response status code is non-200
-        response.raise_for_status()
-    except requests.exceptions.HTTPError:
-        if search_rank:
-            return False, "", ""
-        else:
-            return False, ""
-
-    try:
-        res = response.json()[0]
-    except IndexError:
-        if search_rank:
-            return False, "", ""
-        else:
-            return False, ""
-
-    submittable = res.get("submittable", "").lower() == "true"
-    taxid = res.get("taxId", "")
-    rank = res.get("rank", "")
-
-    if search_rank:
-        return submittable, taxid, rank
-    else:
-        return submittable, taxid
 
 
 class CredentialsManager:
@@ -163,10 +142,24 @@ class EnaQuery:
         self.query_type = query_type
 
     def post_request(self, data):
+        """
+        Sends a POST request to the ENA public API.
+        Args:
+            data (dict): Data payload for the POST request.
+        Returns:
+            requests.Response: Response object from the ENA API.
+        """
         response = requests.post(self.public_url, data=data, **get_default_connection_headers())
         return response
 
     def get_request(self, url):
+        """
+        Sends a GET request to the ENA API (private or public).
+        Args:
+            url (str): URL to send the GET request to.
+        Returns:
+            requests.Response: Response object from the ENA API.
+        """
         if self.private:
             response = requests.get(url, auth=self.auth)
         else:
@@ -174,6 +167,17 @@ class EnaQuery:
         return response
 
     def get_data_or_raise(self, response, mode="single_json"):
+        """
+        Parses the response from ENA and raises an error if the response
+        is empty or invalid. It varies parsing based on the input format.
+        Args:
+            response (requests.Response): Response object from ENA API.
+            mode (str): Parsing mode ('xml', 'full_json', 'single_json').
+        Returns:
+            object: Parsed response data (XML document or JSON object).
+        Raises:
+            EnaEmptyResponseError, EnaParseError: If response is empty or cannot be parsed.
+        """
         data_txt = response.text.strip()
         if not data_txt:
             raise EnaEmptyResponseError(f"{self.accession}: Empty or missing response text.")
@@ -193,6 +197,18 @@ class EnaQuery:
             raise EnaParseError(f"{self.accession}: Failed to parse response as {mode}: {e}")
 
     def retry_or_handle_request_error(self, request, *args, **kwargs):
+        """
+        Retries a request to the ENA API up to RETRY_COUNT times on
+        connection or timeout errors.
+        Args:
+            request (callable): Function to call for the request (get or post).
+            *args: Arguments for the request function.
+            **kwargs: Keyword arguments for the request function.
+        Returns:
+            requests.Response: Response object from the ENA API.
+        Raises:
+            ValueError, HTTPError, RequestException: If all retries fail or other errors occur.
+        """
         attempt = 0
         while attempt < RETRY_COUNT:
             try:
@@ -206,24 +222,35 @@ class EnaQuery:
                     raise ValueError(f"Could not find {self.accession} in ENA after {attempt} attempts. Error: {retry_err}")
                 sleep(1)
             except HTTPError as http_err:
-                logging.error(f"HTTP response has an error status: {http_err}")
+                logger.error(f"HTTP response has an error status: {http_err}")
                 raise
             except RequestException as req_err:
-                logging.error(f"Network-related error status: {req_err}")
+                logger.error(f"Network-related error status: {req_err}")
                 raise
             #   should hopefully encompass all other issues...
             except Exception as e:
-                logging.error(f"An unexpected error occurred: {e}")
+                logger.error(f"An unexpected error occurred: {e}")
                 raise
 
     def _fetch_ena_data(self, *, url=None, data=None, method="get", mode="single_json", reformatter=None):
+        """
+        Fetches and parses data from ENA using the specified method and mode.
+        Args:
+            url (str, optional): URL for GET requests.
+            data (dict, optional): Data payload for POST requests.
+            method (str): 'get' or 'post'.
+            mode (str): Parsing mode ('xml', 'full_json', 'single_json').
+            reformatter (callable, optional): Function to reformat parsed data.
+        Returns:
+            object: Reformatted or parsed response data from ENA.
+        """
         request_func = self.get_request if method == "get" else self.post_request
         request_input = url or data
         response = self.retry_or_handle_request_error(request_func, request_input)
         try:
             parsed = self.get_data_or_raise(response, mode=mode)
         except (EnaEmptyResponseError, EnaParseError) as e:
-            logging.error(e)
+            logger.error(e)
             return None
         return reformatter(parsed) if reformatter else parsed
 
@@ -239,7 +266,7 @@ class EnaQuery:
             }
 
         data = self._fetch_ena_data(url=url, mode="single_json", reformatter=reformatter)
-        logging.info(f"{self.accession} private run returned from ENA")
+        logger.info(f"{self.accession} private run returned from ENA")
         return data
 
     def _get_public_run(self):
@@ -248,7 +275,7 @@ class EnaQuery:
             {"result": "read_run", "query": f'run_accession="{self.accession}"', "fields": "secondary_study_accession,sample_accession"}
         )
         result = self._fetch_ena_data(data=data, method="post", mode="single_json")
-        logging.info(f"{self.accession} public run returned from ENA")
+        logger.info(f"{self.accession} public run returned from ENA")
         return result
 
     def _get_private_study(self):
@@ -259,14 +286,14 @@ class EnaQuery:
             return {"study_accession": self.accession, "study_description": desc}
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logging.info(f"{self.accession} private study returned from ENA")
+        logger.info(f"{self.accession} private study returned from ENA")
         return result
 
     def _get_public_study(self):
         data = get_default_params()
         data.update({"result": "study", "query": f'{self.acc_type}="{self.accession}"', "fields": STUDY_DEFAULT_FIELDS})
         result = self._fetch_ena_data(data=data, method="post", mode="single_json")
-        logging.info(f"{self.accession} public study returned from ENA")
+        logger.info(f"{self.accession} public study returned from ENA")
         return result
 
     def _get_private_run_from_assembly(self):
@@ -276,7 +303,7 @@ class EnaQuery:
             return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logging.info(f"private run from the assembly {self.accession} returned from ENA")
+        logger.info(f"private run from the assembly {self.accession} returned from ENA")
         return result
 
     def _get_public_run_from_assembly(self):
@@ -286,11 +313,11 @@ class EnaQuery:
             return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logging.info(f"public run from the assembly {self.accession} returned from ENA")
+        logger.info(f"public run from the assembly {self.accession} returned from ENA")
         return result
 
     def _get_private_study_runs(self):
-        #   Pagination documentation unclear - offest not working. Using hardcoded max 2000 default. TO MODIFY
+        #   Pagination documentation unclear - offset not working. Using hardcoded max 2000 default. TO MODIFY
         url = f"{self.private_url}/runs/{self.accession}?format=json&max-results=2000"
 
         def reformatter(runs):
@@ -302,15 +329,15 @@ class EnaQuery:
             return result
 
         result = self._fetch_ena_data(url=url, mode="full_json", reformatter=reformatter)
-        logging.info(f"found {len(result)} runs for study {self.accession}")
-        logging.info(f"private runs from study {self.accession}, returned from ENA")
+        logger.info(f"found {len(result)} runs for study {self.accession}")
+        logger.info(f"private runs from study {self.accession}, returned from ENA")
         return result
 
     def _get_public_study_runs(self):
         data = get_default_params()
         data.update({"result": "read_run", "fields": STUDY_RUN_DEFAULT_FIELDS, "query": f"{self.acc_type}={self.accession}"})
         result = self._fetch_ena_data(data=data, method="post", mode="full_json")
-        logging.info(f"public runs from study {self.accession}, returned from ENA")
+        logger.info(f"public runs from study {self.accession}, returned from ENA")
         return result
 
     def _get_private_sample(self):
@@ -327,20 +354,25 @@ class EnaQuery:
             return reformatted
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logging.info(f"{self.accession} private sample returned from ENA")
+        logger.info(f"{self.accession} private sample returned from ENA")
         return result
 
     def _get_public_sample(self):
         data = get_default_params()
         data.update({"result": "sample", "fields": SAMPLE_DEFAULT_FIELDS, "query": f"{self.acc_type}={self.accession}"})
         result = self._fetch_ena_data(data=data, method="post", mode="single_json")
-        logging.info(f"{self.accession} public sample returned from ENA")
+        logger.info(f"{self.accession} public sample returned from ENA")
         return result
 
     def build_query(self):
-        """If the private flag is given, assume private data and try private APIs.
-        ENA also has cases where a run may be private but the sample may be public etc. Hence always try
-        public if private fails"""
+        """
+        Executes the appropriate ENA query (private or public) for the specified
+        query type. If the private flag is given, assume private data and try
+        private APIs. ENA also has cases where a run may be private but the
+        sample may be public etc. Hence always try public if private fails
+        Returns:
+            dict or list: ENA response data for the requested query type (study, run, sample, etc.).
+        """
         api_map = {
             "study": (self._get_private_study, self._get_public_study),
             "run": (self._get_private_run, self._get_public_run),
@@ -355,7 +387,7 @@ class EnaQuery:
             try:
                 ena_response = private_api()
             except Exception:
-                logging.info(f"Private API for {self.query_type} failed, trying public.")
+                logger.info(f"Private API for {self.query_type} failed, trying public.")
                 ena_response = public_api()
         else:
             ena_response = public_api()
