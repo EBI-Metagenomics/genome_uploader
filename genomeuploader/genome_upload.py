@@ -879,9 +879,11 @@ class GenomeUpload:
                     save_accessions(new_alias_accession_map, self.accessions_file, "a")
                     alias_accession_map.update(new_alias_accession_map)
                 else:
-                    raise Exception("An error occurred during the registration step.")
+                    raise Exception("An error occurred during the registration step. "
+                                    "Please, check submission_receipt_retry.xml file for details.")
             else:
-                raise Exception("Some genomes could not be submitted to ENA. Please, check the errors above.")
+                raise Exception("Some genomes could not be submitted to ENA. "
+                                "Please, check the errors above and submission_receipt.xml file.")
 
         logger.info("Generating manifest files...")
 
