@@ -24,6 +24,7 @@ dependencies = [
     "numpy>=1.21",
     "python-dotenv>=1.0",
     "click>=8.1",
+    "mgnify-pipelines-toolkit>=1.4.5"
 ]
 
 [project.urls]
