@@ -1,0 +1,7 @@
+name: genomeuploader
+channels:
+  - bioconda
+  - defaults
+dependencies:
+  - ena-webin-cli>=9.0.1
+  - mgnify-pipelines-toolkit>=1.4.5
