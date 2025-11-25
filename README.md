@@ -69,8 +69,7 @@ No more than 5000 genomes can be submitted at the same time. If you have more th
 
 Command will install all necessary dependencies into `genomeuploader` environment
 ```bash
-conda env create -f requirements.yml
-conda activate genomeuploader
+conda install bioconda::genome-uploader
 ```
 
 ### Installation with pip 
@@ -79,7 +78,7 @@ Install `genome_uploader` with:
 ```bash
 pip install genome_uploader
 ```
-Additionally, you need to download [uploader .jar](https://github.com/enasequence/webin-cli) from the [latest release](https://github.com/enasequence/webin-cli/releases). 
+Additionally, you need to download [the webin-cli.jar](https://github.com/enasequence/webin-cli) from the [latest release](https://github.com/enasequence/webin-cli/releases). 
 
 
 ## Setting ENA Credentials
@@ -121,7 +120,7 @@ genome_upload \
 where
   * `-u UPLOAD_STUDY`: study accession for genomes upload to ENA (in format ERPxxxxxx or PRJEBxxxxxx)
   * `--genome_info METADATA_FILE` : genomes metadata file in tsv format
-  * `-m, --mags, --b, --bins`: select for bin or MAG upload. If in doubt, check [which definition fits best according to ENA](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome.html>)
+  * `-m, --mags, --b, --bins`: select either of these for bin **or** MAG upload. If in doubt, check [which definition fits best according to ENA](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome.html>)
   * `--out`: output folder (default: working directory)
   * `--force`: forces reset of sample xmls generation. This is useful if you changed something in your tsv table, or if ENA metadata haven't been downloaded correctly (you can check this in `ENA_backup.json`).
   * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand (it will need the `-test` option in the upload command for the test submission to work)
@@ -132,7 +131,7 @@ where
 > [!NOTE]
 > It is recommended to **validate** your genomes in test mode (i.e. without the `--live` argument in the registration step) before attempting the final upload. 
 > Test run will proceed on the ENA's TEST server. Launching the registration in test mode will add a timestamp to the genome name to allow multiple executions of the test process.
-> If no errors occur, then re-run the command **with** the `--live` argument for a live submission to REAL ENA's server.
+> If no errors occur, then re-run the command **with** the `--live` argument for a live registration to ENA's REAL server.
 
 Sample xmls won't be regenerated automatically if a previous xml already exists. If any metadata or value in the tsv table changes, `--force` will allow xml regeneration.
 
@@ -154,7 +153,6 @@ bin_upload/MAG_upload
 An example of output files and folder structure submitted in test mode can be found under the `examples` folder.
 
 ### Upload genomes
-
 Once manifest files are generated, it is necessary to use ENA's [webin-cli](https://github.com/enasequence/webin-cli) resource to upload genomes.
 
 More information about ENA's webin-cli can be found [in the ENA docs](<https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html>).
@@ -164,7 +162,8 @@ We recommend using a pre-installed [**webin_cli_handler**](https://github.com/EB
 > [!NOTE]
 >
 > First, validate your submission with the `--mode validate`. \
-> Second, upload to the ENA's TEST server using the `--test` flag (make sure you have validated your run on _Generate files for upload_ step).
+> Second, upload to the ENA's TEST server using the `--test` flag (make sure you have validated your run on _Generate files for upload_ step) and `--mode submit`.
+> Finally, upload to ENA's REAL server using `--mode submit` without `--test`.
 
 Run live execution:
 
@@ -176,7 +175,7 @@ webin_cli_handler \
   [--test]
 ```
 If you do not have **ena-webin-cli** installed add the `--download-webin-cli` flag. The tool will be automatically downloaded. It requires a recent JAVA version to be able to work following [official repo](https://github.com/enasequence/webin-cli). \
-If you want to use local Java .jar (downloaded after pip installation) provide it with `--webin-cli-jar`.
+If you want to use your local Java .jar (downloaded after pip installation) provide it with `--webin-cli-jar`.
 
 Other options:
 ```bash
