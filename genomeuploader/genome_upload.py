@@ -356,12 +356,18 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
             latitude = latit_list[0]
             if multiple_element_set(latit_list):
                 latitude = "not provided"
-            genome_info[g]["latitude"] = str(round(float(latitude), GEOGRAPHY_DIGIT_COORDS))
+            try:
+                genome_info[g]["latitude"] = str(round(float(latitude), GEOGRAPHY_DIGIT_COORDS))
+            except ValueError:
+                genome_info[g]["latitude"] = "not provided"
 
             longitude = long_list[0]
             if multiple_element_set(long_list):
                 longitude = "not provided"
-            genome_info[g]["longitude"] = str(round(float(longitude), GEOGRAPHY_DIGIT_COORDS))
+            try:
+                genome_info[g]["longitude"] = str(round(float(longitude), GEOGRAPHY_DIGIT_COORDS))
+            except ValueError:
+                genome_info[g]["longitude"] = "not provided"
 
             samples = samples_list[0]
             if multiple_element_set(samples_list):
