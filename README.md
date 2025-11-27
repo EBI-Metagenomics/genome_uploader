@@ -12,7 +12,7 @@ When you submit genomes to the [ENA](https://www.ebi.ac.uk/ena/browser/home), yo
 ### Prepare Input TSV
 The `genome_uploader` takes as input one tsv (tab-separated values) table in the following format:
 
-| genome_name | genome_path | accessions | assembly_software | binning_software | binning_parameters | stats_generation_software | completeness | contamination | genome_coverage | metagenome | co-assembly | broad_environment | local_environment | environmental_medium | rRNA_presence | taxonomy_lineage |
+| genome_name | genome_path | accessions | assembly_software | binning_software | binning_parameters | stats_generation_software | completeness | contamination | genome_coverage | metagenome | co-assembly | broad_environment | local_environment | environmental_medium | rRNA_presence | NCBI_lineage |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ERR4647712_crispatus | path/to/ERR4647712.fa.gz | ERR4647712 | megahit_v1.2.9 | MGnify-genomes-generation-pipeline_v1.0.0 | default | CheckM2_v1.0.1 | 100 | 0.38 | 14.2 | chicken gut metagenome | False | chicken | gut | mucosa | True | d__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Lactobacillaceae;g__Lactobacillus;s__Lactobacillus crispatus |
 

@@ -73,7 +73,16 @@ class EnaSubmit:
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to submit genomes to ENA: {e}")
 
-        receipt_xml = minidom.parseString(submission_response.content.decode("utf-8"))
+        receipt_content = submission_response.content.decode("utf-8")
+        # Write receipt XML to file for troubleshooting
+        receipt_file = self.submission_xml.parent / "submission_receipt.xml"
+        if receipt_file.exists():
+            receipt_file = self.submission_xml.parent / "submission_receipt_retry.xml"
+        with open(receipt_file, "w") as file:
+            file.write(receipt_content)
+            logger.info(f"Receipt XML written to {receipt_file}")
+
+        receipt_xml = minidom.parseString(receipt_content)
         receipt = receipt_xml.getElementsByTagName("RECEIPT")
         success = receipt[0].attributes["success"].value
         alias_dict = {}
