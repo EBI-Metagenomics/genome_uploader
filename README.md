@@ -1,4 +1,4 @@
-# Public bins and MAGs uploader
+# ENA public Bins and MAGs uploader
 This repository allows to:
 
   * Generate xmls and manifests necessary for genome submission
@@ -7,10 +7,10 @@ This repository allows to:
 
 ## How it works
 
-When you submit genomes to the [ENA](https://www.ebi.ac.uk/ena/browser/home), you need to register a sample for every genome containing all the relevant metadata describing the genome and the sample of origin. The `genome_uploader` acts as the main linker to preserve sample metadata as much as possible. For every genome to register, you need an INSDC run or assembly accession associated to the genome in order for the script to inherit its relevant metadata. On top of those metadata, the script adds metadata specified by the user that are specific to the genome, like taxonomy, statistics, or the tools used to generate it. The metadata that ENA requires are descibed in the checklist for [MAGs](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) and for [bins](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>), respectively.
+When you submit genomes to the [ENA](https://www.ebi.ac.uk/ena/browser/home), you need to register a sample for every genome containing all the relevant metadata describing the genome and the sample of origin. The `genome_uploader` acts as the main linker to preserve sample metadata as much as possible. For every genome to register, you need an [INSDC](https://www.insdc.org/) run or assembly accession associated to the genome in order for the script to inherit its relevant metadata. On top of those metadata, the script adds metadata specified by the user that are specific to the genome, like taxonomy, statistics, or the tools used to generate it. The metadata that ENA requires are descibed in the checklist for [MAGs](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) and for [bins](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>), respectively.
 
-### Input tsv and fields
-The genome_uploader takes as input one tsv (tab-separated values) table in the following format:
+### Prepare Input TSV
+The `genome_uploader` takes as input one tsv (tab-separated values) table in the following format:
 
 | genome_name | genome_path | accessions | assembly_software | binning_software | binning_parameters | stats_generation_software | completeness | contamination | genome_coverage | metagenome | co-assembly | broad_environment | local_environment | environmental_medium | rRNA_presence | NCBI_lineage |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -63,20 +63,23 @@ Files to be uploaded will need to be compressed (e.g. already in .gz format).
 ### Split your input tables
 No more than 5000 genomes can be submitted at the same time. If you have more than 5000, split your table into smaller ones and launch the `genome_uploader` for each table.
 
-## Installation and setup
+## Installation
 
-You can install **genome_uploader** with:
+### Installation with conda (recommended)
+
+Command will install all necessary dependencies into `genomeuploader` environment
+```bash
+conda install bioconda::genome-uploader
+```
+
+### Installation with pip 
+Install `genome_uploader` with:
 
 ```bash
 pip install genome_uploader
 ```
+Additionally, you need to download [the webin-cli.jar](https://github.com/enasequence/webin-cli) from the [latest release](https://github.com/enasequence/webin-cli/releases). 
 
-Next download webin-cli for upload to **ENA** with:
-
-```bash
-download_webin_cli -v 8.2.0
-# we recommend using the most recent version of webin-cli
-```
 
 ## Setting ENA Credentials
 
@@ -100,17 +103,24 @@ export ENA_WEBIN=your_username_here
 export ENA_WEBIN_PASSWORD=your_password_here
 ```
 
-## Command examples
-You can generate pre-upload files with:
+## Run
+
+### Generate files for upload
+Run `genome_uploader` with input TSV:
 
 ```bash
-genome_upload -u UPLOAD_STUDY --genome_info METADATA_FILE (--mags | --bins) --centre_name CENTRE_NAME [--out] [--force] [--live] [--tpa]
+genome_upload \
+  -u UPLOAD_STUDY \
+  --genome_info METADATA_FILE \
+  (--mags | --bins) \
+  --centre_name CENTRE_NAME \
+  [--out] [--force] [--live] [--tpa]
 ```
 
 where
   * `-u UPLOAD_STUDY`: study accession for genomes upload to ENA (in format ERPxxxxxx or PRJEBxxxxxx)
-  * `---genome_info METADATA_FILE` : genomes metadata file in tsv format
-  * `-m, --mags, --b, --bins`: select for bin or MAG upload. If in doubt, check [which definition fits best according to ENA](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome.html>)
+  * `--genome_info METADATA_FILE` : genomes metadata file in tsv format
+  * `-m, --mags, --b, --bins`: select either of these for bin **or** MAG upload. If in doubt, check [which definition fits best according to ENA](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome.html>)
   * `--out`: output folder (default: working directory)
   * `--force`: forces reset of sample xmls generation. This is useful if you changed something in your tsv table, or if ENA metadata haven't been downloaded correctly (you can check this in `ENA_backup.json`).
   * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand (it will need the `-test` option in the upload command for the test submission to work)
@@ -118,11 +128,14 @@ where
   * `--tpa`: if uploading TPA (Third PArty) generated genomes
   * `--private`: if data is private
 
-It is recommended to validate your genomes in test mode (i.e. without `--live` in the registration step and with `-test` during the upload) before attempting the final upload. Launching the registration in test mode will add a timestamp to the genome name to allow multiple executions of the test process.
+> [!NOTE]
+> It is recommended to **validate** your genomes in test mode (i.e. without the `--live` argument in the registration step) before attempting the final upload. 
+> Test run will proceed on the ENA's TEST server. Launching the registration in test mode will add a timestamp to the genome name to allow multiple executions of the test process.
+> If no errors occur, then re-run the command **with** the `--live` argument for a live registration to ENA's REAL server.
 
 Sample xmls won't be regenerated automatically if a previous xml already exists. If any metadata or value in the tsv table changes, `--force` will allow xml regeneration.
 
-### Produced files:
+#### Produced files:
 The script produces the following files and folders:
 ```bash
 bin_upload/MAG_upload
@@ -139,22 +152,59 @@ bin_upload/MAG_upload
 
 An example of output files and folder structure submitted in test mode can be found under the `examples` folder.
 
-## Upload genomes
-Once manifest files are generated, it is necessary to use ENA's webin-cli resource to upload genomes.
+### Upload genomes
+Once manifest files are generated, it is necessary to use ENA's [webin-cli](https://github.com/enasequence/webin-cli) resource to upload genomes.
 
-To test your submission (i.e. you registered your samples without the `--live` option with genome_upload.py), add the `-test` argument.
+More information about ENA's webin-cli can be found [in the ENA docs](<https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html>).
 
-A live execution example within this repo is the following:
+We recommend using a pre-installed [**webin_cli_handler**](https://github.com/EBI-Metagenomics/mgnify-pipelines-toolkit/blob/dev/mgnify_pipelines_toolkit/ena/webin_cli_handler.py) script.
+
+> [!NOTE]
+>
+> First, validate your submission with the `--mode validate`. \
+> Second, upload to the ENA's TEST server using the `--test` flag (make sure you have validated your run on _Generate files for upload_ step) and `--mode submit`.
+> Finally, upload to ENA's REAL server using `--mode submit` without `--test`.
+
+Run live execution:
+
 ```bash
-java -jar ./webin-cli.jar \
-  -context=genome \
-  -manifest=ERR123456_bin.1.manifest \
-  -userName="Webin-XXX" \
-  -password="YYY" \
-  -submit
+webin_cli_handler \
+  --manifest *.manifest \
+  --context genome \
+  --mode submit \
+  [--test]
 ```
+If you do not have **ena-webin-cli** installed add the `--download-webin-cli` flag. The tool will be automatically downloaded. It requires a recent JAVA version to be able to work following [official repo](https://github.com/enasequence/webin-cli). \
+If you want to use your local Java .jar (downloaded after pip installation) provide it with `--webin-cli-jar`.
 
-More information on ENA's webin-cli can be found [here](<https://ena-docs.readthedocs.io/en/latest/submit/general-guide/webin-cli.html>).
+Other options:
+```bash
+webin_cli_handler 
+
+  -h, --help            show this help message and exit
+  -m, --manifest MANIFEST
+                        Manifest text file containing file and metadata fields
+  -c, --context {genome,transcriptome,sequence,polysample,reads,taxrefset}
+                        Submission type: genome, transcriptome, sequence, polysample, reads, taxrefset
+  --mode {submit,validate}
+                        submit or validate
+  --test                Specify to use test server instead of live
+  --workdir WORKDIR     Path to working directory
+  --download-webin-cli  Specify if you do not have ena-webin-cli installed
+  --download-webin-cli-directory DOWNLOAD_WEBIN_CLI_DIRECTORY
+                        Path to save webin-cli into
+  --download-webin-cli-version DOWNLOAD_WEBIN_CLI_VERSION
+                        Version of ena-webin-cli to download, default: latest
+  --webin-cli-jar WEBIN_CLI_JAR
+                        Path to pre-downloaded webin-cli.jar file to execute
+  --retries RETRIES     Number of retry attempts (default: 3)
+  --retry-delay RETRY_DELAY
+                        Initial retry delay in seconds (default: 5)
+  --java-heap-size-initial JAVA_HEAP_SIZE_INITIAL
+                        Java initial heap size in GB (default: 10)
+  --java-heap-size-max JAVA_HEAP_SIZE_MAX
+                        Java maximum heap size in GB (default: 10)
+```
 
 ## Devs section
 
