@@ -410,7 +410,7 @@ class GenomeUpload:
         accession_comparison["primary_accession_count"] = metadata["accessions"].map(lambda a: len(primary_accession_re.findall(a)))
 
         accession_comparison["mismatching"] = accession_comparison.apply(
-            lambda row: (row["run_accession_count"] + row["primary_accession_count"]) != row["attemptive_accessions"],
+            lambda row: (row["run_accession_count"] + row["primary_accession_count"]) != row["input_accessions"],
             axis=1
         ).isna()
 
