@@ -307,7 +307,7 @@ class EnaQuery:
         return result
 
     def _get_public_run_from_assembly(self):
-        url = f"{self.browser_url}/analyses/xml/{self.accession}"
+        url = f"{self.browser_url}/{self.accession}"
 
         def reformatter(xml_doc):
             return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
