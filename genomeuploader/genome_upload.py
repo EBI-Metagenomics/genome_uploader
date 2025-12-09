@@ -398,17 +398,20 @@ class GenomeUpload:
             raise ValueError("Genomes need to be registered in batches of 5000 genomes or smaller.")
 
         # check whether accessions follow the right format
-        accessions_reg_exp = re.compile(r"([E|S|D]R[R|Z]\d{6,})")
+        run_accession_re = re.compile(r"\b[ESD]RR\d{6,}\b")
+        primary_accession_re = re.compile(r"\b[ESD]RZ\d{6,}\b")
 
-        accession_comparison = pd.DataFrame(columns=["genome_name", "input_accessions", "correct", "mismatching", "co-assembly"])
+        accession_comparison = pd.DataFrame(columns=["genome_name", "input_accessions", "run_accession_count", "primary_accession_count", "mismatching", "co-assembly"])
         accession_comparison["genome_name"] = metadata["genome_name"]
 
         accession_comparison["input_accessions"] = metadata["accessions"].map(lambda a: len(a.split(",")))
 
-        accession_comparison["correct"] = metadata["accessions"].map(lambda a: len(accessions_reg_exp.findall(a)))
+        accession_comparison["run_accession_count"] = metadata["accessions"].map(lambda a: len(run_accession_re.findall(a)))
+        accession_comparison["primary_accession_count"] = metadata["accessions"].map(lambda a: len(primary_accession_re.findall(a)))
 
         accession_comparison["mismatching"] = accession_comparison.apply(
-            lambda row: True if row["input_accessions"] == row["correct"] else None, axis=1
+            lambda row: (row["run_accession_count"] + row["primary_accession_count"]) != row["attemptive_accessions"],
+            axis=1
         ).isna()
 
         mismatching_accessions = accession_comparison[accession_comparison["mismatching"]]["genome_name"]
@@ -425,16 +428,23 @@ class GenomeUpload:
         except ValueError:
             raise ValueError("Completeness, contamination and coverage values should be formatted as floats")
 
-        # check whether all co-assemblies have more than one run associated and vice versa
+        # check whether all co-assemblies have more than one run associated and viceversa
         accession_comparison["co-assembly"] = metadata["co-assembly"]
-        coassembly_discrepancy = metadata[
-            ((accession_comparison["correct"] < 2) & (accession_comparison["co-assembly"]))
-            | ((accession_comparison["correct"] > 1) & (~accession_comparison["co-assembly"]))
+        coassembly_discrepancy = accession_comparison[
+            (
+                (accession_comparison["run_accession_count"] < 2)
+                & (accession_comparison["co-assembly"])
+                & (accession_comparison["primary_accession_count"] == 0)
+            )
+            | (
+                (accession_comparison["run_accession_count"] > 1)
+                & (~accession_comparison["co-assembly"])
+            )
         ]["genome_name"]
         if not coassembly_discrepancy.empty:
             raise ValueError(
-                "The following genomes show discrepancy between number of runs "
-                "involved and co-assembly status: " + ",".join(coassembly_discrepancy.values)
+                "The following genomes show discrepancy between number of runs involved and co-assembly status: "
+                ",".join(coassembly_discrepancy.values)
             )
 
         # are provided metagenomes part of the accepted metagenome list?
