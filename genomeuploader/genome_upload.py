@@ -551,7 +551,7 @@ class GenomeUpload:
                 derived_runs = []
                 for acc in genome_info[g]["accessions"]:
                     ena_query = EnaQuery(acc, "run_assembly", self.private)
-                    derived_runs.append(ena_query.build_query())
+                    derived_runs.extend(ena_query.build_query())
                 genome_info[g]["accessions"] = derived_runs
             all_runs.extend(genome_info[g]["accessions"])
 

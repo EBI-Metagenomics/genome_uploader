@@ -310,10 +310,11 @@ class EnaQuery:
         url = f"{self.browser_url}/{self.accession}"
 
         def reformatter(xml_doc):
-            return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
+            run_refs = xml_doc.getElementsByTagName("RUN_REF")
+            return sorted({node.getAttribute("accession") for node in run_refs})
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logger.info(f"public run from the assembly {self.accession} returned from ENA")
+        logger.info(f"public runs for assembly {self.accession} returned from ENA")
         return result
 
     def _get_private_study_runs(self):
