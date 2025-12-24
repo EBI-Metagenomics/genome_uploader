@@ -70,9 +70,10 @@ def test_ena_run_from_assembly(public_run_from_assembly_xml, private_run_from_as
 
     ena_run_from_assembly_public = EnaQuery(accession="ERZ2626953", query_type="run_assembly", private=False)
 
-    ena_run_from_assembly_public = EnaQuery(accession="ERZ2626953", query_type="run_assembly", private=True)
+    ena_run_from_assembly_private = EnaQuery(accession="ERZ2626953", query_type="run_assembly", private=True)
 
-    assert ena_run_from_assembly_public.build_query() and ena_run_from_assembly_public.build_query() == "ERR4918394"
+    assert ena_run_from_assembly_private.build_query() and ena_run_from_assembly_private.build_query() == ["ERR4918394"]
+    assert ena_run_from_assembly_public.build_query() and ena_run_from_assembly_public.build_query() == ["ERR4918394"]
 
 
 @responses.activate
