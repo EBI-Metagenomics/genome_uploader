@@ -304,13 +304,14 @@ class EnaQuery:
             run_refs = xml_doc.getElementsByTagName("RUN_REF")
             if not run_refs:
                 return None  # No RUN_REF tag found
-            run_ref = run_refs[0]
-            if not run_ref.hasAttribute("accession"):
-                return None  # RUN_REF exists but no accession attribute
-            return run_ref.getAttribute("accession")
+            accessions = sorted(
+                {node.getAttribute("accession") for node in run_refs if node.hasAttribute("accession")}
+            )
+            return accessions or None
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logger.info(f"private run from the assembly {self.accession} returned from ENA")
+        if result:
+            logger.info(f"private runs {result} for assembly {self.accession} returned from ENA")
         return result
 
     def _get_assembly_platform_from_xml(self):
