@@ -649,6 +649,8 @@ BIN_MANDATORY_FIELDS = [
 
 MAG_MANDATORY_FIELDS = ["rRNA_presence", "completeness", "contamination"]
 
+NA_SYNONYMS = ["not available", "na", "not applicable"]
+
 GEOGRAPHY_DIGIT_COORDS = 8
 
 BIN_CHECKLIST = "ERC000050"

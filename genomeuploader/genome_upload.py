@@ -40,6 +40,7 @@ from genomeuploader.constants import (
     MAG_MANDATORY_FIELDS,
     METAGENOMES,
     MQ,
+    NA_SYNONYMS,
 )
 from genomeuploader.ena import EnaQuery
 from genomeuploader.ena_submit import EnaSubmit
@@ -94,91 +95,85 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
     or 'not applicable'. This ensures that co-assembly metadata are
     applied to the newly registered sample only if they match in all
     samples used to generate the co-assembly.
-    The function also rounds geographic coordinates and ensures
-    all accessions are stored as a comma-separated string.
-    Needs optimisation.
+    Behaviour for handling multiple differing values is defined
+    in the BIN_SAMPLE_FIELDS dictionary ("if_multiple" key).
+    It also normalises missing values to a defined standard 
+    ("normalise_na" key). "biosample_field" key indicates the
+    corresponding field in the ENA metadata of a run's biosample.
     Args:
         genome_info (dict): Dictionary of genome metadata.
         ena_dict (dict): Dictionary of ENA metadata for runs.
     Returns:
         None. Modifies genome_info in place.
     """
+    BIN_SAMPLE_FIELDS = {
+        "sequencingMethod": {
+            "biosample_field": "instrumentModel",
+            "if_multiple": "join_sorted",
+        },
+        "collectionDate": {
+            "biosample_field": "collectionDate",
+            "if_multiple": "not provided",
+            "normalise_na": "missing: third party data",
+        },
+        "country": {
+            "biosample_field": "country",
+            "if_multiple": "not applicable",
+        },
+        "latitude": {
+            "biosample_field": "latitude",
+            "if_multiple": "not provided",
+            "normalise_na": "not provided",
+        },
+        "longitude": {
+            "biosample_field": "longitude",
+            "if_multiple": "not provided",
+            "normalise_na": "not provided",
+        },
+        "sample_accessions": {
+            "biosample_field": "sampleAccession",
+            "if_multiple": "join_sorted",
+        },
+        "study": {
+            "biosample_field": "study",
+            # TODO this is questionable, need to see how to handle multiple studies
+            "if_multiple": "take_first",
+        },
+        "description": {
+            "biosample_field": "projectDescription",
+            # TODO this is questionable, need to see how to handle multiple studies
+            "if_multiple": "take_first",
+        },
+    }
+
+    def resolve_set(values: set, if_multiple: str) -> str:
+        if len(values) == 1:
+            return values.pop()
+        if if_multiple == "join_sorted":
+            return ",".join(sorted(values))
+        if if_multiple == "take_first":
+            return values.pop()
+        return if_multiple  # literal string like "not provided"
+    
     for g in genome_info:
-        # TODO: optimise all the part below
         if genome_info[g]["co-assembly"]:
-            instrument_set, collection_set, country_set = set(), set(), set()
-            study_set, description_set, samples_set = set(), set(), set()
-            long_set, latit_set = set(), set()
-            for run in genome_info[g]["accessions"]:
-                instrument_set.add(ena_dict[run]["instrumentModel"])
-                collection_set.add(ena_dict[run]["collectionDate"])
-                country_set.add(ena_dict[run]["country"])
-                study_set.add(ena_dict[run]["study"])
-                description_set.add(ena_dict[run]["projectDescription"])
-                samples_set.add(ena_dict[run]["sampleAccession"])
-                long_set.add(ena_dict[run]["longitude"])
-                latit_set.add(ena_dict[run]["latitude"])
-            
-            # set.pop() is used to get the single element
-            genome_info[g]["study"] = study_set.pop()
-            genome_info[g]["description"] = description_set.pop()
-            
-            if len(instrument_set) > 1:
-                instrument = ",".join(sorted(instrument_set))
-            else:
-                instrument = instrument_set.pop()
-            genome_info[g]["sequencingMethod"] = instrument
+            runs = [ena_dict[r] for r in genome_info[g]["accessions"]]
+            for field, config in BIN_SAMPLE_FIELDS.items():
+                values = {run[config["biosample_field"]] for run in runs}
+                value = resolve_set(values, config["if_multiple"])
+                if "normalise_na" in config:
+                    if value.lower() in NA_SYNONYMS:
+                        value = config["normalise_na"]
+                genome_info[g][field] = value
 
-            if len(collection_set) > 1:
-                collection_date = "not provided"
-            else:
-                collection_date = collection_set.pop()
-            if collection_date.lower() in ["not available", "na"]:
-                collection_date = "missing: third party data"
-            genome_info[g]["collectionDate"] = collection_date
-
-            if len(country_set) > 1:
-                country = "not applicable"
-            else:
-                country = country_set.pop()
-            genome_info[g]["country"] = country
-
-            if len(latit_set) > 1:
-                latitude = "not provided"
-            else:
-                latitude = latit_set.pop()
-            try:
-                genome_info[g]["latitude"] = str(round(float(latitude), GEOGRAPHY_DIGIT_COORDS))
-            except ValueError:
-                genome_info[g]["latitude"] = "not provided"
-
-            if len(long_set) > 1:
-                longitude = "not provided"
-            else:
-                longitude = long_set.pop()
-            try:
-                genome_info[g]["longitude"] = str(round(float(longitude), GEOGRAPHY_DIGIT_COORDS))
-            except ValueError:
-                genome_info[g]["longitude"] = "not provided"
-
-            if len(samples_set) > 1:
-                samples = ",".join(samples_set)
-            else:
-                samples = samples_set.pop()
-            genome_info[g]["sample_accessions"] = samples
         else:
-            run = genome_info[g]["accessions"][0]
-            genome_info[g]["sequencingMethod"] = ena_dict[run]["instrumentModel"]
-            if ena_dict[run]["collectionDate"].lower() in ["not applicable", "not available", "na"]:
-                genome_info[g]["collectionDate"] = "not provided"
-            else:
-                genome_info[g]["collectionDate"] = ena_dict[run]["collectionDate"]
-            genome_info[g]["study"] = ena_dict[run]["study"]
-            genome_info[g]["description"] = ena_dict[run]["projectDescription"]
-            genome_info[g]["sample_accessions"] = ena_dict[run]["sampleAccession"]
-            genome_info[g]["country"] = ena_dict[run]["country"]
-            genome_info[g]["longitude"] = ena_dict[run]["longitude"]
-            genome_info[g]["latitude"] = ena_dict[run]["latitude"]
+            for field, config in BIN_SAMPLE_FIELDS.items():
+                run = genome_info[g]["accessions"][0]
+                value = ena_dict[run][config["biosample_field"]]
+                if "normalise_na" in config:
+                    if value.lower() in NA_SYNONYMS:
+                        value = config["normalise_na"]
+                genome_info[g][field] = value
 
         genome_info[g]["accessions"] = ",".join(genome_info[g]["accessions"])
 
