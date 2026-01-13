@@ -34,6 +34,11 @@ def public_run_from_assembly_xml(test_file_dir):
 
 
 @pytest.fixture(scope="module")
+def public_runs_from_coassembly_xml(test_file_dir):
+    return test_file_dir / Path("public_runs_from_coassembly.xml")
+
+
+@pytest.fixture(scope="module")
 def private_run_from_assembly_xml(test_file_dir):
     return test_file_dir / Path("private_run_from_assembly.xml")
 
