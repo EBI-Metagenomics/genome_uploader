@@ -84,17 +84,6 @@ def compute_mag_quality(completeness: float, contamination: float, rna_presence:
     return quality, completeness, contamination
 
 
-def multiple_element_set(metadata_list: list) -> bool:
-    """
-    Checks if a list contains more than one unique element.
-    Args:
-        metadata_list (list): List of metadata values.
-    Returns:
-        bool: True if more than one unique element exists, else False.
-    """
-    return len(set(metadata_list)) > 1
-
-
 def combine_ena_info(genome_info: dict, ena_dict: dict):
     """
     Combines ENA metadata into genome information dictionary.
@@ -117,58 +106,65 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
     for g in genome_info:
         # TODO: optimise all the part below
         if genome_info[g]["co-assembly"]:
-            instrument_list, collection_list, country_list = [], [], []
-            study_list, description_list, samples_list = [], [], []
-            long_list, latit_list = [], []
+            instrument_set, collection_set, country_set = set(), set(), set()
+            study_set, description_set, samples_set = set(), set(), set()
+            long_set, latit_set = set(), set()
             for run in genome_info[g]["accessions"]:
-                instrument_list.append(ena_dict[run]["instrumentModel"])
-                collection_list.append(ena_dict[run]["collectionDate"])
-                country_list.append(ena_dict[run]["country"])
-                study_list.append(ena_dict[run]["study"])
-                description_list.append(ena_dict[run]["projectDescription"])
-                samples_list.append(ena_dict[run]["sampleAccession"])
-                long_list.append(ena_dict[run]["longitude"])
-                latit_list.append(ena_dict[run]["latitude"])
-
-            genome_info[g]["study"] = study_list[0]
-            genome_info[g]["description"] = description_list[0]
-
-            instrument = instrument_list[0]
-            if multiple_element_set(instrument_list):
-                instrument = ",".join(instrument_list)
+                instrument_set.add(ena_dict[run]["instrumentModel"])
+                collection_set.add(ena_dict[run]["collectionDate"])
+                country_set.add(ena_dict[run]["country"])
+                study_set.add(ena_dict[run]["study"])
+                description_set.add(ena_dict[run]["projectDescription"])
+                samples_set.add(ena_dict[run]["sampleAccession"])
+                long_set.add(ena_dict[run]["longitude"])
+                latit_set.add(ena_dict[run]["latitude"])
+            
+            # set.pop() is used to get the single element
+            genome_info[g]["study"] = study_set.pop()
+            genome_info[g]["description"] = description_set.pop()
+            
+            if len(instrument_set) > 1:
+                instrument = ",".join(sorted(instrument_set))
+            else:
+                instrument = instrument_set.pop()
             genome_info[g]["sequencingMethod"] = instrument
 
-            collection_date = collection_list[0]
-            if multiple_element_set(collection_list):
+            if len(collection_set) > 1:
                 collection_date = "not provided"
+            else:
+                collection_date = collection_set.pop()
             if collection_date.lower() in ["not available", "na"]:
                 collection_date = "missing: third party data"
             genome_info[g]["collectionDate"] = collection_date
 
-            country = country_list[0]
-            if multiple_element_set(country_list):
+            if len(country_set) > 1:
                 country = "not applicable"
+            else:
+                country = country_set.pop()
             genome_info[g]["country"] = country
 
-            latitude = latit_list[0]
-            if multiple_element_set(latit_list):
+            if len(latit_set) > 1:
                 latitude = "not provided"
+            else:
+                latitude = latit_set.pop()
             try:
                 genome_info[g]["latitude"] = str(round(float(latitude), GEOGRAPHY_DIGIT_COORDS))
             except ValueError:
                 genome_info[g]["latitude"] = "not provided"
 
-            longitude = long_list[0]
-            if multiple_element_set(long_list):
+            if len(long_set) > 1:
                 longitude = "not provided"
+            else:
+                longitude = long_set.pop()
             try:
                 genome_info[g]["longitude"] = str(round(float(longitude), GEOGRAPHY_DIGIT_COORDS))
             except ValueError:
                 genome_info[g]["longitude"] = "not provided"
 
-            samples = samples_list[0]
-            if multiple_element_set(samples_list):
-                samples = ",".join(samples_list)
+            if len(samples_set) > 1:
+                samples = ",".join(samples_set)
+            else:
+                samples = samples_set.pop()
             genome_info[g]["sample_accessions"] = samples
         else:
             run = genome_info[g]["accessions"][0]
