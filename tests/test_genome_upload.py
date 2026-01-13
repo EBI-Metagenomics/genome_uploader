@@ -110,3 +110,47 @@ class Tests:
         # Check sample count, XML should include only new genomes, excluding registered in first round
         with open("tests/fixtures/bin_upload/genome_samples.xml") as f:
             assert f.read().count("alias=") == number_of_bins2 - number_of_bins1
+
+
+    def test_genomeuploader_coassembly_end_to_end(tmp_path):
+        timestamp = str(int(dt.timestamp(dt.now())))
+        with open("tests/fixtures/input_coassembly_fixture.tsv", "r") as f:
+            lines = f.readlines()
+        number_of_bins = len(lines) - 1
+        command = [
+            "python",
+            "genomeuploader/genome_upload.py",
+            "-u",
+            "ERP159782",
+            "--genome_info",
+            "tests/fixtures/input_coassembly_fixture.tsv",
+            "--out",
+            "tests/fixtures/",
+            "--bins",
+            "--test-suffix",
+            f"end-to-end-coassembly-{timestamp}",
+            "--centre_name",
+            "EMG",
+        ]
+
+        result = subprocess.run(command, capture_output=True, text=True)
+        assert result.returncode == 0, f"Run with coassembly submission failed: {result.stderr}"
+
+        # Check required output files
+        expected_files = [
+            "tests/fixtures/bin_upload/manifests_test/",
+            "tests/fixtures/bin_upload/genome_samples.xml",
+            "tests/fixtures/bin_upload/registered_bins_test.tsv",
+            "tests/fixtures/bin_upload/submission.xml",
+        ]
+        for path in expected_files:
+            assert Path(path).exists(), f"Missing expected output: {path}"
+
+        # check registered samples tsv
+        filepath = "tests/fixtures/bin_upload/registered_bins_test.tsv"
+        with open(filepath, "r") as f:
+            lines = f.readlines()
+        # should have the same number of genomes
+        assert len(lines) == number_of_bins
+        # should have sample id (ERS) and suffix from --test-suffix command
+        assert "ERS" in "".join(lines) and "end-to-end" in "".join(lines)
