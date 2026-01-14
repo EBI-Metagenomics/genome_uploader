@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+
+
 HQ = "Multiple fragments where gaps span repetitive regions. Presence of the 23S, 16S, and 5S rRNA genes and at least 18 tRNAs"
 MQ = "Many fragments with little to no review of assembly other than reporting of standard assembly statistics"
 
@@ -650,6 +653,9 @@ BIN_MANDATORY_FIELDS = [
 MAG_MANDATORY_FIELDS = ["rRNA_presence", "completeness", "contamination"]
 
 NA_SYNONYMS = ["not available", "na", "not applicable"]
+
+RUN_ACCESSION_RE = re.compile(r"\b[ESD]RR\d{6,}\b")
+ASSEMBLY_ACCESSION_RE = re.compile(r"\b[ESD]RZ\d{6,}\b")
 
 GEOGRAPHY_DIGIT_COORDS = 8
 
