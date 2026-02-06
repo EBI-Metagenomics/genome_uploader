@@ -820,7 +820,7 @@ class GenomeUpload:
         values = (
             ("STUDY", self.upload_study),
             ("SAMPLE", alias_to_sample[genome_info["alias"]]),
-            ("ASSEMBLYNAME", genome_info["alias"]),
+            ("ASSEMBLYNAME", f'{genome_info["alias"]}_{self.genome_type[:-1]}'),
             ("ASSEMBLY_TYPE", assembly_type),
             ("COVERAGE", genome_info["coverageDepth"]),
             ("PROGRAM", genome_info["assembler"]),
