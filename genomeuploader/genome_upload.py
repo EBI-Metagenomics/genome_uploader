@@ -816,11 +816,11 @@ class GenomeUpload:
         assembly_type = "Metagenome-Assembled Genome (MAG)"
         if self.genome_type == "bins":
             assembly_type = "binned metagenome"
-
+        suffix = '_mag' if self.genome_type == 'MAGs' else ''
         values = (
             ("STUDY", self.upload_study),
             ("SAMPLE", alias_to_sample[genome_info["alias"]]),
-            ("ASSEMBLYNAME", f'{genome_info["alias"]}_{self.genome_type[:-1]}'),
+            ("ASSEMBLYNAME", f'{genome_info["alias"]}{suffix}'),
             ("ASSEMBLY_TYPE", assembly_type),
             ("COVERAGE", genome_info["coverageDepth"]),
             ("PROGRAM", genome_info["assembler"]),
