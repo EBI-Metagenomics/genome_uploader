@@ -513,6 +513,75 @@ class GenomeUpload:
 
         return genome_info
 
+    def get_collection_date(self, collection_date):
+        if collection_date.lower() in [
+            "not collected",
+            "not provided",
+            "restricted access",
+            "missing: control sample",
+            "missing: sample group",
+            "missing: synthetic construct",
+            "missing: lab stock",
+            "missing: third party data",
+            "missing: data agreement established pre-2023",
+            "missing: endangered species",
+            "missing: human-identifiable",
+        ]:
+            collection_date = collection_date.lower()
+        if (
+                not collection_date
+                or collection_date.lower() == "missing"
+                or collection_date.lower() in ["not available", "na"]
+        ):
+            collection_date = "missing: third party data"
+        return collection_date
+
+    def get_location_metadata(self, sample_info, run_accession):
+
+        latitude, longitude = "missing: third party data", "missing: third party data"
+        country = "missing: third party data"
+
+        if self.private:
+            latitude = sample_info.get("latitude", "not provided")
+            longitude = sample_info.get("longitude", "not provided")
+            country = sample_info.get("country", "not provided")
+        else:
+            try:
+                country = sample_info["country"].split(":")[0]
+                location = sample_info["location"]
+                if location:
+                    if "N" in location:
+                        latitude = location.split("N")[0].strip()
+                        longitude = location.split("N")[1].strip()
+                    elif "S" in location:
+                        latitude = "-" + location.split("S")[0].strip()
+                        longitude = location.split("S")[1].strip()
+
+                    if "W" in longitude:
+                        longitude = "-" + longitude.split("W")[0].strip()
+                    elif longitude.endswith("E"):
+                        longitude = longitude.split("E")[0].strip()
+            except KeyError as e:
+                pass
+
+        if latitude not in ["missing: third party data", "not provided"]:
+            try:
+                latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
+            except ValueError:
+                raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(run_accession))
+
+        if longitude not in ["missing: third party data", "not provided"]:
+            try:
+                longitude = "{:.{}f}".format(
+                    round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS
+                )
+            except ValueError:
+                raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(run_accession))
+
+        if country not in GEOGRAPHIC_LOCATIONS:
+            country = "missing: third party data"
+        return latitude, longitude, country
+
     def extract_ena_info(self, genome_info: dict):
         """
         Retrieves ENA metadata for genomes and updates genome_info in place.
@@ -536,12 +605,27 @@ class GenomeUpload:
 
         # retrieving metadata from runs (and runs from assembly accessions if provided)
         all_runs = []
+        assembly_overrides = {}  # run_acc -> {study_accession, sample_accession} from assembly record
         for g in genome_info:
             if genome_info[g]["accessionType"] == "assembly":
                 derived_runs = []
                 for acc in genome_info[g]["accessions"]:
-                    ena_query = EnaQuery(acc, "run_assembly", self.private)
-                    derived_runs.append(ena_query.build_query())
+                    # Fetch study and sample directly from the assembly record
+                    assembly_query = EnaQuery(acc, "assembly_info", self.private)
+                    asm_info = assembly_query.build_query() or {}
+
+                    # Get the run linked to this assembly (used for instrument_model and as fallback)
+                    run_query = EnaQuery(acc, "run_assembly", self.private)
+                    run_acc = run_query.build_query()
+                    # TODO check if no runs returned
+                    derived_runs.append(run_acc)
+
+                    # Store assembly-level study/sample to override run-derived values later
+                    if run_acc and (asm_info.get("study_accession") or asm_info.get("sample_accession")):
+                        assembly_overrides[run_acc] = {
+                            "study_accession": asm_info.get("study_accession"),
+                            "sample_accession": asm_info.get("sample_accession"),
+                        }
                 genome_info[g]["accessions"] = derived_runs
             all_runs.extend(genome_info[g]["accessions"])
 
@@ -590,69 +674,8 @@ class GenomeUpload:
                             ena_query = EnaQuery(sample_accession, "sample", self.private)
                             sample_info = ena_query.build_query()
 
-                            latitude, longitude = "missing: third party data", "missing: third party data"
-                            country = "missing: third party data"
-                            if self.private:
-                                latitude = sample_info.get("latitude", "not provided")
-                                longitude = sample_info.get("longitude", "not provided")
-                                country = sample_info.get("country", "not provided")
-                            else:
-                                try:
-                                    country = sample_info["country"].split(":")[0]
-                                    location = sample_info["location"]
-                                    if location:
-                                        if "N" in location:
-                                            latitude = location.split("N")[0].strip()
-                                            longitude = location.split("N")[1].strip()
-                                        elif "S" in location:
-                                            latitude = "-" + location.split("S")[0].strip()
-                                            longitude = location.split("S")[1].strip()
-
-                                        if "W" in longitude:
-                                            longitude = "-" + longitude.split("W")[0].strip()
-                                        elif longitude.endswith("E"):
-                                            longitude = longitude.split("E")[0].strip()
-                                except KeyError as e:
-                                    pass
-
-                            if latitude not in ["missing: third party data", "not provided"]:
-                                try:
-                                    latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
-                                except ValueError:
-                                    raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(run_accession))
-
-                            if longitude not in ["missing: third party data", "not provided"]:
-                                try:
-                                    longitude = "{:.{}f}".format(
-                                        round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS
-                                    )
-                                except ValueError:
-                                    raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(run_accession))
-
-                            if country not in GEOGRAPHIC_LOCATIONS:
-                                country = "missing: third party data"
-
-                            collection_date = sample_info["collection_date"]
-                            if collection_date.lower() in [
-                                "not collected",
-                                "not provided",
-                                "restricted access",
-                                "missing: control sample",
-                                "missing: sample group",
-                                "missing: synthetic construct",
-                                "missing: lab stock",
-                                "missing: third party data",
-                                "missing: data agreement established pre-2023",
-                                "missing: endangered species",
-                                "missing: human-identifiable",
-                            ]:
-                                collection_date = collection_date.lower()
-                            if (
-                                not collection_date
-                                or collection_date.lower() == "missing"
-                                or collection_date.lower() in ["not available", "na"]
-                            ):
-                                collection_date = "missing: third party data"
+                            latitude, longitude, country = self.get_location_metadata(sample_info, run_accession)
+                            collection_date = self.get_collection_date(sample_info["collection_date"])
 
                             temp_dict[run_accession] = {
                                 "instrumentModel": ena_info[run]["instrument_model"],
@@ -671,6 +694,34 @@ class GenomeUpload:
                                 file.write(json.dumps(temp_dict))
                                 file.truncate()
         temp_dict = {**temp_dict, **backup_dict}
+
+        # Apply assembly record overrides: prefer study/sample from the assembly over the run
+        for run_acc, override in assembly_overrides.items():
+            if run_acc not in temp_dict:
+                continue
+            study_acc = override.get("study_accession")
+            sample_acc = override.get("sample_accession")
+
+            if study_acc:
+                ena_query = EnaQuery(study_acc, "study", self.private)
+                study_info = ena_query.build_query() or {}
+                project_description = study_info.get("study_description")
+                if not project_description:
+                    project_description = study_info.get("study_title", "")
+                temp_dict[run_acc]["study"] = study_acc
+                temp_dict[run_acc]["projectDescription"] = project_description
+
+            if sample_acc:
+                ena_query = EnaQuery(sample_acc, "sample", self.private)
+                sample_info = ena_query.build_query() or {}
+                latitude, longitude, country = self.get_location_metadata(sample_info, run_acc)
+                collection_date = self.get_collection_date(sample_info.get("collection_date", ""))
+                temp_dict[run_acc]["sampleAccession"] = sample_acc
+                temp_dict[run_acc]["latitude"] = latitude
+                temp_dict[run_acc]["longitude"] = longitude
+                temp_dict[run_acc]["country"] = country
+                temp_dict[run_acc]["collectionDate"] = collection_date
+
         combine_ena_info(genome_info, temp_dict)
 
     def create_genome_dictionary(self) -> dict:

@@ -306,14 +306,49 @@ class EnaQuery:
         logger.info(f"private run from the assembly {self.accession} returned from ENA")
         return result
 
-    def _get_public_run_from_assembly(self):
-        url = f"{self.browser_url}/analyses/xml/{self.accession}"
+    def _get_private_assembly_info(self):
+        url = f"{self.private_url}/analyses/xml/{self.accession}"
 
         def reformatter(xml_doc):
-            return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
+            result = {}
+            study_refs = xml_doc.getElementsByTagName("STUDY_REF")
+            if study_refs and study_refs[0].hasAttribute("accession"):
+                result["study_accession"] = study_refs[0].getAttribute("accession")
+            sample_refs = xml_doc.getElementsByTagName("SAMPLE_REF")
+            if sample_refs and sample_refs[0].hasAttribute("accession"):
+                result["sample_accession"] = sample_refs[0].getAttribute("accession")
+            return result if result else None
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logger.info(f"public run from the assembly {self.accession} returned from ENA")
+        logger.info(f"{self.accession} private assembly info returned from ENA")
+        return result
+
+    def _get_public_assembly_info(self):
+        data = get_default_params()
+        data.update({
+            "result": "analysis",
+            "query": f'analysis_accession="{self.accession}"',
+            "fields": "study_accession,sample_accession",
+        })
+        result = self._fetch_ena_data(data=data, method="post", mode="single_json")
+        logger.info(f"{self.accession} public assembly info returned from ENA")
+        return result
+
+    def _get_public_run_from_assembly(self):
+        url = f"{self.browser_url}/{self.accession}"
+
+        def reformatter(xml_doc):
+            run_refs = xml_doc.getElementsByTagName("RUN_REF")
+            if not run_refs:
+                return None  # No RUN_REF tag found
+            run_ref = run_refs[0]
+            if not run_ref.hasAttribute("accession"):
+                return None  # RUN_REF exists but no accession attribute
+            return run_ref.getAttribute("accession")
+
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
+        if result:
+            logger.info(f"public run ${result} from the assembly {self.accession} returned from ENA")
         return result
 
     def _get_private_study_runs(self):
@@ -377,6 +412,7 @@ class EnaQuery:
             "study": (self._get_private_study, self._get_public_study),
             "run": (self._get_private_run, self._get_public_run),
             "run_assembly": (self._get_private_run_from_assembly, self._get_public_run_from_assembly),
+            "assembly_info": (self._get_private_assembly_info, self._get_public_assembly_info),
             "study_runs": (self._get_private_study_runs, self._get_public_study_runs),
             "sample": (self._get_private_sample, self._get_public_sample),
         }
