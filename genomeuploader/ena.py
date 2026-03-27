@@ -28,6 +28,7 @@ from requests.exceptions import ConnectionError, HTTPError, RequestException, Ti
 
 from genomeuploader.config import (
     ACCESSION_MAP,
+    ASSEMBLY_DEFAULT_FIELDS,
     ENA_BROWSER_URL,
     ENA_SEARCH_URL,
     ENA_SUBMISSION_URL,
@@ -306,6 +307,31 @@ class EnaQuery:
         logger.info(f"private run from the assembly {self.accession} returned from ENA")
         return result
 
+    def _get_assembly_platform_from_xml(self):
+        if self.private:
+            # TODO review URL
+            url = f"{self.private_url}/analyses/xml/{self.accession}"
+        else:
+            url = f"{self.browser_url}/{self.accession}"
+        def reformatter(xml_doc):
+            result = {}
+            analysis_nodes = xml_doc.getElementsByTagName("ANALYSIS_TYPE")
+
+            for analysis in analysis_nodes:
+                # Get SEQUENCE_ASSEMBLY inside ANALYSIS_TYPE
+                seq_assembly = analysis.getElementsByTagName("SEQUENCE_ASSEMBLY")
+
+                for seq in seq_assembly:
+                    # Get PLATFORM
+                    platform_nodes = seq.getElementsByTagName("PLATFORM")
+
+                    for platform in platform_nodes:
+                        if platform.firstChild:
+                            result['sampling_platform'] = platform.firstChild.nodeValue
+            return result if result else None
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
+        return result
+
     def _get_private_assembly_info(self):
         url = f"{self.private_url}/analyses/xml/{self.accession}"
 
@@ -320,7 +346,11 @@ class EnaQuery:
             return result if result else None
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logger.info(f"{self.accession} private assembly info returned from ENA")
+        if not result['sampling_platform']:
+            # It seems that field is not indexed in ENA's API
+            xml_result = self._get_assembly_platform_from_xml()
+            result['sampling_platform'] = xml_result['sampling_platform']
+        logger.debug(f"{self.accession} private assembly info returned from ENA")
         return result
 
     def _get_public_assembly_info(self):
@@ -328,10 +358,14 @@ class EnaQuery:
         data.update({
             "result": "analysis",
             "query": f'analysis_accession="{self.accession}"',
-            "fields": "study_accession,sample_accession",
+            "fields": ASSEMBLY_DEFAULT_FIELDS,
         })
         result = self._fetch_ena_data(data=data, method="post", mode="single_json")
-        logger.info(f"{self.accession} public assembly info returned from ENA")
+        if not result['sampling_platform']:
+            # It seems that field is not indexed in ENA's API
+            xml_result = self._get_assembly_platform_from_xml()
+            result['sampling_platform'] = xml_result['sampling_platform']
+        logger.debug(f"{self.accession} public assembly info returned from ENA")
         return result
 
     def _get_public_run_from_assembly(self):
@@ -389,14 +423,14 @@ class EnaQuery:
             return reformatted
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logger.info(f"{self.accession} private sample returned from ENA")
+        logger.debug(f"{self.accession} private sample returned from ENA")
         return result
 
     def _get_public_sample(self):
         data = get_default_params()
         data.update({"result": "sample", "fields": SAMPLE_DEFAULT_FIELDS, "query": f"{self.acc_type}={self.accession}"})
         result = self._fetch_ena_data(data=data, method="post", mode="single_json")
-        logger.info(f"{self.accession} public sample returned from ENA")
+        logger.debug(f"{self.accession} public sample returned from ENA")
         return result
 
     def build_query(self):
@@ -412,7 +446,7 @@ class EnaQuery:
             "study": (self._get_private_study, self._get_public_study),
             "run": (self._get_private_run, self._get_public_run),
             "run_assembly": (self._get_private_run_from_assembly, self._get_public_run_from_assembly),
-            "assembly_info": (self._get_private_assembly_info, self._get_public_assembly_info),
+            "assembly": (self._get_private_assembly_info, self._get_public_assembly_info),
             "study_runs": (self._get_private_study_runs, self._get_public_study_runs),
             "sample": (self._get_private_sample, self._get_public_sample),
         }

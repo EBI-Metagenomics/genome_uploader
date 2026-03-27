@@ -171,18 +171,18 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
                 samples = ",".join(samples_list)
             genome_info[g]["sample_accessions"] = samples
         else:
-            run = genome_info[g]["accessions"][0]
-            genome_info[g]["sequencingMethod"] = ena_dict[run]["instrumentModel"]
-            if ena_dict[run]["collectionDate"].lower() in ["not applicable", "not available", "na"]:
+            accession = genome_info[g]["accessions"][0]
+            genome_info[g]["sequencingMethod"] = ena_dict[accession]["instrumentModel"]
+            if ena_dict[accession]["collectionDate"].lower() in ["not applicable", "not available", "na"]:
                 genome_info[g]["collectionDate"] = "not provided"
             else:
-                genome_info[g]["collectionDate"] = ena_dict[run]["collectionDate"]
-            genome_info[g]["study"] = ena_dict[run]["study"]
-            genome_info[g]["description"] = ena_dict[run]["projectDescription"]
-            genome_info[g]["sample_accessions"] = ena_dict[run]["sampleAccession"]
-            genome_info[g]["country"] = ena_dict[run]["country"]
-            genome_info[g]["longitude"] = ena_dict[run]["longitude"]
-            genome_info[g]["latitude"] = ena_dict[run]["latitude"]
+                genome_info[g]["collectionDate"] = ena_dict[accession]["collectionDate"]
+            genome_info[g]["study"] = ena_dict[accession]["study"]
+            genome_info[g]["description"] = ena_dict[accession]["projectDescription"]
+            genome_info[g]["sample_accessions"] = ena_dict[accession]["sampleAccession"]
+            genome_info[g]["country"] = ena_dict[accession]["country"]
+            genome_info[g]["longitude"] = ena_dict[accession]["longitude"]
+            genome_info[g]["latitude"] = ena_dict[accession]["latitude"]
 
         genome_info[g]["accessions"] = ",".join(genome_info[g]["accessions"])
 
@@ -264,6 +264,7 @@ def compute_manifests(genomes: dict) -> dict:
             genomes[g]["genome_coverage"],
             genomes[g]["co-assembly"],
         )
+        manifest_info[g]["accessionType"] = genomes[g]["accessionType"]
 
     return manifest_info
 
@@ -536,7 +537,7 @@ class GenomeUpload:
             collection_date = "missing: third party data"
         return collection_date
 
-    def get_location_metadata(self, sample_info, run_accession):
+    def get_location_metadata(self, sample_info):
 
         latitude, longitude = "missing: third party data", "missing: third party data"
         country = "missing: third party data"
@@ -568,7 +569,7 @@ class GenomeUpload:
             try:
                 latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
             except ValueError:
-                raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(run_accession))
+                raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(sample_info.get("sample_accession")))
 
         if longitude not in ["missing: third party data", "not provided"]:
             try:
@@ -576,11 +577,26 @@ class GenomeUpload:
                     round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS
                 )
             except ValueError:
-                raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(run_accession))
+                raise IOError("Longitude could not be parsed. Check metadata for run {}.".format(sample_info.get("sample_accession")))
 
         if country not in GEOGRAPHIC_LOCATIONS:
             country = "missing: third party data"
         return latitude, longitude, country
+
+    def get_project_description(self, s):
+        ena_query = EnaQuery(s, "study", self.private)
+        study_info = ena_query.build_query()
+        project_description = study_info["study_description"]
+        if not project_description:
+            project_description = study_info["study_title"]
+        return project_description
+
+    def get_sample_metadata(self, sample_accession):
+        ena_query = EnaQuery(sample_accession, "sample", self.private)
+        sample_info = ena_query.build_query()
+        latitude, longitude, country = self.get_location_metadata(sample_info)
+        collection_date = self.get_collection_date(sample_info["collection_date"])
+        return latitude, longitude, country, collection_date
 
     def extract_ena_info(self, genome_info: dict):
         """
@@ -603,124 +619,56 @@ class GenomeUpload:
         """
         logger.info("Retrieving project and run info from ENA (this might take a while)...")
 
-        # retrieving metadata from runs (and runs from assembly accessions if provided)
-        all_runs = []
-        assembly_overrides = {}  # run_acc -> {study_accession, sample_accession} from assembly record
-        for g in genome_info:
-            if genome_info[g]["accessionType"] == "assembly":
-                derived_runs = []
+        study_descriptions = {}  # that dictionary is needed to not call study API for each run/assembly
+        temp_dict = {}
+
+        # Load previously saved entries from backup (JSONL format)
+        if self.backup_file.exists() and not self.force:
+            try:
+                with self.backup_file.open("r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            temp_dict.update(json.loads(line))
+                logger.info(f"Loaded {len(temp_dict)} entries from backup {self.backup_file}")
+            except (json.decoder.JSONDecodeError, IOError) as e:
+                logger.warning(f"Could not read backup file {self.backup_file}: {e}")
+
+        backup_mode = "w" if (self.force or not self.backup_file.exists()) else "a"
+        with self.backup_file.open(backup_mode) as backup_f:
+            for g in genome_info:
                 for acc in genome_info[g]["accessions"]:
-                    # Fetch study and sample directly from the assembly record
-                    assembly_query = EnaQuery(acc, "assembly_info", self.private)
-                    asm_info = assembly_query.build_query() or {}
+                    if acc in temp_dict:
+                        continue
+                    if genome_info[g]["accessionType"] == "assembly":
+                        assembly_query = EnaQuery(acc, "assembly", self.private)
+                        general_info = assembly_query.build_query() or {}  # format {'analysis_accession': 'ERZ', 'study_accession': 'PRJ', 'sample_accession': 'SAMN', "sampling_platform": ".."}
+                        study_accession = general_info.get("study_accession")
+                        instrument_model = general_info["sampling_platform"]
+                    else:
+                        ena_query = EnaQuery(acc, "run", self.private)
+                        general_info = ena_query.build_query()
+                        study_accession = general_info.get("secondary_study_accession")
+                        instrument_model = general_info.get("instrument_model")
 
-                    # Get the run linked to this assembly (used for instrument_model and as fallback)
-                    run_query = EnaQuery(acc, "run_assembly", self.private)
-                    run_acc = run_query.build_query()
-                    # TODO check if no runs returned
-                    derived_runs.append(run_acc)
+                    if study_accession not in study_descriptions:
+                        study_descriptions[study_accession] = self.get_project_description(study_accession)
 
-                    # Store assembly-level study/sample to override run-derived values later
-                    if run_acc and (asm_info.get("study_accession") or asm_info.get("sample_accession")):
-                        assembly_overrides[run_acc] = {
-                            "study_accession": asm_info.get("study_accession"),
-                            "sample_accession": asm_info.get("sample_accession"),
-                        }
-                genome_info[g]["accessions"] = derived_runs
-            all_runs.extend(genome_info[g]["accessions"])
+                    sample_accession = general_info.get("sample_accession")
+                    latitude, longitude, country, collection_date = self.get_sample_metadata(sample_accession)
 
-        runs_set, study_set, samples_dict, temp_dict = set(all_runs), set(), {}, {}
-        for r in runs_set:
-            ena_query = EnaQuery(r, "run", self.private)
-            run_info = ena_query.build_query()
-            study_set.add(run_info["secondary_study_accession"])
-            samples_dict[r] = run_info["sample_accession"]
-
-        if not study_set:
-            raise ValueError("No study corresponding to runs found.")
-
-        write_mode = "r+"
-        if not self.backup_file.exists() or self.force:
-            write_mode = "w"
-
-        counter = 0
-
-        with self.backup_file.open(write_mode) as file:
-            backup_dict = {}
-            if not write_mode == "w":
-                try:
-                    backup_dict = json.load(file)
-                    temp_dict = dict(backup_dict)
-                    logger.info(f"A backup file {self.backup_file} for ENA sample metadata has been found.")
-                except json.decoder.JSONDecodeError:
-                    pass
-            for s in study_set:
-                ena_query = EnaQuery(s, "study", self.private)
-                study_info = ena_query.build_query()
-                project_description = study_info["study_description"]
-                if not project_description:
-                    project_description = study_info["study_title"]
-
-                ena_query = EnaQuery(s, "study_runs", self.private)
-                ena_info = ena_query.build_query()
-                if not ena_info:
-                    raise IOError(f"No runs found on ENA for project {s}.")
-
-                for run, item in enumerate(ena_info):
-                    run_accession = ena_info[run]["run_accession"]
-                    if run_accession not in backup_dict:
-                        if run_accession in runs_set:
-                            sample_accession = ena_info[run]["sample_accession"]
-                            ena_query = EnaQuery(sample_accession, "sample", self.private)
-                            sample_info = ena_query.build_query()
-
-                            latitude, longitude, country = self.get_location_metadata(sample_info, run_accession)
-                            collection_date = self.get_collection_date(sample_info["collection_date"])
-
-                            temp_dict[run_accession] = {
-                                "instrumentModel": ena_info[run]["instrument_model"],
-                                "collectionDate": collection_date,
-                                "country": country,
-                                "latitude": latitude,
-                                "longitude": longitude,
-                                "projectDescription": project_description,
-                                "study": s,
-                                "sampleAccession": samples_dict[run_accession],
-                            }
-                            counter += 1
-
-                            if (counter % 10 == 0) or (len(runs_set) - len(backup_dict) == counter):
-                                file.seek(0)
-                                file.write(json.dumps(temp_dict))
-                                file.truncate()
-        temp_dict = {**temp_dict, **backup_dict}
-
-        # Apply assembly record overrides: prefer study/sample from the assembly over the run
-        for run_acc, override in assembly_overrides.items():
-            if run_acc not in temp_dict:
-                continue
-            study_acc = override.get("study_accession")
-            sample_acc = override.get("sample_accession")
-
-            if study_acc:
-                ena_query = EnaQuery(study_acc, "study", self.private)
-                study_info = ena_query.build_query() or {}
-                project_description = study_info.get("study_description")
-                if not project_description:
-                    project_description = study_info.get("study_title", "")
-                temp_dict[run_acc]["study"] = study_acc
-                temp_dict[run_acc]["projectDescription"] = project_description
-
-            if sample_acc:
-                ena_query = EnaQuery(sample_acc, "sample", self.private)
-                sample_info = ena_query.build_query() or {}
-                latitude, longitude, country = self.get_location_metadata(sample_info, run_acc)
-                collection_date = self.get_collection_date(sample_info.get("collection_date", ""))
-                temp_dict[run_acc]["sampleAccession"] = sample_acc
-                temp_dict[run_acc]["latitude"] = latitude
-                temp_dict[run_acc]["longitude"] = longitude
-                temp_dict[run_acc]["country"] = country
-                temp_dict[run_acc]["collectionDate"] = collection_date
+                    temp_dict[acc] = {
+                        "instrumentModel": instrument_model,
+                        "collectionDate": collection_date,
+                        "country": country,
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "projectDescription": study_descriptions[study_accession],
+                        "study": study_accession,
+                        "sampleAccession": sample_accession,
+                    }
+                    backup_f.write(json.dumps({acc: temp_dict[acc]}) + "\n")
+                    backup_f.flush()
 
         combine_ena_info(genome_info, temp_dict)
 
@@ -821,8 +769,8 @@ class GenomeUpload:
         for g in genomes:
             plural = ""
             if genomes[g]["co-assembly"]:
-                plural = "s"
-            description = f"This sample represents a {tpa_description}{assembly_type} assembled from the metagenomic run{plural} {genomes[g]['accessions']} of study {genomes[g]['study']}."
+                plural = "(s)"
+            description = f"This sample represents a {tpa_description}{assembly_type} generated from the metagenomic {genomes[g]['accessionType']}{plural} {genomes[g]['accessions']} of study {genomes[g]['study']}."
 
             sample = et.SubElement(sample_set, "SAMPLE")
             sample.set("alias", genomes[g]["alias"])
@@ -863,7 +811,7 @@ class GenomeUpload:
         if self.tpa:
             tpa_addition = "Third Party Annotation (TPA) "
         if genome_info["co-assembly"]:
-            multiple_runs = "s"
+            multiple_runs = "(s)"
         assembly_type = "Metagenome-Assembled Genome (MAG)"
         if self.genome_type == "bins":
             assembly_type = "binned metagenome"
@@ -880,8 +828,8 @@ class GenomeUpload:
             (
                 "DESCRIPTION",
                 (
-                    f"This is a {tpa_addition}bin derived from the primary whole genome shotgun (WGS) data set "
-                    f"{genome_info['study']}. This sample represents a {assembly_type} from the metagenomic run{multiple_runs} "
+                    f"This is a {tpa_addition}bin derived from "
+                    f"{genome_info['study']}. This sample represents a {assembly_type} from the metagenomic {genome_info['accessionType']}{multiple_runs} "
                     f"{genome_info['accessions']}."
                 ),
             ),

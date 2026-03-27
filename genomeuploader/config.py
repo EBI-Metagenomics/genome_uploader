@@ -33,7 +33,7 @@ RUN_DEFAULT_FIELDS = ",".join(["secondary_study_accession", "sample_accession"])
 
 STUDY_RUN_DEFAULT_FIELDS = ",".join(["sample_accession", "run_accession", "instrument_model"])
 
-ASSEMBLY_DEFAULT_FIELDS = "sample_accession"
+ASSEMBLY_DEFAULT_FIELDS = ",".join(["study_accession", "sample_accession", "sampling_platform"])
 
 SAMPLE_DEFAULT_FIELDS = ",".join(["sample_accession", "collection_date", "country", "location"])
 
