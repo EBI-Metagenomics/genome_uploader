@@ -309,7 +309,6 @@ class EnaQuery:
 
     def _get_assembly_platform_from_xml(self):
         if self.private:
-            # TODO review URL
             url = f"{self.private_url}/analyses/xml/{self.accession}"
         else:
             url = f"{self.browser_url}/{self.accession}"
