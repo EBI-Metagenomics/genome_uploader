@@ -120,4 +120,4 @@ def public_assembly_info_data():
 
 @pytest.fixture
 def private_assembly_info_data():
-    return {"study_accession": "PRJEB71644", "sample_accession": "SAMEA114545946", "sampling_platform": 'ILLUMINA'}
+    return {"study_accession": "ERP157889", "sample_accession": "SRS1254557", "sampling_platform": 'ILLUMINA'}
