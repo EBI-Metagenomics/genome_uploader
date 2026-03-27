@@ -311,10 +311,8 @@ class EnaQuery:
         if self.private:
             # TODO review URL
             url = f"{self.private_url}/analyses/xml/{self.accession}"
-            print('1')
         else:
             url = f"{self.browser_url}/{self.accession}"
-            print('2')
         def reformatter(xml_doc):
             result = {}
             analysis_nodes = xml_doc.getElementsByTagName("ANALYSIS_TYPE")
