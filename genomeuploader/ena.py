@@ -311,8 +311,10 @@ class EnaQuery:
         if self.private:
             # TODO review URL
             url = f"{self.private_url}/analyses/xml/{self.accession}"
+            print('1')
         else:
             url = f"{self.browser_url}/{self.accession}"
+            print('2')
         def reformatter(xml_doc):
             result = {}
             analysis_nodes = xml_doc.getElementsByTagName("ANALYSIS_TYPE")
@@ -346,7 +348,12 @@ class EnaQuery:
             return result if result else None
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        if not result['sampling_platform']:
+        get_platform = False
+        if 'sampling_platform' not in result.keys():
+            get_platform = True
+        elif not result['sampling_platform']:
+            get_platform = True
+        if get_platform:
             # It seems that field is not indexed in ENA's API
             xml_result = self._get_assembly_platform_from_xml()
             result['sampling_platform'] = xml_result['sampling_platform']
@@ -361,7 +368,12 @@ class EnaQuery:
             "fields": ASSEMBLY_DEFAULT_FIELDS,
         })
         result = self._fetch_ena_data(data=data, method="post", mode="single_json")
-        if not result['sampling_platform']:
+        get_platform = False
+        if 'sampling_platform' not in result.keys():
+            get_platform = True
+        elif not result['sampling_platform']:
+            get_platform = True
+        if get_platform:
             # It seems that field is not indexed in ENA's API
             xml_result = self._get_assembly_platform_from_xml()
             result['sampling_platform'] = xml_result['sampling_platform']

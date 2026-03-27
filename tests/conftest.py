@@ -101,3 +101,23 @@ def private_sample_data():
         "latitude": "66.079905",
         "longitude": "12.587848",
     }
+
+
+@pytest.fixture(scope="module")
+def public_assembly_info_json(test_file_dir):
+    return test_file_dir / Path("public_assembly_info.json")
+
+
+@pytest.fixture(scope="module")
+def private_assembly_info_xml(test_file_dir):
+    return test_file_dir / Path("private_assembly_info.xml")
+
+
+@pytest.fixture
+def public_assembly_info_data():
+    return {"study_accession": "PRJEB71644", "sample_accession": "SAMEA114545946", "sampling_platform": 'ILLUMINA'}
+
+
+@pytest.fixture
+def private_assembly_info_data():
+    return {"study_accession": "PRJEB71644", "sample_accession": "SAMEA114545946", "sampling_platform": 'ILLUMINA'}

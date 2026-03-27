@@ -104,6 +104,27 @@ def test_ena_sample(public_sample_data, private_sample_data, public_sample_json,
 
 
 @responses.activate
+def test_ena_assembly_info(public_assembly_info_data, private_assembly_info_data, public_assembly_info_json, private_assembly_info_xml):
+    responses.add(responses.POST, "https://www.ebi.ac.uk/ena/portal/api/search", json=read_json(public_assembly_info_json))
+
+    responses.add(responses.GET, "https://www.ebi.ac.uk/ena/browser/api/xml/ERZ23498047",
+                  body=read_xml(private_assembly_info_xml))
+
+    responses.add(
+        responses.GET,
+        "https://www.ebi.ac.uk/ena/submit/report/analyses/xml/ERZ23498047",
+        body=read_xml(private_assembly_info_xml),
+        content_type="application/xml",
+    )
+
+    ena_assembly_info_public = EnaQuery(accession="ERZ23498047", query_type="assembly", private=False)
+    ena_assembly_info_private = EnaQuery(accession="ERZ23498047", query_type="assembly", private=True)
+
+    assert ena_assembly_info_public.build_query() == public_assembly_info_data
+    assert ena_assembly_info_private.build_query() == private_assembly_info_data
+
+
+@responses.activate
 def test_ena_exceptions(monkeypatch):
     ena_query = EnaQuery(
         accession="ERP125469",
