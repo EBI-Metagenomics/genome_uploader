@@ -646,8 +646,8 @@ class GenomeUpload:
                         study_accession = general_info.get("study_accession")
                         instrument_model = general_info["sampling_platform"]
                     else:
-                        ena_query = EnaQuery(acc, "run", self.private)
-                        general_info = ena_query.build_query()
+                        run_query = EnaQuery(acc, "run", self.private)
+                        general_info = run_query.build_query()
                         study_accession = general_info.get("secondary_study_accession")
                         instrument_model = general_info.get("instrument_model")
 

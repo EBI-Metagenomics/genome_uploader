@@ -313,22 +313,16 @@ class EnaQuery:
             url = f"{self.private_url}/analyses/xml/{self.accession}"
         else:
             url = f"{self.browser_url}/{self.accession}"
+
         def reformatter(xml_doc):
-            result = {}
-            analysis_nodes = xml_doc.getElementsByTagName("ANALYSIS_TYPE")
+            for seq in xml_doc.getElementsByTagName("SEQUENCE_ASSEMBLY"):
+                platform_nodes = seq.getElementsByTagName("PLATFORM")
+                if platform_nodes:
+                    node = platform_nodes[0].firstChild
+                    if node:
+                        return {"sampling_platform": node.nodeValue}
+            return None
 
-            for analysis in analysis_nodes:
-                # Get SEQUENCE_ASSEMBLY inside ANALYSIS_TYPE
-                seq_assembly = analysis.getElementsByTagName("SEQUENCE_ASSEMBLY")
-
-                for seq in seq_assembly:
-                    # Get PLATFORM
-                    platform_nodes = seq.getElementsByTagName("PLATFORM")
-
-                    for platform in platform_nodes:
-                        if platform.firstChild:
-                            result['sampling_platform'] = platform.firstChild.nodeValue
-            return result if result else None
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
         return result
 
@@ -346,15 +340,10 @@ class EnaQuery:
             return result if result else None
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        get_platform = False
-        if 'sampling_platform' not in result.keys():
-            get_platform = True
-        elif not result['sampling_platform']:
-            get_platform = True
-        if get_platform:
+        if not result.get("sampling_platform"):
             # It seems that field is not indexed in ENA's API
-            xml_result = self._get_assembly_platform_from_xml()
-            result['sampling_platform'] = xml_result['sampling_platform']
+            xml_result = self._get_assembly_platform_from_xml() or {}
+            result['sampling_platform'] = xml_result.get('sampling_platform')
         logger.debug(f"{self.accession} private assembly info returned from ENA")
         return result
 
@@ -366,15 +355,10 @@ class EnaQuery:
             "fields": ASSEMBLY_DEFAULT_FIELDS,
         })
         result = self._fetch_ena_data(data=data, method="post", mode="single_json")
-        get_platform = False
-        if 'sampling_platform' not in result.keys():
-            get_platform = True
-        elif not result['sampling_platform']:
-            get_platform = True
-        if get_platform:
+        if not result.get("sampling_platform"):
             # It seems that field is not indexed in ENA's API
-            xml_result = self._get_assembly_platform_from_xml()
-            result['sampling_platform'] = xml_result['sampling_platform']
+            xml_result = self._get_assembly_platform_from_xml() or {}
+            result['sampling_platform'] = xml_result.get('sampling_platform')
         logger.debug(f"{self.accession} public assembly info returned from ENA")
         return result
 
