@@ -926,7 +926,11 @@ __version__ = importlib.metadata.version("genome_uploader")
     default=False,
     help="If data is private",
 )
-def main(upload_study, genome_info, mags, bins, out, force, live, test_suffix, tpa, centre_name, private):
+@click.option("--verbose", is_flag=True, help="Enable debug logging")
+def main(upload_study, genome_info, mags, bins, out, force, live, test_suffix, tpa, centre_name, private, verbose):
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
     if mags == bins:
         raise click.UsageError("Must specify only one of --mags or --bins (not both)")
 
@@ -945,6 +949,7 @@ def main(upload_study, genome_info, mags, bins, out, force, live, test_suffix, t
         "tpa": tpa,
         "centre_name": centre_name,
         "private": private,
+        "verbose": verbose,
     }
 
     ena_upload = GenomeUpload(args)
