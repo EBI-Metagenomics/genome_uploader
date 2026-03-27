@@ -418,7 +418,9 @@ class GenomeUpload:
         except ValueError:
             raise ValueError("Completeness, contamination and coverage values should be formatted as floats")
 
-        # check whether all co-assemblies have more than one run associated and vice versa
+        # raise error if one of the following checks fails:
+        # - co-assemblies are associated with more than one run
+        # - co-assemblies are associated with one assembly accession
         accession_comparison["co-assembly"] = metadata["co-assembly"]
         coassembly_discrepancy = accession_comparison[
             (
