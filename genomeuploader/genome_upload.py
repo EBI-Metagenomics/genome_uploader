@@ -768,8 +768,8 @@ class GenomeUpload:
 
         for g in genomes:
             plural = ""
-            if genomes[g]["co-assembly"]:
-                plural = "(s)"
+            if genomes[g]["co-assembly"] and genomes[g]['accessionType'] == "run":
+                plural = "s"
             description = f"This sample represents a {tpa_description}{assembly_type} generated from the metagenomic {genomes[g]['accessionType']}{plural} {genomes[g]['accessions']} of study {genomes[g]['study']}."
 
             sample = et.SubElement(sample_set, "SAMPLE")
@@ -810,8 +810,8 @@ class GenomeUpload:
         tpa_addition, multiple_runs = "", ""
         if self.tpa:
             tpa_addition = "Third Party Annotation (TPA) "
-        if genome_info["co-assembly"]:
-            multiple_runs = "(s)"
+        if genome_info["co-assembly"] and genome_info['accessionType'] == "run":
+            multiple_runs = "s"
         assembly_type = "Metagenome-Assembled Genome (MAG)"
         if self.genome_type == "bins":
             assembly_type = "binned metagenome"
