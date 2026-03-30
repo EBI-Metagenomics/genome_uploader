@@ -20,3 +20,7 @@ class EnaParseError(EnaQueryError):
 
 class NoDataException(EnaQueryError):
     pass
+
+
+class SubmissionSizeLimitError(EnaQueryError):
+    pass

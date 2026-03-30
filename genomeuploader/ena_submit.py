@@ -5,9 +5,15 @@ import xml.dom.minidom as minidom
 import requests
 
 from genomeuploader.ena import CredentialsManager
+from genomeuploader.exceptions import SubmissionSizeLimitError
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+SIZE_LIMIT_PATTERN = re.compile(
+    r"Submission size\s+([\d.]+)\s*MBytes\s+exceeds\s+the\s+maximum\s+allowed\s+size\s+of\s+([\d.]+)\s*Mbytes",
+    re.IGNORECASE,
+)
 
 
 def identify_registered_genomes(message):
@@ -99,6 +105,18 @@ class EnaSubmit:
             final_error = ""
             for error in errors:
                 final_error += f"\n\t{error.firstChild.nodeValue.strip()}"
+
+            size_error = SIZE_LIMIT_PATTERN.search(final_error)
+            if size_error:
+                submitted_mb, max_mb = size_error.groups()
+                raise SubmissionSizeLimitError(
+                    (
+                        "ENA rejected sample XML because it exceeds the maximum payload size: "
+                    f"{submitted_mb:.2f} MB submitted, maximum allowed is {max_mb:.2f} MB. "
+                    "The submission will need to be split into smaller batches."
+                )
+            )
+
             # check are there already registered genomes
             registered_genomes = identify_registered_genomes(final_error)
             if registered_genomes:

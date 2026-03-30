@@ -48,6 +48,8 @@ from genomeuploader.taxon_finder import TaxonFinder
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+MAX_SAMPLE_XML_SIZE_BYTES = (9.5 * 1024 * 1024) # ENA limit is 10MB, we set a lower threshold to be safe
+
 
 def round_stats(stats: float) -> float:
     """
@@ -322,6 +324,7 @@ class GenomeUpload:
         self.upload_study = args["upload_study"]
         self.genome_metadata = Path(args["genome_info"])
         self.test_suffix = args["test_suffix"]
+        self.max_sample_xml_size_bytes = MAX_SAMPLE_XML_SIZE_BYTES
 
     def generate_files_and_folders(self):
         """
@@ -796,6 +799,76 @@ class GenomeUpload:
             dom = minidom.parseString(et.tostring(sample_set, encoding="utf-8"))
             f.write(dom.toprettyxml().encode("utf-8"))
 
+    def split_genomes_by_sample_xml_size(self, genomes: dict) -> list[dict]:
+        """
+        Splits genomes recursively into 2 batches until each batch produces
+        a pretty-printed sample XML smaller than ENA limit.
+        Args:
+            genomes (dict): Dictionary of genome metadata.
+        Returns:
+            list[dict]: Batches to be submitted separately.
+        """
+        self.write_genomes_xml(genomes)
+        xml_size = self.samples_xml.stat().st_size
+
+        if xml_size < self.max_sample_xml_size_bytes:
+            return [genomes]
+
+        if len(genomes) <= 1:
+            return [genomes]
+
+        genomes_items = list(genomes.items())
+        midpoint = len(genomes_items) // 2
+        left_genomes = dict(genomes_items[:midpoint])
+        right_genomes = dict(genomes_items[midpoint:])
+
+        left_batches = self.split_genomes_by_sample_xml_size(left_genomes)
+        right_batches = self.split_genomes_by_sample_xml_size(right_genomes)
+
+        return left_batches + right_batches
+
+    def submit_genome_batch(self, genome_batch: dict) -> dict:
+        """
+        Submits one batch and handles retries for partially registered genomes.
+        Args:
+            genome_batch (dict): Batch of genome metadata.
+        Returns:
+            dict: Mapping of alias to ENA sample accession.
+        """
+        self.write_genomes_xml(genome_batch)
+        ena_submit = EnaSubmit(self.samples_xml, self.submission_xml, len(genome_batch), self.live)
+
+        alias_accession_map = ena_submit.handle_genomes_registration()
+
+        if len(alias_accession_map) == len(genome_batch):
+            # all genomes were registered
+            return alias_accession_map
+
+        if len(alias_accession_map) > 0:
+            # exclude successfully registered genomes from XML
+            if self.samples_xml.exists():
+                self.samples_xml.unlink(missing_ok=True)
+            filtered_genome_batch = {k: v for k, v in genome_batch.items() if k not in alias_accession_map}
+            logger.info("Re-writing genome registration XML...")
+            self.write_genomes_xml(filtered_genome_batch)
+            logger.info("Registering new genome samples XMLs...")
+            ena_submit_new = EnaSubmit(self.samples_xml, self.submission_xml, len(filtered_genome_batch), self.live)
+            new_alias_accession_map = ena_submit_new.handle_genomes_registration()
+            if len(new_alias_accession_map) == len(filtered_genome_batch):
+                # all genomes from the filtered XML were registered
+                alias_accession_map.update(new_alias_accession_map)
+                return alias_accession_map
+
+            raise Exception(
+                "An error occurred during the registration step. "
+                "Please, check submission_receipt_retry.xml file for details."
+            )
+
+        raise Exception(
+            "Some genomes could not be submitted to ENA. " 
+            "Please, check the errors above and submission_receipt.xml file."
+        )
+
     def generate_genome_manifest(self, genome_info: dict, alias_to_sample: dict):
         """
         Generates a manifest file for a genome.
@@ -861,34 +934,18 @@ class GenomeUpload:
         # sample xml generation or recovery
         genome_info = self.create_genome_dictionary()
 
-        logger.info("Registering genome samples XMLs...")
-        ena_submit = EnaSubmit(self.samples_xml, self.submission_xml, len(genome_info), self.live)
-        alias_accession_map = ena_submit.handle_genomes_registration()
+        batch_list = self.split_genomes_by_sample_xml_size(genome_info)
+        logger.info(f"Registering genome samples XMLs in {len(batch_list)} batch(es)...")
 
-        if len(alias_accession_map) == len(genome_info):
-            # all genomes were registered
-            save_accessions(alias_accession_map, self.accessions_file, "w")
-        else:
-            if len(alias_accession_map) > 0:
-                # exclude those from XML
-                if self.samples_xml.exists():
-                    self.samples_xml.unlink(missing_ok=True)
-                filtered_genome_info = {k: v for k, v in genome_info.items() if k not in alias_accession_map}
-                logger.info("Re-writing genome registration XML...")
-                self.write_genomes_xml(filtered_genome_info)
-                logger.info("Registering new genome samples XMLs...")
-                ena_submit_new = EnaSubmit(self.samples_xml, self.submission_xml, len(filtered_genome_info), self.live)
-                new_alias_accession_map = ena_submit_new.handle_genomes_registration()
-                if len(new_alias_accession_map) == len(filtered_genome_info):
-                    # all new genomes were registered
-                    save_accessions(new_alias_accession_map, self.accessions_file, "a")
-                    alias_accession_map.update(new_alias_accession_map)
-                else:
-                    raise Exception("An error occurred during the registration step. "
-                                    "Please, check submission_receipt_retry.xml file for details.")
-            else:
-                raise Exception("Some genomes could not be submitted to ENA. "
-                                "Please, check the errors above and submission_receipt.xml file.")
+        alias_accession_map = {}
+        write_mode = "w"
+
+        for batch_number, batch in enumerate(batch_list, start=1):
+            logger.info(f"Submitting batch {batch_number}/{len(batch_list)} containing {len(batch)} genome(s).")
+            batch_accessions = self.submit_genome_batch(batch)
+            save_accessions(batch_accessions, self.accessions_file, write_mode)
+            write_mode = "a"
+            alias_accession_map.update(batch_accessions)
 
         logger.info("Generating manifest files...")
 
