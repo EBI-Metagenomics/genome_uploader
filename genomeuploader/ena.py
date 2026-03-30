@@ -28,6 +28,7 @@ from requests.exceptions import ConnectionError, HTTPError, RequestException, Ti
 
 from genomeuploader.config import (
     ACCESSION_MAP,
+    ASSEMBLY_DEFAULT_FIELDS,
     ENA_BROWSER_URL,
     ENA_SEARCH_URL,
     ENA_SUBMISSION_URL,
@@ -306,14 +307,75 @@ class EnaQuery:
         logger.info(f"private run from the assembly {self.accession} returned from ENA")
         return result
 
-    def _get_public_run_from_assembly(self):
-        url = f"{self.browser_url}/analyses/xml/{self.accession}"
+    def _get_assembly_platform_from_xml(self):
+        if self.private:
+            url = f"{self.private_url}/analyses/xml/{self.accession}"
+        else:
+            url = f"{self.browser_url}/{self.accession}"
 
         def reformatter(xml_doc):
-            return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
+            for seq in xml_doc.getElementsByTagName("SEQUENCE_ASSEMBLY"):
+                platform_nodes = seq.getElementsByTagName("PLATFORM")
+                if platform_nodes:
+                    node = platform_nodes[0].firstChild
+                    if node:
+                        return {"sampling_platform": node.nodeValue}
+            return None
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logger.info(f"public run from the assembly {self.accession} returned from ENA")
+        return result
+
+    def _get_private_assembly_info(self):
+        url = f"{self.private_url}/analyses/xml/{self.accession}"
+
+        def reformatter(xml_doc):
+            result = {}
+            study_refs = xml_doc.getElementsByTagName("STUDY_REF")
+            if study_refs and study_refs[0].hasAttribute("accession"):
+                result["study_accession"] = study_refs[0].getAttribute("accession")
+            sample_refs = xml_doc.getElementsByTagName("SAMPLE_REF")
+            if sample_refs and sample_refs[0].hasAttribute("accession"):
+                result["sample_accession"] = sample_refs[0].getAttribute("accession")
+            return result if result else None
+
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
+        if not result.get("sampling_platform"):
+            # It seems that field is not indexed in ENA's API
+            xml_result = self._get_assembly_platform_from_xml() or {}
+            result['sampling_platform'] = xml_result.get('sampling_platform')
+        logger.debug(f"{self.accession} private assembly info returned from ENA")
+        return result
+
+    def _get_public_assembly_info(self):
+        data = get_default_params()
+        data.update({
+            "result": "analysis",
+            "query": f'analysis_accession="{self.accession}"',
+            "fields": ASSEMBLY_DEFAULT_FIELDS,
+        })
+        result = self._fetch_ena_data(data=data, method="post", mode="single_json")
+        if not result.get("sampling_platform"):
+            # It seems that field is not indexed in ENA's API
+            xml_result = self._get_assembly_platform_from_xml() or {}
+            result['sampling_platform'] = xml_result.get('sampling_platform')
+        logger.debug(f"{self.accession} public assembly info returned from ENA")
+        return result
+
+    def _get_public_run_from_assembly(self):
+        url = f"{self.browser_url}/{self.accession}"
+
+        def reformatter(xml_doc):
+            run_refs = xml_doc.getElementsByTagName("RUN_REF")
+            if not run_refs:
+                return None  # No RUN_REF tag found
+            run_ref = run_refs[0]
+            if not run_ref.hasAttribute("accession"):
+                return None  # RUN_REF exists but no accession attribute
+            return run_ref.getAttribute("accession")
+
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
+        if result:
+            logger.info(f"public run ${result} from the assembly {self.accession} returned from ENA")
         return result
 
     def _get_private_study_runs(self):
@@ -354,14 +416,14 @@ class EnaQuery:
             return reformatted
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
-        logger.info(f"{self.accession} private sample returned from ENA")
+        logger.debug(f"{self.accession} private sample returned from ENA")
         return result
 
     def _get_public_sample(self):
         data = get_default_params()
         data.update({"result": "sample", "fields": SAMPLE_DEFAULT_FIELDS, "query": f"{self.acc_type}={self.accession}"})
         result = self._fetch_ena_data(data=data, method="post", mode="single_json")
-        logger.info(f"{self.accession} public sample returned from ENA")
+        logger.debug(f"{self.accession} public sample returned from ENA")
         return result
 
     def build_query(self):
@@ -377,6 +439,7 @@ class EnaQuery:
             "study": (self._get_private_study, self._get_public_study),
             "run": (self._get_private_run, self._get_public_run),
             "run_assembly": (self._get_private_run_from_assembly, self._get_public_run_from_assembly),
+            "assembly": (self._get_private_assembly_info, self._get_public_assembly_info),
             "study_runs": (self._get_private_study_runs, self._get_public_study_runs),
             "sample": (self._get_private_sample, self._get_public_sample),
         }
