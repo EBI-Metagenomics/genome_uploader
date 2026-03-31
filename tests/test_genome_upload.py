@@ -97,12 +97,14 @@ class Tests:
 
         xml_bytes = b"<SAMPLE_SET/>"
 
-        single_path = uploader.write_genomes_xml(xml_bytes, 1, 1)
-        batch_1_path = uploader.write_genomes_xml(xml_bytes, 1, 2)
-        batch_2_path = uploader.write_genomes_xml(xml_bytes, 2, 2)
-        retry_path = uploader.write_genomes_xml(xml_bytes, 2, 2, retry=True)
+        single_path = uploader.write_genomes_xml(xml_bytes, batch_number=1, total_batches=1)
+        single_retry_path = uploader.write_genomes_xml(xml_bytes, batch_number=1, total_batches=1, retry=True)
+        batch_1_path = uploader.write_genomes_xml(xml_bytes, batch_number=1, total_batches=2)
+        batch_2_path = uploader.write_genomes_xml(xml_bytes, batch_number=2, total_batches=2)
+        retry_path = uploader.write_genomes_xml(xml_bytes, batch_number=2, total_batches=2, retry=True)
 
         assert single_path == uploader.samples_xml
+        assert single_retry_path.name == "genome_samples_retry.xml"
         assert batch_1_path.name == "genome_samples_batch_1.xml"
         assert batch_2_path.name == "genome_samples_batch_2.xml"
         assert retry_path.name == "genome_samples_batch_2_retry.xml"
@@ -135,8 +137,9 @@ class Tests:
         expected_files = [
             "tests/fixtures/bin_upload/manifests_test/",
             "tests/fixtures/bin_upload/genome_samples.xml",
-            "tests/fixtures/bin_upload/registered_bins_test.tsv",
             "tests/fixtures/bin_upload/submission.xml",
+            "tests/fixtures/bin_upload/submission_receipt.xml",
+            "tests/fixtures/bin_upload/registered_bins_test.tsv",
         ]
         for path in expected_files:
             assert Path(path).exists(), f"Missing expected output: {path}"
@@ -198,8 +201,11 @@ class Tests:
         expected_files = [
             "tests/fixtures/bin_upload/manifests_test/",
             "tests/fixtures/bin_upload/genome_samples.xml",
-            "tests/fixtures/bin_upload/registered_bins_test.tsv",
+            "tests/fixtures/bin_upload/genome_samples_retry.xml",
             "tests/fixtures/bin_upload/submission.xml",
+            "tests/fixtures/bin_upload/submission_receipt.xml",
+            "tests/fixtures/bin_upload/submission_receipt_retry.xml",
+            "tests/fixtures/bin_upload/registered_bins_test.tsv",
         ]
         for path in expected_files:
             assert Path(path).exists(), f"Missing expected output: {path}"
@@ -210,8 +216,8 @@ class Tests:
             lines = f.readlines()
         # should have 3 line
         assert len(lines) == number_of_bins2
-        # Check sample count, XML should include only new genomes, excluding registered in first round
-        with open("tests/fixtures/bin_upload/genome_samples.xml") as f:
+        # The retry XML should contain only the new (not yet registered) genomes.
+        with open("tests/fixtures/bin_upload/genome_samples_retry.xml") as f:
             assert f.read().count("alias=") == number_of_bins2 - number_of_bins1
 
     @responses_lib.activate

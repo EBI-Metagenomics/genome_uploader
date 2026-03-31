@@ -39,9 +39,10 @@ def identify_registered_genomes(message):
 
 
 class EnaSubmit:
-    def __init__(self, sample_xml, submission_xml, number_of_genomes, live=False):
+    def __init__(self, sample_xml, submission_xml, submission_receipt, number_of_genomes, live=False):
         self.sample_xml = sample_xml
         self.submission_xml = submission_xml
+        self.submission_receipt = submission_receipt
         self.live = live
         self.auth = CredentialsManager.get_credentials()
         self.number_of_genomes = number_of_genomes
@@ -81,12 +82,9 @@ class EnaSubmit:
 
         receipt_content = submission_response.content.decode("utf-8")
         # Write receipt XML to file for troubleshooting
-        receipt_file = self.submission_xml.parent / "submission_receipt.xml"
-        if receipt_file.exists():
-            receipt_file = self.submission_xml.parent / "submission_receipt_retry.xml"
-        with open(receipt_file, "w") as file:
+        with open(self.submission_receipt, "w") as file:
             file.write(receipt_content)
-            logger.info(f"Receipt XML written to {receipt_file}")
+            logger.info(f"Receipt XML written to {self.submission_receipt}")
 
         receipt_xml = minidom.parseString(receipt_content)
         receipt = receipt_xml.getElementsByTagName("RECEIPT")

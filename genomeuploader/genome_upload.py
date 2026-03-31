@@ -203,6 +203,21 @@ def save_accessions(alias_accession_dict: dict, accessions_file: Path):
             f.write(f"{elem}\t{alias_accession_dict[elem]}\n")
 
 
+def _apply_batch_suffix(base: Path, batch_number: int, total_batches: int, retry: bool = False) -> Path:
+    """
+    Returns a suffixed Path for batch-numbered output files.
+    Single-batch runs omit the batch number; retry appends '_retry'.
+    Returns the original path unchanged when no suffix is needed.
+    """
+    if total_batches == 1:
+        suffix = "_retry" if retry else ""
+    else:
+        suffix = f"_batch_{batch_number}" + ("_retry" if retry else "")
+    if not suffix:
+        return base
+    return base.with_name(f"{base.stem}{suffix}{base.suffix}")
+
+
 def create_manifest_dictionary(
     run: str,
     alias: str,
@@ -317,6 +332,7 @@ class GenomeUpload:
             self.backup_file,
             self.samples_xml,
             self.submission_xml,
+            self.submission_receipt,
             self.manifest_dir,
             self.accessions_file,
         ) = self.generate_files_and_folders()
@@ -329,7 +345,7 @@ class GenomeUpload:
         """
         Generates required directories and file paths for upload.
         Returns:
-            tuple: Paths for upload_dir, backup_file, samples_xml, submission_xml, manifest_dir, accessions_file
+            tuple: Paths for upload_dir, backup_file, samples_xml, submission_xml, submission_receipt, manifest_dir, accessions_file
         """
         upload_name = "MAG_upload"
         if self.genome_type == "bins":
@@ -340,6 +356,7 @@ class GenomeUpload:
         backup_file = upload_dir / "ENA_backup.json"
         samples_xml = upload_dir / "genome_samples.xml"
         submission_xml = upload_dir / "submission.xml"
+        submission_receipt = upload_dir / "submission_receipt.xml"
         if not self.live:
             manifest_dir = upload_dir / "manifests_test"
         else:
@@ -353,7 +370,7 @@ class GenomeUpload:
             accessions_filename = accessions_filename.replace(".tsv", "_test.tsv")
         accessions_file = upload_dir / accessions_filename
 
-        return upload_dir, backup_file, samples_xml, submission_xml, manifest_dir, accessions_file
+        return upload_dir, backup_file, samples_xml, submission_xml, submission_receipt, manifest_dir, accessions_file
 
     def validate_metadata_tsv(self) -> dict:
         """
@@ -805,13 +822,7 @@ class GenomeUpload:
         Returns:
             Path: Path of written XML file.
         """
-        if total_batches == 1 and not retry:
-            output_path = self.samples_xml
-        else:
-            suffix = f"_batch_{batch_number}"
-            if retry:
-                suffix += "_retry"
-            output_path = self.samples_xml.with_name(f"{self.samples_xml.stem}{suffix}{self.samples_xml.suffix}")
+        output_path = _apply_batch_suffix(self.samples_xml, batch_number, total_batches, retry)
 
         with output_path.open("wb") as f:
             f.write(xml_bytes)
@@ -858,7 +869,8 @@ class GenomeUpload:
         Returns:
             dict: Mapping of alias to ENA sample accession.
         """
-        ena_submit = EnaSubmit(sample_xml_path, self.submission_xml, len(genome_batch), self.live)
+        receipt_path = _apply_batch_suffix(self.submission_receipt, batch_number, total_batches)
+        ena_submit = EnaSubmit(sample_xml_path, self.submission_xml, receipt_path, len(genome_batch), self.live)
 
         alias_accession_map = ena_submit.handle_genomes_registration()
 
@@ -872,8 +884,9 @@ class GenomeUpload:
             retry_xml_bytes = self.build_genomes_xml(filtered_genome_batch)
             logger.info("Re-writing genome registration XML...")
             retry_xml_path = self.write_genomes_xml(retry_xml_bytes, batch_number, total_batches, retry=True)
+            retry_receipt_path = _apply_batch_suffix(self.submission_receipt, batch_number, total_batches, retry=True)
             logger.info("Registering new genome samples XMLs...")
-            ena_submit_new = EnaSubmit(retry_xml_path, self.submission_xml, len(filtered_genome_batch), self.live)
+            ena_submit_new = EnaSubmit(retry_xml_path, self.submission_xml, retry_receipt_path, len(filtered_genome_batch), self.live)
             new_alias_accession_map = ena_submit_new.handle_genomes_registration()
             if len(new_alias_accession_map) == len(filtered_genome_batch):
                 # all genomes from the filtered XML were registered
@@ -882,12 +895,12 @@ class GenomeUpload:
 
             raise Exception(
                 "An error occurred during the registration step. "
-                "Please, check submission_receipt_retry.xml file for details."
+                f"Please, check {retry_receipt_path.name} file for details."
             )
 
         raise Exception(
-            "Some genomes could not be submitted to ENA. " 
-            "Please, check the errors above and submission_receipt.xml file."
+            "Some genomes could not be submitted to ENA. "
+            f"Please, check the errors above and {receipt_path.name} file."
         )
 
     def generate_genome_manifest(self, genome_info: dict, alias_to_sample: dict):
