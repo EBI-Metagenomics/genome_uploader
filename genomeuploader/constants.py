@@ -651,6 +651,9 @@ MAG_MANDATORY_FIELDS = ["rRNA_presence", "completeness", "contamination"]
 
 GEOGRAPHY_DIGIT_COORDS = 8
 
+# ENA limit is 10MB; use a slightly lower threshold to avoid hard-limit failures.
+MAX_SAMPLE_XML_SIZE_BYTES = int(9.5 * 1024 * 1024)
+
 BIN_CHECKLIST = "ERC000050"
 BIN_CHECKLIST_TYPE = "binned_metagenome"
 MAG_CHECKLIST = "ERC000047"

@@ -42,7 +42,7 @@ def _mock_genome(alias: str) -> dict:
 
 
 class Tests:
-    def test_split_genomes_by_sample_xml_size(self, tmp_path):
+    def test_split_genomes_by_sample_xml_size(self, tmp_path, monkeypatch):
         args = {
             "upload_study": "ERP000001",
             "genome_info": "tests/fixtures/input_fixture.tsv",
@@ -58,7 +58,7 @@ class Tests:
         }
 
         uploader = GenomeUpload(args)
-        uploader.max_sample_xml_size_bytes = 4300
+        monkeypatch.setattr("genomeuploader.genome_upload.MAX_SAMPLE_XML_SIZE_BYTES", 4300)
 
         genomes = {
             "genome_1": _mock_genome("genome_1"),
@@ -76,7 +76,7 @@ class Tests:
         for batch_xml_bytes, batch_info in batches:
             assert isinstance(batch_xml_bytes, bytes)
             assert len(batch_info) > 0
-            assert len(batch_xml_bytes) < uploader.max_sample_xml_size_bytes
+            assert len(batch_xml_bytes) < 4300
 
     def test_write_genomes_xml_paths(self, tmp_path):
         args = {

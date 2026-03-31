@@ -38,6 +38,7 @@ from genomeuploader.constants import (
     MAG_CHECKLIST,
     MAG_CHECKLIST_TYPE,
     MAG_MANDATORY_FIELDS,
+    MAX_SAMPLE_XML_SIZE_BYTES,
     METAGENOMES,
     MQ,
 )
@@ -47,8 +48,6 @@ from genomeuploader.taxon_finder import TaxonFinder
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-MAX_SAMPLE_XML_SIZE_BYTES = (9.5 * 1024 * 1024) # ENA limit is 10MB, we set a lower threshold to be safe
 
 
 def round_stats(stats: float) -> float:
@@ -339,7 +338,6 @@ class GenomeUpload:
         self.upload_study = args["upload_study"]
         self.genome_metadata = Path(args["genome_info"])
         self.test_suffix = args["test_suffix"]
-        self.max_sample_xml_size_bytes = MAX_SAMPLE_XML_SIZE_BYTES
 
     def generate_files_and_folders(self):
         """
@@ -842,7 +840,7 @@ class GenomeUpload:
         xml_bytes = self.build_genomes_xml(genomes)
         xml_size = len(xml_bytes)
 
-        if xml_size < self.max_sample_xml_size_bytes:
+        if xml_size < MAX_SAMPLE_XML_SIZE_BYTES:
             return [(xml_bytes, genomes)]
 
         if len(genomes) <= 1:
