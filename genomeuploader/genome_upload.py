@@ -677,7 +677,7 @@ class GenomeUpload:
 
     def create_genome_dictionary(self) -> dict:
         """
-        Orchestrates extraction and writing of genome metadata and XML files.
+        Orchestrates parsing of input metadata and retrieval of additional ENA metadata.
         Returns:
             dict: Final genome information dictionary.
         """
@@ -686,10 +686,7 @@ class GenomeUpload:
         genome_info = self.extract_genomes_info()
 
         self.extract_ena_info(genome_info)
-        logger.info("Writing genome registration XML...")
-
-        self.write_genomes_xml(genome_info)
-        logger.info("All files have been written to " + str(self.upload_dir))
+        logger.info("Genome registration metadata prepared.")
 
         return genome_info
 
@@ -721,13 +718,13 @@ class GenomeUpload:
             dom = minidom.parseString(et.tostring(submission, encoding="utf-8"))
             submission_file.write(dom.toprettyxml().encode("utf-8"))
 
-    def write_genomes_xml(self, genomes: dict):
+    def build_genomes_xml(self, genomes: dict) -> bytes:
         """
-        Writes the genome samples XML file for ENA registration.
+        Builds the genome samples XML content for ENA registration.
         Args:
             genomes (dict): Dictionary of genome metadata.
         Returns:
-            None
+            bytes: Pretty-printed XML bytes.
         """
         map_sample_attributes = [
             # tag - value - unit (optional)
@@ -795,27 +792,51 @@ class GenomeUpload:
             for constant in constant_sample_attributes:
                 create_sample_attribute(sample_attributes, constant)
 
-        with self.samples_xml.open("wb") as f:
-            dom = minidom.parseString(et.tostring(sample_set, encoding="utf-8"))
-            f.write(dom.toprettyxml().encode("utf-8"))
+        dom = minidom.parseString(et.tostring(sample_set, encoding="utf-8"))
+        return dom.toprettyxml().encode("utf-8")
 
-    def split_genomes_by_sample_xml_size(self, genomes: dict) -> list[dict]:
+    def write_genomes_xml(self, xml_bytes: bytes, batch_number: int, total_batches: int, retry: bool = False) -> Path:
+        """
+        Writes sample XML bytes to disk and resolves output filename per batch.
+        Args:
+            xml_bytes (bytes): Prebuilt pretty-printed sample XML bytes.
+            batch_number (int): 1-based index of batch being written.
+            total_batches (int): Total number of batches for this submission step.
+            retry (bool): Whether this file is a retry for a partially registered batch.
+        Returns:
+            Path: Path of written XML file.
+        """
+        if total_batches == 1 and not retry:
+            output_path = self.samples_xml
+        else:
+            suffix = f"_batch_{batch_number}"
+            if retry:
+                suffix += "_retry"
+            output_path = self.samples_xml.with_name(f"{self.samples_xml.stem}{suffix}{self.samples_xml.suffix}")
+
+        with output_path.open("wb") as f:
+            f.write(xml_bytes)
+
+        return output_path
+
+    def split_genomes_by_sample_xml_size(self, genomes: dict) -> list[tuple[bytes, dict]]:
         """
         Splits genomes recursively into 2 batches until each batch produces
         a pretty-printed sample XML smaller than ENA limit.
         Args:
             genomes (dict): Dictionary of genome metadata.
         Returns:
-            list[dict]: Batches to be submitted separately.
+            list[tuple[bytes, dict]]: Batches represented by XML bytes and
+            dictionaries storing genome metadata for each batch.
         """
-        self.write_genomes_xml(genomes)
-        xml_size = self.samples_xml.stat().st_size
+        xml_bytes = self.build_genomes_xml(genomes)
+        xml_size = len(xml_bytes)
 
         if xml_size < self.max_sample_xml_size_bytes:
-            return [genomes]
+            return [(xml_bytes, genomes)]
 
         if len(genomes) <= 1:
-            return [genomes]
+            return [(xml_bytes, genomes)]
 
         genomes_items = list(genomes.items())
         midpoint = len(genomes_items) // 2
@@ -827,16 +848,18 @@ class GenomeUpload:
 
         return left_batches + right_batches
 
-    def submit_genome_batch(self, genome_batch: dict) -> dict:
+    def submit_genome_batch(self, genome_batch: dict, sample_xml_path: Path, batch_number: int, total_batches: int) -> dict:
         """
         Submits one batch and handles retries for partially registered genomes.
         Args:
             genome_batch (dict): Batch of genome metadata.
+            sample_xml_path (Path): XML file path for the submitted batch.
+            batch_number (int): Batch index for naming retry files.
+            total_batches (int): Total number of batches.
         Returns:
             dict: Mapping of alias to ENA sample accession.
         """
-        self.write_genomes_xml(genome_batch)
-        ena_submit = EnaSubmit(self.samples_xml, self.submission_xml, len(genome_batch), self.live)
+        ena_submit = EnaSubmit(sample_xml_path, self.submission_xml, len(genome_batch), self.live)
 
         alias_accession_map = ena_submit.handle_genomes_registration()
 
@@ -846,13 +869,12 @@ class GenomeUpload:
 
         if len(alias_accession_map) > 0:
             # exclude successfully registered genomes from XML
-            if self.samples_xml.exists():
-                self.samples_xml.unlink(missing_ok=True)
             filtered_genome_batch = {k: v for k, v in genome_batch.items() if k not in alias_accession_map}
+            retry_xml_bytes = self.build_genomes_xml(filtered_genome_batch)
             logger.info("Re-writing genome registration XML...")
-            self.write_genomes_xml(filtered_genome_batch)
+            retry_xml_path = self.write_genomes_xml(retry_xml_bytes, batch_number, total_batches, retry=True)
             logger.info("Registering new genome samples XMLs...")
-            ena_submit_new = EnaSubmit(self.samples_xml, self.submission_xml, len(filtered_genome_batch), self.live)
+            ena_submit_new = EnaSubmit(retry_xml_path, self.submission_xml, len(filtered_genome_batch), self.live)
             new_alias_accession_map = ena_submit_new.handle_genomes_registration()
             if len(new_alias_accession_map) == len(filtered_genome_batch):
                 # all genomes from the filtered XML were registered
@@ -933,7 +955,7 @@ class GenomeUpload:
 
         # sample xml generation or recovery
         genome_info = self.create_genome_dictionary()
-
+        # splitting into batches if the generated XML exceeds the size limit, and submitting each batch separately
         batch_list = self.split_genomes_by_sample_xml_size(genome_info)
         logger.info(f"Registering genome samples XMLs in {len(batch_list)} batch(es)...")
 
@@ -941,11 +963,15 @@ class GenomeUpload:
         write_mode = "w"
 
         for batch_number, batch in enumerate(batch_list, start=1):
-            logger.info(f"Submitting batch {batch_number}/{len(batch_list)} containing {len(batch)} genome(s).")
-            batch_accessions = self.submit_genome_batch(batch)
+            batch_xml_bytes, batch_genome_info = batch
+            logger.info(f"Submitting batch {batch_number}/{len(batch_list)} containing {len(batch_genome_info)} genome(s).")
+            sample_xml_path = self.write_genomes_xml(batch_xml_bytes, batch_number, len(batch_list))
+            batch_accessions = self.submit_genome_batch(batch_genome_info, sample_xml_path, batch_number, len(batch_list))
             save_accessions(batch_accessions, self.accessions_file, write_mode)
             write_mode = "a"
             alias_accession_map.update(batch_accessions)
+
+        logger.info("Submitted sample XML files have been written to " + str(self.upload_dir))
 
         logger.info("Generating manifest files...")
 

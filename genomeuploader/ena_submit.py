@@ -112,10 +112,10 @@ class EnaSubmit:
                 raise SubmissionSizeLimitError(
                     (
                         "ENA rejected sample XML because it exceeds the maximum payload size: "
-                    f"{submitted_mb:.2f} MB submitted, maximum allowed is {max_mb:.2f} MB. "
-                    "The submission will need to be split into smaller batches."
+                        f"{float(submitted_mb):.2f} MB submitted, maximum allowed is {float(max_mb):.2f} MB. "
+                        "The submission will need to be split into smaller batches."
+                    )
                 )
-            )
 
             # check are there already registered genomes
             registered_genomes = identify_registered_genomes(final_error)
