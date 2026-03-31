@@ -189,17 +189,16 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
         genome_info[g]["accessions"] = ",".join(genome_info[g]["accessions"])
 
 
-def save_accessions(alias_accession_dict: dict, accessions_file: Path, write_mode: str):
+def save_accessions(alias_accession_dict: dict, accessions_file: Path):
     """
     Saves alias-accession mappings to a file.
     Args:
         alias_accession_dict (dict): Mapping of alias to accession.
         accessions_file (Path): Output file path.
-        write_mode (str): File write mode ('w', 'a', etc.).
     Returns:
         None
     """
-    with accessions_file.open(write_mode) as f:
+    with accessions_file.open("w") as f:
         for elem in alias_accession_dict:
             f.write(f"{elem}\t{alias_accession_dict[elem]}\n")
 
@@ -947,8 +946,6 @@ class GenomeUpload:
         Raises:
             Exception: If registration fails for any genome.
         """
-        genome_info, manifest_info = {}, {}
-
         # submission xml existence
         if not self.submission_xml.exists() or self.force:
             self.write_submission_xml(study=False)
@@ -957,21 +954,21 @@ class GenomeUpload:
         genome_info = self.create_genome_dictionary()
         # splitting into batches if the generated XML exceeds the size limit, and submitting each batch separately
         batch_list = self.split_genomes_by_sample_xml_size(genome_info)
-        logger.info(f"Registering genome samples XMLs in {len(batch_list)} batch(es)...")
+        total_batches = len(batch_list)
+        logger.info(f"Registering genome samples XMLs in {total_batches} batch(es)...")
 
         alias_accession_map = {}
-        write_mode = "w"
 
-        for batch_number, batch in enumerate(batch_list, start=1):
-            batch_xml_bytes, batch_genome_info = batch
-            logger.info(f"Submitting batch {batch_number}/{len(batch_list)} containing {len(batch_genome_info)} genome(s).")
-            sample_xml_path = self.write_genomes_xml(batch_xml_bytes, batch_number, len(batch_list))
-            batch_accessions = self.submit_genome_batch(batch_genome_info, sample_xml_path, batch_number, len(batch_list))
-            save_accessions(batch_accessions, self.accessions_file, write_mode)
-            write_mode = "a"
+        for batch_number, (batch_xml_bytes, batch_genome_info) in enumerate(batch_list, start=1):
+            logger.info(f"Submitting batch {batch_number}/{total_batches} containing {len(batch_genome_info)} genome(s).")
+            sample_xml_path = self.write_genomes_xml(batch_xml_bytes, batch_number, total_batches)
+            batch_accessions = self.submit_genome_batch(batch_genome_info, sample_xml_path, batch_number, total_batches)
             alias_accession_map.update(batch_accessions)
 
-        logger.info("Submitted sample XML files have been written to " + str(self.upload_dir))
+        # Write all accessions at once
+        save_accessions(alias_accession_map, self.accessions_file)
+
+        logger.info(f"Submitted sample XML files have been written to {self.upload_dir}")
 
         logger.info("Generating manifest files...")
 
