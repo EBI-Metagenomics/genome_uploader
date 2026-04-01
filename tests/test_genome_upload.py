@@ -4,79 +4,36 @@ from pathlib import Path
 
 import responses as responses_lib
 
+from genomeuploader.ena_submit import EnaSubmit
 from genomeuploader.genome_upload import *
 
 
-def _mock_genome(alias: str) -> dict:
-    return {
-        "alias": alias,
-        "co-assembly": False,
-        "accessionType": "run",
-        "accessions": "ERR000001",
-        "study": "ERP000001",
-        "taxID": "2",
-        "scientific_name": "Bacteria",
-        "description": "test project",
-        "genome_name": alias,
-        "genome_path": "tests/fixtures/bin_upload/genome_samples.xml",
-        "sequencingMethod": "Illumina",
-        "assembly_software": "megahit_v1.2.9",
-        "MAG_quality": "Multiple fragments",
-        "binning_software": "metabat2_v2.15",
-        "binning_parameters": "default",
-        "stats_generation_software": "checkm2_v1.0",
-        "completeness": 90.0,
-        "contamination": 2.0,
-        "genome_coverage": 10.0,
-        "isolationSource": "marine metagenome",
-        "collectionDate": "2024-01-01",
-        "country": "Norway",
-        "latitude": "66.079905",
-        "longitude": "12.587848",
-        "broad_environment": "marine biome",
-        "local_environment": "coastal water",
-        "environmental_medium": "water",
-        "sample_accessions": "SAMEA000001",
-        "metagenome": "marine metagenome",
-    }
-
-
 class Tests:
-    def test_split_genomes_by_sample_xml_size(self, tmp_path, monkeypatch):
-        args = {
-            "upload_study": "ERP000001",
-            "genome_info": "tests/fixtures/input_fixture.tsv",
-            "mags": False,
-            "bins": True,
-            "out": str(tmp_path),
-            "force": False,
-            "live": False,
-            "test_suffix": "unit",
-            "tpa": False,
-            "centre_name": "EMG",
-            "private": False,
-        }
+    @responses_lib.activate
+    def test_handle_genomes_registration_uses_webin_v2_queue(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("genomeuploader.ena_submit.CredentialsManager.get_credentials", lambda: ("user", "password"))
+        monkeypatch.setattr("genomeuploader.ena_submit.time.sleep", lambda _: None)
 
-        uploader = GenomeUpload(args)
-        monkeypatch.setattr("genomeuploader.genome_upload.MAX_SAMPLE_XML_SIZE_BYTES", 4300)
+        payload_xml = tmp_path / "submission.xml"
+        payload_xml.write_text(
+            "<WEBIN><SUBMISSION_SET><SUBMISSION><ACTIONS><ACTION><ADD/></ACTION></ACTIONS></SUBMISSION></SUBMISSION_SET><SAMPLE_SET><SAMPLE alias=\"genome_1\" center_name=\"EMG\"/></SAMPLE_SET></WEBIN>"
+        )
 
-        genomes = {
-            "genome_1": _mock_genome("genome_1"),
-            "genome_2": _mock_genome("genome_2"),
-            "genome_3": _mock_genome("genome_3"),
-            "genome_4": _mock_genome("genome_4"),
-        }
+        receipt_path = tmp_path / "submission_receipt.xml"
+        queue_url = "https://wwwdev.ebi.ac.uk/ena/submit/webin-v2/submit/queue"
+        poll_url = "https://wwwdev.ebi.ac.uk/ena/submit/webin-v2/submit/poll/ERA000001"
+        final_receipt = '<RECEIPT success="true"><SAMPLE accession="ERS000001" alias="genome_1"/></RECEIPT>'
 
-        batches = uploader.split_genomes_by_sample_xml_size(genomes)
+        responses_lib.add(responses_lib.POST, queue_url, json={"submissionId": "ERA000001"}, status=200)
+        responses_lib.add(responses_lib.GET, poll_url, body="queued", status=202)
+        responses_lib.add(responses_lib.GET, poll_url, body=final_receipt, status=200, content_type="application/xml")
 
-        assert len(batches) > 1
-        assert sum(len(batch_aliases) for _, batch_aliases in batches) == len(genomes)
-        assert not uploader.samples_xml.exists()
+        ena_submit = EnaSubmit(payload_xml, receipt_path, 1, live=False)
+        alias_map = ena_submit.handle_genomes_registration()
 
-        for batch_xml_bytes, batch_info in batches:
-            assert isinstance(batch_xml_bytes, bytes)
-            assert len(batch_info) > 0
-            assert len(batch_xml_bytes) < 4300
+        assert alias_map == {"genome_1": "ERS000001"}
+        assert receipt_path.read_text() == final_receipt
+        assert b"<WEBIN>" in responses_lib.calls[0].request.body
 
     def test_write_genomes_xml_paths(self, tmp_path):
         args = {
@@ -95,19 +52,11 @@ class Tests:
 
         uploader = GenomeUpload(args)
 
-        xml_bytes = b"<SAMPLE_SET/>"
+        genomes = {}
 
-        single_path = uploader.write_genomes_xml(xml_bytes, batch_number=1, total_batches=1)
-        single_retry_path = uploader.write_genomes_xml(xml_bytes, batch_number=1, total_batches=1, retry=True)
-        batch_1_path = uploader.write_genomes_xml(xml_bytes, batch_number=1, total_batches=2)
-        batch_2_path = uploader.write_genomes_xml(xml_bytes, batch_number=2, total_batches=2)
-        retry_path = uploader.write_genomes_xml(xml_bytes, batch_number=2, total_batches=2, retry=True)
-
+        single_path = uploader.write_genomes_xml(genomes)
         assert single_path == uploader.samples_xml
-        assert single_retry_path.name == "genome_samples_retry.xml"
-        assert batch_1_path.name == "genome_samples_batch_1.xml"
-        assert batch_2_path.name == "genome_samples_batch_2.xml"
-        assert retry_path.name == "genome_samples_batch_2_retry.xml"
+        assert single_path.name == "genome_samples.xml"
 
     def test_genomeuploader_end_to_end(tmp_path):
         timestamp = str(int(dt.timestamp(dt.now())))
@@ -137,7 +86,6 @@ class Tests:
         expected_files = [
             "tests/fixtures/bin_upload/manifests_test/",
             "tests/fixtures/bin_upload/genome_samples.xml",
-            "tests/fixtures/bin_upload/submission.xml",
             "tests/fixtures/bin_upload/submission_receipt.xml",
             "tests/fixtures/bin_upload/registered_bins_test.tsv",
         ]
@@ -202,7 +150,6 @@ class Tests:
             "tests/fixtures/bin_upload/manifests_test/",
             "tests/fixtures/bin_upload/genome_samples.xml",
             "tests/fixtures/bin_upload/genome_samples_retry.xml",
-            "tests/fixtures/bin_upload/submission.xml",
             "tests/fixtures/bin_upload/submission_receipt.xml",
             "tests/fixtures/bin_upload/submission_receipt_retry.xml",
             "tests/fixtures/bin_upload/registered_bins_test.tsv",
@@ -216,7 +163,7 @@ class Tests:
             lines = f.readlines()
         # should have 3 line
         assert len(lines) == number_of_bins2
-        # The retry XML should contain only the new (not yet registered) genomes.
+        # The retry payload XML should contain only the new (not yet registered) genomes.
         with open("tests/fixtures/bin_upload/genome_samples_retry.xml") as f:
             assert f.read().count("alias=") == number_of_bins2 - number_of_bins1
 

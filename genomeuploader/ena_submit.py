@@ -1,19 +1,14 @@
 import logging
 import re
+import time
 import xml.dom.minidom as minidom
 
 import requests
 
 from genomeuploader.ena import CredentialsManager
-from genomeuploader.exceptions import SubmissionSizeLimitError
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-SIZE_LIMIT_PATTERN = re.compile(
-    r"Submission size\s+([\d.]+)\s*MBytes\s+exceeds\s+the\s+maximum\s+allowed\s+size\s+of\s+([\d.]+)\s*Mbytes",
-    re.IGNORECASE,
-)
 
 
 def identify_registered_genomes(message):
@@ -39,13 +34,55 @@ def identify_registered_genomes(message):
 
 
 class EnaSubmit:
-    def __init__(self, sample_xml, submission_xml, submission_receipt, number_of_genomes, live=False):
+    def __init__(self, sample_xml, submission_receipt, number_of_genomes, live=False):
         self.sample_xml = sample_xml
-        self.submission_xml = submission_xml
         self.submission_receipt = submission_receipt
         self.live = live
         self.auth = CredentialsManager.get_credentials()
         self.number_of_genomes = number_of_genomes
+
+    def poll_submission_receipt(self, poll_url: str, timeout_seconds: int = 600, poll_interval_seconds: int = 5) -> str:
+        """
+        Polls the Webin REST V2 queue endpoint until the final XML receipt is available.
+        """
+        deadline = time.monotonic() + timeout_seconds
+        headers = {"Accept": "application/xml"}
+
+        while time.monotonic() < deadline:
+            poll_response = requests.get(poll_url, headers=headers, auth=self.auth)
+
+            if poll_response.status_code == 202:
+                logger.info("Submission is still being processed; waiting for final receipt...")
+                time.sleep(poll_interval_seconds)
+                continue
+
+            poll_response.raise_for_status()
+            return poll_response.text
+
+        raise TimeoutError("Timed out while waiting for ENA queued submission receipt.")
+
+    def parse_receipt(self, receipt_content: str) -> dict:
+        receipt_xml = minidom.parseString(receipt_content)
+        receipt = receipt_xml.getElementsByTagName("RECEIPT")
+        success = receipt[0].attributes["success"].value
+        alias_dict = {}
+
+        if success == "true":
+            for sample in receipt_xml.getElementsByTagName("SAMPLE"):
+                alias_dict[sample.attributes["alias"].value] = sample.attributes["accession"].value
+            logger.info(f"{len(alias_dict)} genome samples successfully registered.")
+            return alias_dict
+
+        errors = receipt_xml.getElementsByTagName("ERROR")
+        final_error = "".join(f"\n\t{error.firstChild.nodeValue.strip()}" for error in errors)
+
+        registered_genomes = identify_registered_genomes(final_error)
+        if registered_genomes:
+            logger.info("Some previously submitted genomes were retrieved from the receipt")
+            return registered_genomes
+
+        logger.info("No previously submitted genomes retrieved from the receipt")
+        return alias_dict
 
     def handle_genomes_registration(self):
         """
@@ -62,66 +99,44 @@ class EnaSubmit:
         Raises:
             Exception: If the submission request fails.
         """
-        live_sub, mode = "", "live"
-
-        if not self.live:
-            live_sub = "dev"
-            mode = "test"
-
-        url = f"https://www{live_sub}.ebi.ac.uk/ena/submit/drop-box/submit/"
-
-        logger.info(f"Registering sample xml in {mode} mode.")
+        mode = "live" if self.live else "test"
+        live_sub = "" if self.live else "dev"
+        base_url = f"https://www{live_sub}.ebi.ac.uk/ena/submit/webin-v2"
+        queue_url = f"{base_url}/submit/queue"
+    
+        logger.info(f"Registering genome samples using XML in {mode} mode.")
 
         try:
-            with self.submission_xml.open("r") as sub_file, self.sample_xml.open("r") as sample_file:
-                f = {"SUBMISSION": sub_file, "SAMPLE": sample_file}
-                submission_response = requests.post(url, files=f, auth=self.auth)
-                submission_response.raise_for_status()
+            submission_response = requests.post(
+                queue_url,
+                data=self.sample_xml.read_bytes(),
+                headers={"Accept": "application/json", "Content-Type": "application/xml"},
+                auth=self.auth,
+            )
+            submission_response.raise_for_status()
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to submit genomes to ENA: {e}")
 
-        receipt_content = submission_response.content.decode("utf-8")
+        queue_response = submission_response.json()
+        submission_id = queue_response.get("submissionId")
+        if not submission_id:
+            raise Exception("ENA queue submission did not return a submissionId.")
+
+        poll_url = queue_response.get("_links", {}).get("poll", {}).get("href")
+        if not poll_url:
+            raise Exception("ENA queue submission did not return a poll URL.")
+        
+        try:
+            receipt_content = self.poll_submission_receipt(poll_url)
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Failed to poll queued ENA submission {submission_id}: {e}")
+
         # Write receipt XML to file for troubleshooting
         with open(self.submission_receipt, "w") as file:
             file.write(receipt_content)
             logger.info(f"Receipt XML written to {self.submission_receipt}")
 
-        receipt_xml = minidom.parseString(receipt_content)
-        receipt = receipt_xml.getElementsByTagName("RECEIPT")
-        success = receipt[0].attributes["success"].value
-        alias_dict = {}
-        if success == "true":
-            samples = receipt_xml.getElementsByTagName("SAMPLE")
-            for s in samples:
-                sra_acc = s.attributes["accession"].value
-                alias = s.attributes["alias"].value
-                alias_dict[alias] = sra_acc
-            logger.info(f"{str(len(alias_dict))} genome samples successfully registered.")
-        # check errors and search for existing accessions
-        elif success == "false":
-            errors = receipt_xml.getElementsByTagName("ERROR")
-            final_error = ""
-            for error in errors:
-                final_error += f"\n\t{error.firstChild.nodeValue.strip()}"
-
-            size_error = SIZE_LIMIT_PATTERN.search(final_error)
-            if size_error:
-                submitted_mb, max_mb = size_error.groups()
-                raise SubmissionSizeLimitError(
-                    (
-                        "ENA rejected sample XML because it exceeds the maximum payload size: "
-                        f"{float(submitted_mb):.2f} MB submitted, maximum allowed is {float(max_mb):.2f} MB. "
-                        "The submission will need to be split into smaller batches."
-                    )
-                )
-
-            # check are there already registered genomes
-            registered_genomes = identify_registered_genomes(final_error)
-            if registered_genomes:
-                alias_dict.update(registered_genomes)
-                logger.info("Some previously submitted genomes were retrieved from the receipt")
-            else:
-                logger.info("No previously submitted genomes retrieved from the receipt")
+        alias_dict = self.parse_receipt(receipt_content)
         if len(alias_dict) == self.number_of_genomes:
             logger.info("All genomes were registered")
         else:
