@@ -24,7 +24,7 @@ class Tests:
         poll_url = "https://wwwdev.ebi.ac.uk/ena/submit/webin-v2/submit/poll/ERA000001"
         final_receipt = '<RECEIPT success="true"><SAMPLE accession="ERS000001" alias="genome_1"/></RECEIPT>'
 
-        responses_lib.add(responses_lib.POST, queue_url, json={"submissionId": "ERA000001"}, status=200)
+        responses_lib.add(responses_lib.POST, queue_url, json={"submissionId": "ERA000001", "_links": {"poll": {"href": poll_url}}}, status=200)
         responses_lib.add(responses_lib.GET, poll_url, body="queued", status=202)
         responses_lib.add(responses_lib.GET, poll_url, body=final_receipt, status=200, content_type="application/xml")
 
