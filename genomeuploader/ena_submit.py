@@ -4,6 +4,7 @@ import time
 import xml.dom.minidom as minidom
 
 import requests
+from retry import retry
 
 from genomeuploader.ena import CredentialsManager
 
@@ -84,6 +85,14 @@ class EnaSubmit:
         logger.info("No previously submitted genomes retrieved from the receipt")
         return alias_dict
 
+    @retry(
+        exceptions=(requests.exceptions.RequestException),
+        tries=3,
+        delay=15,
+        backoff=2,
+        max_delay=120,
+        logger=logger,
+    )
     def handle_genomes_registration(self):
         """
         Submits genome sample and submission XML files to ENA and parses the
@@ -92,12 +101,15 @@ class EnaSubmit:
         genomes as well as previously registered ones from error messages.
         Updates and returns a dictionary mapping genome alias to accession for
         all registered genomes.
+        
+        The entire submission+polling workflow is retried with exponential backoff
+        on transient errors (connection errors, HTTP 5xx errors).
 
         Returns:
             dict: Dictionary mapping genome alias to accession for all successfully or previously registered genomes.
 
         Raises:
-            Exception: If the submission request fails.
+            Exception: If the submission request fails after retries.
         """
         mode = "live" if self.live else "test"
         live_sub = "" if self.live else "dev"
@@ -106,16 +118,13 @@ class EnaSubmit:
     
         logger.info(f"Registering genome samples using XML in {mode} mode.")
 
-        try:
-            submission_response = requests.post(
+        submission_response = requests.post(
                 queue_url,
                 data=self.sample_xml.read_bytes(),
                 headers={"Accept": "application/json", "Content-Type": "application/xml"},
                 auth=self.auth,
             )
-            submission_response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to submit genomes to ENA: {e}")
+        submission_response.raise_for_status()
 
         queue_response = submission_response.json()
         submission_id = queue_response.get("submissionId")
@@ -126,10 +135,7 @@ class EnaSubmit:
         if not poll_url:
             raise Exception("ENA queue submission did not return a poll URL.")
         
-        try:
-            receipt_content = self.poll_submission_receipt(poll_url)
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to poll queued ENA submission {submission_id}: {e}")
+        receipt_content = self.poll_submission_receipt(poll_url)
 
         # Write receipt XML to file for troubleshooting
         with open(self.submission_receipt, "w") as file:
