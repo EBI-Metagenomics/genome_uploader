@@ -7,6 +7,7 @@ import requests
 from retry import retry
 
 from genomeuploader.ena import CredentialsManager
+from genomeuploader.exceptions import EnaQueueTimeoutError
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -57,10 +58,21 @@ class EnaSubmit:
                 time.sleep(poll_interval_seconds)
                 continue
 
+            if poll_response.status_code in (408, 504):
+                raise EnaQueueTimeoutError(
+                    "ENA async submission timed out while processing. "
+                    "This submission is likely too large and should be split into smaller batches. "
+                    f"Polling response payload: {poll_response.text}"
+                )
+
             poll_response.raise_for_status()
             return poll_response.text
 
-        raise TimeoutError("Timed out while waiting for ENA queued submission receipt.")
+        raise EnaQueueTimeoutError(
+                    "ENA async submission timed out while processing. "
+                    "This submission is likely too large and should be split into smaller batches. "
+                    f"Polling response payload: {poll_response.text}"
+                )
 
     def parse_receipt(self, receipt_content: str) -> dict:
         receipt_xml = minidom.parseString(receipt_content)
