@@ -693,9 +693,9 @@ class GenomeUpload:
 
         return genome_info
 
-    def write_genomes_xml(self, genomes: dict) -> Path:
+    def write_genome_samples_xml(self, genomes: dict) -> Path:
         """
-        Builds and writes the submitted Webin XML payload for ENA registration.
+        Writes the genome samples XML file for ENA registration.
         Args:
             genomes (dict): Dictionary of genome metadata.
         Returns:
@@ -786,7 +786,7 @@ class GenomeUpload:
 
         return self.samples_xml
 
-    def submit_genome_batch(self, genome_batch: dict) -> dict:
+    def handle_genome_samples_registration(self, genome_batch: dict) -> dict:
         """
         Submits genome registration XML and handles retries for partially registered genomes.
         Args:
@@ -796,7 +796,7 @@ class GenomeUpload:
         """
         ena_submit = EnaSubmit(self.samples_xml, self.submission_receipt, len(genome_batch), self.live)
 
-        alias_accession_map = ena_submit.handle_genomes_registration()
+        alias_accession_map = ena_submit.register_genome_samples_in_ena()
 
         if len(alias_accession_map) == len(genome_batch):
             # all genomes were registered
@@ -808,10 +808,10 @@ class GenomeUpload:
             # Update self paths for retry
             self.samples_xml = _apply_retry_suffix(self.samples_xml)
             self.submission_receipt = _apply_retry_suffix(self.submission_receipt)
-            self.write_genomes_xml(filtered_genome_batch)
+            self.write_genome_samples_xml(filtered_genome_batch)
             logger.info("Registering new genome samples XMLs...")
             ena_submit_new = EnaSubmit(self.samples_xml, self.submission_receipt, len(filtered_genome_batch), self.live)
-            new_alias_accession_map = ena_submit_new.handle_genomes_registration()
+            new_alias_accession_map = ena_submit_new.register_genome_samples_in_ena()
             if len(new_alias_accession_map) == len(filtered_genome_batch):
                 # all genomes from the filtered XML were registered
                 alias_accession_map.update(new_alias_accession_map)
@@ -877,7 +877,8 @@ class GenomeUpload:
 
     def genome_upload(self):
         """
-        Main workflow for genome upload: validates, registers, and writes manifests.
+        Main workflow for genome upload: validates input metadata, gathers required information from ENA,
+        builds genome samples XML, registers genome samples in ENA, and writes manifests for genome assembly submission. 
         Returns:
             None
         Raises:
@@ -888,8 +889,8 @@ class GenomeUpload:
 
         logger.info(f"Registering genomes using one XML containing {len(genome_info)} genome(s)...")
 
-        self.write_genomes_xml(genome_info)
-        alias_accession_map = self.submit_genome_batch(genome_info)
+        self.write_genome_samples_xml(genome_info)
+        alias_accession_map = self.handle_genome_samples_registration(genome_info)
 
         # Write all accessions at once
         save_accessions(alias_accession_map, self.accessions_file)

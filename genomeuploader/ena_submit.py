@@ -45,7 +45,28 @@ class EnaSubmit:
 
     def poll_submission_receipt(self, poll_url: str, timeout_seconds: int = 600, poll_interval_seconds: int = 5) -> str:
         """
-        Polls the Webin REST V2 queue endpoint until the final XML receipt is available.
+        Poll the ENA Webin queue endpoint until a final XML receipt is returned.
+
+        The queue endpoint returns HTTP 202 while ENA is still processing the
+        submission. In that case, the method waits for ``poll_interval_seconds``
+        and retries until either a final receipt is available or the overall
+        timeout is reached. HTTP 408 and 504 responses are treated as ENA queue
+        timeouts and converted into ``EnaQueueTimeoutError``.
+
+        Args:
+            poll_url (str): Poll endpoint returned by the Webin submission API.
+            timeout_seconds (int, optional): Maximum total time to wait for a
+                final receipt before raising ``EnaQueueTimeoutError``.
+                Defaults to 600 seconds (10 minutes).
+            poll_interval_seconds (int, optional): Delay between polling
+                attempts while the submission remains queued. Defaults to 5.
+
+        Returns:
+            str: Final XML receipt content returned by ENA.
+
+        Raises:
+            EnaQueueTimeoutError: If ENA returns a timeout status or if the
+                final receipt is not available before the deadline.
         """
         deadline = time.monotonic() + timeout_seconds
         headers = {"Accept": "application/xml"}
@@ -75,6 +96,22 @@ class EnaSubmit:
                 )
 
     def parse_receipt(self, receipt_content: str) -> dict:
+        """
+        Parse an ENA XML receipt and extract genome alias-to-accession mappings.
+
+        Successful receipts return all submitted samples from the ``SAMPLE``
+        elements. Failed receipts are inspected for ``ERROR`` elements that may
+        still contain accessions for genomes already registered in ENA, and
+        those previously registered genomes are returned when present.
+
+        Args:
+            receipt_content (str): XML receipt content returned by ENA.
+
+        Returns:
+            dict: Mapping of genome alias to accession for successfully parsed
+                or previously registered genomes. Returns an empty dictionary if
+                no accessions can be recovered from the receipt.
+        """
         receipt_xml = minidom.parseString(receipt_content)
         receipt = receipt_xml.getElementsByTagName("RECEIPT")
         success = receipt[0].attributes["success"].value
@@ -105,7 +142,7 @@ class EnaSubmit:
         max_delay=120,
         logger=logger,
     )
-    def handle_genomes_registration(self):
+    def register_genome_samples_in_ena(self):
         """
         Submits genome sample and submission XML files to ENA and parses the
         receipt for registration results.
@@ -121,7 +158,7 @@ class EnaSubmit:
             dict: Dictionary mapping genome alias to accession for all successfully or previously registered genomes.
 
         Raises:
-            Exception: If the submission request fails after retries.
+            Exception: If the submission response does not contain expected fields.
         """
         mode = "live" if self.live else "test"
         live_sub = "" if self.live else "dev"

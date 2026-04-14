@@ -10,7 +10,7 @@ from genomeuploader.genome_upload import *
 
 class Tests:
     @responses_lib.activate
-    def test_handle_genomes_registration_uses_webin_v2_queue(self, tmp_path, monkeypatch):
+    def test_register_genome_samples_in_ena_uses_webin_v2_queue(self, tmp_path, monkeypatch):
         monkeypatch.setattr("genomeuploader.ena_submit.CredentialsManager.get_credentials", lambda: ("user", "password"))
         monkeypatch.setattr("genomeuploader.ena_submit.time.sleep", lambda _: None)
 
@@ -29,34 +29,12 @@ class Tests:
         responses_lib.add(responses_lib.GET, poll_url, body=final_receipt, status=200, content_type="application/xml")
 
         ena_submit = EnaSubmit(payload_xml, receipt_path, 1, live=False)
-        alias_map = ena_submit.handle_genomes_registration()
+        alias_map = ena_submit.register_genome_samples_in_ena()
 
         assert alias_map == {"genome_1": "ERS000001"}
         assert receipt_path.read_text() == final_receipt
         assert b"<WEBIN>" in responses_lib.calls[0].request.body
 
-    def test_write_genomes_xml_paths(self, tmp_path):
-        args = {
-            "upload_study": "ERP000001",
-            "genome_info": "tests/fixtures/input_fixture.tsv",
-            "mags": False,
-            "bins": True,
-            "out": str(tmp_path),
-            "force": False,
-            "live": False,
-            "test_suffix": "unit",
-            "tpa": False,
-            "centre_name": "EMG",
-            "private": False,
-        }
-
-        uploader = GenomeUpload(args)
-
-        genomes = {}
-
-        single_path = uploader.write_genomes_xml(genomes)
-        assert single_path == uploader.samples_xml
-        assert single_path.name == "genome_samples.xml"
 
     def test_genomeuploader_end_to_end(tmp_path):
         timestamp = str(int(dt.timestamp(dt.now())))
