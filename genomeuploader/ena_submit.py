@@ -12,6 +12,12 @@ from genomeuploader.exceptions import EnaQueueTimeoutError
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+HTTP_ACCEPTED_CODE = 202
+HTTP_TIMEOUT_CODES = (408, 504)
+
+ENA_PROD_BASE_URL = "https://www.ebi.ac.uk/ena/submit/webin-v2"
+ENA_DEV_BASE_URL = "https://wwwdev.ebi.ac.uk/ena/submit/webin-v2"
+
 
 def identify_registered_genomes(message):
     """
@@ -74,12 +80,12 @@ class EnaSubmit:
         while time.monotonic() < deadline:
             poll_response = requests.get(poll_url, headers=headers, auth=self.auth)
 
-            if poll_response.status_code == 202:
+            if poll_response.status_code == HTTP_ACCEPTED_CODE:
                 logger.info("Submission is still being processed; waiting for final receipt...")
                 time.sleep(poll_interval_seconds)
                 continue
 
-            if poll_response.status_code in (408, 504):
+            if poll_response.status_code in HTTP_TIMEOUT_CODES:
                 raise EnaQueueTimeoutError(
                     "ENA async submission timed out while processing. "
                     "This submission is likely too large and should be split into smaller batches. "
@@ -160,11 +166,10 @@ class EnaSubmit:
         Raises:
             Exception: If the submission response does not contain expected fields.
         """
-        mode = "live" if self.live else "test"
-        live_sub = "" if self.live else "dev"
-        base_url = f"https://www{live_sub}.ebi.ac.uk/ena/submit/webin-v2"
+        base_url = ENA_PROD_BASE_URL if self.live else ENA_DEV_BASE_URL
         queue_url = f"{base_url}/submit/queue"
     
+        mode = "live" if self.live else "test"
         logger.info(f"Registering genome samples using XML in {mode} mode.")
 
         submission_response = requests.post(
