@@ -549,12 +549,12 @@ def get_location_metadata(self, sample_info):
         country = "missing: third party data"
 
         try:
-            # in this case, samples would be private
             latitude = sample_info["latitude"]
             longitude = sample_info["longitude"]
             country = sample_info["country"]
         except KeyError:
-            # samples are either public, or missing metadata
+            # trying other fields, as a different checklist might have 
+            # been used, or metadata might be missing
             try:
                 country = sample_info["country"].split(":")[0]
                 location = sample_info["location"]
