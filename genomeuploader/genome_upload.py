@@ -543,16 +543,18 @@ class GenomeUpload:
             collection_date = "missing: third party data"
         return collection_date
 
-    def get_location_metadata(self, sample_info):
-
-        latitude, longitude = "missing: third party data", "missing: third party data"
+def get_location_metadata(self, sample_info):
+        latitude = "missing: third party data"
+        longitude = "missing: third party data"
         country = "missing: third party data"
 
-        if self.private:
-            latitude = sample_info.get("latitude", "not provided")
-            longitude = sample_info.get("longitude", "not provided")
-            country = sample_info.get("country", "not provided")
-        else:
+        try:
+            latitude = sample_info["latitude"]
+            longitude = sample_info["longitude"]
+            country = sample_info["country"]
+        except KeyError:
+            # trying other fields, as a different checklist might have 
+            # been used, or metadata might be missing
             try:
                 country = sample_info["country"].split(":")[0]
                 location = sample_info["location"]
