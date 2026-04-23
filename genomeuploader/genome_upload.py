@@ -543,7 +543,7 @@ class GenomeUpload:
             collection_date = "missing: third party data"
         return collection_date
 
-def get_location_metadata(self, sample_info):
+    def get_location_metadata(self, sample_info):
         latitude = "missing: third party data"
         longitude = "missing: third party data"
         country = "missing: third party data"
