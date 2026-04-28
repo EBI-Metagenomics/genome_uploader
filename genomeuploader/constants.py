@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+
 HQ = "Multiple fragments where gaps span repetitive regions. Presence of the 23S, 16S, and 5S rRNA genes and at least 18 tRNAs"
 MQ = "Many fragments with little to no review of assembly other than reporting of standard assembly statistics"
 
@@ -655,3 +657,14 @@ BIN_CHECKLIST = "ERC000050"
 BIN_CHECKLIST_TYPE = "binned_metagenome"
 MAG_CHECKLIST = "ERC000047"
 MAG_CHECKLIST_TYPE = "Metagenome-assembled genome"
+
+COLLECTION_DATE_REGEX = re.compile(r"(^[12][0-9]{3}(-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01])(T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z?([+-][0-9]{1,2})?)?)?)?(/[0-9]{4}(-[0-9]{2}(-[0-9]{2}(T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z?([+-][0-9]{1,2})?)?)?)?)?$)")
+DATE_FORMATS = [
+    "%Y/%m/%d",      # 2009/7/17
+    "%d/%m/%Y",      # 17/7/2009
+    "%m/%d/%Y",      # 7/17/2009
+    "%m-%d-%Y",      # 7-17-2009
+    "%d-%m-%Y",      # 17-7-2009
+    "%d-%b-%Y",      # 21-Sep-2015
+    "%d-%B-%Y",      # 21-September-2015
+]
