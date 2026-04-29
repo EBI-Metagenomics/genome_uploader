@@ -658,6 +658,7 @@ BIN_CHECKLIST_TYPE = "binned_metagenome"
 MAG_CHECKLIST = "ERC000047"
 MAG_CHECKLIST_TYPE = "Metagenome-assembled genome"
 
+# collection_date regex currently supported by ENA (last reviewed 27.04.2026)
 COLLECTION_DATE_REGEX = re.compile(r"(^[12][0-9]{3}(-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01])(T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z?([+-][0-9]{1,2})?)?)?)?(/[0-9]{4}(-[0-9]{2}(-[0-9]{2}(T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z?([+-][0-9]{1,2})?)?)?)?)?$)")
 DATE_FORMATS = [
     "%Y/%m/%d",      # 2009/7/17
