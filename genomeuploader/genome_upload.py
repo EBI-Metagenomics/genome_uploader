@@ -187,17 +187,17 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
         genome_info[g]["accessions"] = ",".join(genome_info[g]["accessions"])
 
 
-def save_accessions(alias_accession_dict: dict, accessions_file: Path, write_mode: str):
+def save_accessions(alias_accession_dict: dict, accessions_file: Path):
     """
     Saves alias-accession mappings to a file.
     Args:
         alias_accession_dict (dict): Mapping of alias to accession.
         accessions_file (Path): Output file path.
-        write_mode (str): File write mode ('w', 'a', etc.).
     Returns:
         None
     """
-    with accessions_file.open(write_mode) as f:
+    with open(accessions_file, 'w') as f:
+        f.write('alias\tsample\n')
         for elem in alias_accession_dict:
             f.write(f"{elem}\t{alias_accession_dict[elem]}\n")
 
@@ -867,7 +867,7 @@ class GenomeUpload:
 
         if len(alias_accession_map) == len(genome_info):
             # all genomes were registered
-            save_accessions(alias_accession_map, self.accessions_file, "w")
+            save_accessions(alias_accession_map, self.accessions_file)
         else:
             if len(alias_accession_map) > 0:
                 # exclude those from XML
@@ -881,15 +881,14 @@ class GenomeUpload:
                 new_alias_accession_map = ena_submit_new.handle_genomes_registration()
                 if len(new_alias_accession_map) == len(filtered_genome_info):
                     # all new genomes were registered
-                    save_accessions(new_alias_accession_map, self.accessions_file, "a")
                     alias_accession_map.update(new_alias_accession_map)
+                    save_accessions(alias_accession_map, self.accessions_file)
                 else:
                     raise Exception("An error occurred during the registration step. "
                                     "Please, check submission_receipt_retry.xml file for details.")
             else:
                 raise Exception("Some genomes could not be submitted to ENA. "
                                 "Please, check the errors above and submission_receipt.xml file.")
-
         logger.info("Generating manifest files...")
 
         manifest_info = compute_manifests(genome_info)
