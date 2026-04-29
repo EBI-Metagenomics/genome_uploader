@@ -193,7 +193,6 @@ def save_accessions(alias_accession_dict: dict, accessions_file: Path):
     Args:
         alias_accession_dict (dict): Mapping of alias to accession.
         accessions_file (Path): Output file path.
-        write_mode (str): File write mode ('w', 'a', etc.).
     Returns:
         None
     """
@@ -868,7 +867,7 @@ class GenomeUpload:
 
         if len(alias_accession_map) == len(genome_info):
             # all genomes were registered
-            samples_to_save = alias_accession_map
+            save_accessions(alias_accession_map, self.accessions_file)
         else:
             if len(alias_accession_map) > 0:
                 # exclude those from XML
@@ -883,15 +882,13 @@ class GenomeUpload:
                 if len(new_alias_accession_map) == len(filtered_genome_info):
                     # all new genomes were registered
                     alias_accession_map.update(new_alias_accession_map)
-                    samples_to_save = alias_accession_map
+                    save_accessions(alias_accession_map, self.accessions_file)
                 else:
                     raise Exception("An error occurred during the registration step. "
                                     "Please, check submission_receipt_retry.xml file for details.")
             else:
                 raise Exception("Some genomes could not be submitted to ENA. "
                                 "Please, check the errors above and submission_receipt.xml file.")
-        save_accessions(samples_to_save, self.accessions_file)
-
         logger.info("Generating manifest files...")
 
         manifest_info = compute_manifests(genome_info)
