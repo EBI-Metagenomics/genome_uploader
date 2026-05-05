@@ -572,6 +572,9 @@ class GenomeUpload:
                         longitude = longitude.split("E")[0].strip()
             except KeyError as e:
                 pass
+        except TypeError:
+            # if the dictionary is empty, the sample wasn't found in the private/public api
+            return None
 
         if latitude not in ["missing: third party data", "not provided"]:
             try:
@@ -589,7 +592,13 @@ class GenomeUpload:
 
         if country not in GEOGRAPHIC_LOCATIONS:
             country = "missing: third party data"
-        return latitude, longitude, country
+
+        metadata_dict = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "country": country
+        }
+        return metadata_dict
 
     def get_project_description(self, s):
         ena_query = EnaQuery(s, "study", self.private)
@@ -599,12 +608,23 @@ class GenomeUpload:
             project_description = study_info["study_title"]
         return project_description
 
-    def get_sample_metadata(self, sample_accession):
-        ena_query = EnaQuery(sample_accession, "sample", self.private)
+    def get_metadata_with_privacy(self, sample_accession, privacy_status):
+        ena_query = EnaQuery(sample_accession, "sample", privacy_status)
         sample_info = ena_query.build_query()
-        latitude, longitude, country = self.get_location_metadata(sample_info)
-        collection_date = self.get_collection_date(sample_info["collection_date"])
-        return latitude, longitude, country, collection_date
+        metadata_dict = self.get_location_metadata(sample_info)
+        if metadata_dict:
+            metadata_dict["collection_date"] = self.get_collection_date(sample_info["collection_date"])
+            return metadata_dict
+        else:
+            return None
+
+    def get_sample_metadata(self, sample_accession):
+        metadata_dict = self.get_metadata_with_privacy(sample_accession, self.private)
+        # it may happen that the status of registered samples is different
+        # than runs/assemblies referenced in the input metadata
+        if not metadata_dict:
+            metadata_dict = self.get_metadata_with_privacy(sample_accession, not self.private)
+        return metadata_dict
 
     def extract_ena_info(self, genome_info: dict):
         """
@@ -663,14 +683,14 @@ class GenomeUpload:
                         study_descriptions[study_accession] = self.get_project_description(study_accession)
 
                     sample_accession = general_info.get("sample_accession")
-                    latitude, longitude, country, collection_date = self.get_sample_metadata(sample_accession)
+                    metadata_dict = self.get_sample_metadata(sample_accession)
 
                     temp_dict[acc] = {
                         "instrumentModel": instrument_model,
-                        "collectionDate": collection_date,
-                        "country": country,
-                        "latitude": latitude,
-                        "longitude": longitude,
+                        "collectionDate": metadata_dict["collection_date"],
+                        "country": metadata_dict["country"],
+                        "latitude": metadata_dict["latitude"],
+                        "longitude": metadata_dict["longitude"],
                         "projectDescription": study_descriptions[study_accession],
                         "study": study_accession,
                         "sampleAccession": sample_accession,
