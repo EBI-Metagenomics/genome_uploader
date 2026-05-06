@@ -74,8 +74,8 @@ class Tests:
         filepath = "tests/fixtures/bin_upload/registered_bins_test.tsv"
         with open(filepath, "r") as f:
             lines = f.readlines()
-        # should have the same number of genomes
-        assert len(lines) == number_of_bins
+        # should have the same number of genomes (including header)
+        assert len(lines) == number_of_bins + 1
         # should have sample id (ERS) and suffix from --test-suffix command
         assert "ERS" in "".join(lines) and "end-to-end" in "".join(lines)
 
@@ -139,10 +139,10 @@ class Tests:
         filepath = "tests/fixtures/bin_upload/registered_bins_test.tsv"
         with open(filepath, "r") as f:
             lines = f.readlines()
-        # should have 3 line
-        assert len(lines) == number_of_bins2
-        # The retry payload XML should contain only the new (not yet registered) genomes.
-        with open("tests/fixtures/bin_upload/genome_samples_retry.xml") as f:
+        # should have 3 lines + header
+        assert len(lines) == number_of_bins2 + 1
+        # Check sample count, XML should include only new genomes, excluding registered in first round
+        with open("tests/fixtures/bin_upload/genome_samples.xml") as f:
             assert f.read().count("alias=") == number_of_bins2 - number_of_bins1
 
     @responses_lib.activate

@@ -32,6 +32,8 @@ from genomeuploader.constants import (
     BIN_CHECKLIST,
     BIN_CHECKLIST_TYPE,
     BIN_MANDATORY_FIELDS,
+    COLLECTION_DATE_REGEX,
+    DATE_FORMATS,
     GEOGRAPHIC_LOCATIONS,
     GEOGRAPHY_DIGIT_COORDS,
     HQ,
@@ -196,7 +198,8 @@ def save_accessions(alias_accession_dict: dict, accessions_file: Path):
     Returns:
         None
     """
-    with accessions_file.open("w") as f:
+    with open(accessions_file, 'w') as f:
+        f.write('alias\tsample\n')
         for elem in alias_accession_dict:
             f.write(f"{elem}\t{alias_accession_dict[elem]}\n")
 
@@ -520,28 +523,45 @@ class GenomeUpload:
 
         return genome_info
 
+    def reformat_collection_date(self, date):
+        for format in DATE_FORMATS:
+            try:
+                new_date = dt.strptime(date, format)
+                return new_date.strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+        return None
+
     def get_collection_date(self, collection_date):
-        if collection_date.lower() in [
-            "not collected",
-            "not provided",
-            "restricted access",
-            "missing: control sample",
-            "missing: sample group",
-            "missing: synthetic construct",
-            "missing: lab stock",
-            "missing: third party data",
-            "missing: data agreement established pre-2023",
-            "missing: endangered species",
-            "missing: human-identifiable",
-        ]:
-            collection_date = collection_date.lower()
-        if (
-                not collection_date
-                or collection_date.lower() == "missing"
-                or collection_date.lower() in ["not available", "na"]
-        ):
-            collection_date = "missing: third party data"
-        return collection_date
+        # check if given collection date respects the required ENA format
+        if COLLECTION_DATE_REGEX.match(collection_date):
+            if collection_date.lower() in [
+                "not collected",
+                "not provided",
+                "restricted access",
+                "missing: control sample",
+                "missing: sample group",
+                "missing: synthetic construct",
+                "missing: lab stock",
+                "missing: third party data",
+                "missing: data agreement established pre-2023",
+                "missing: endangered species",
+                "missing: human-identifiable",
+            ]:
+                collection_date = collection_date.lower()
+            if (
+                    not collection_date
+                    or collection_date.lower() == "missing"
+                    or collection_date.lower() in ["not available", "na"]
+            ):
+                collection_date = "missing: third party data"
+            return collection_date
+        else:
+            # try to reformat the date
+            new_collection_date = self.reformat_collection_date(collection_date)
+            if not new_collection_date:
+                raise IOError(f"Collection date {collection_date} could not be parsed.")
+            return new_collection_date
 
     def get_location_metadata(self, sample_info):
         latitude = "missing: third party data"
