@@ -77,18 +77,31 @@ def private_study_data():
 
 @pytest.fixture
 def public_run_data():
-    return {"run_accession": "ERR4918394", "sample_accession": "SAMEA7687881", "secondary_study_accession": "ERP125469"}
+    return {
+        "run_accession": "ERR4918394",
+        "sample_accession": "SAMEA7687881",
+        "secondary_study_accession": "ERP125469"
+    }
 
 
 #   private json only has ERS sample IDs
 @pytest.fixture
 def private_run_data():
-    return {"run_accession": "ERR4918394", "sample_accession": "ERS5444411", "secondary_study_accession": "ERP125469"}
+    return {
+        "run_accession": "ERR4918394",
+        "sample_accession": "ERS5444411",
+        "secondary_study_accession": "ERP125469"
+    }
 
 
 @pytest.fixture
 def public_sample_data():
-    return {"sample_accession": "SAMEA7687881", "collection_date": "2019-06-11", "country": "Norway", "location": "66.079905 N 12.587848 E"}
+    return {
+        "sample_accession": "SAMEA7687881",
+        "collection_date": "2019-06-11",
+        "country": "Norway",
+        "location": "66.079905 N 12.587848 E"
+    }
 
 
 #  private xml can only query with RS accession and lat and long are split
@@ -115,9 +128,17 @@ def private_assembly_info_xml(test_file_dir):
 
 @pytest.fixture
 def public_assembly_info_data():
-    return {"study_accession": "PRJEB71644", "sample_accession": "SAMEA114545946", "sampling_platform": 'ILLUMINA'}
+    return {
+        "study_accession": "PRJEB71644",
+        "sample_accession": "SAMEA114545946",
+        "sampling_platform": 'ILLUMINA'
+    }
 
 
 @pytest.fixture
 def private_assembly_info_data():
-    return {"study_accession": "ERP157889", "sample_accession": "SRS1254557", "sampling_platform": 'ILLUMINA'}
+    return {
+        "study_accession": "ERP157889",
+        "sample_accession": "SRS1254557",
+        "sampling_platform": 'ILLUMINA'
+    }
