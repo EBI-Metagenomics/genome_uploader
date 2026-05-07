@@ -169,7 +169,7 @@ Run live execution:
 
 ```bash
 webin_cli_handler \
-  --manifest *.manifest \
+  --manifest <alias>.manifest \
   --context genome \
   --mode submit \
   [--test]
@@ -183,13 +183,17 @@ webin_cli_handler
 
   -h, --help            show this help message and exit
   -m, --manifest MANIFEST
-                        Manifest text file containing file and metadata fields
+                        Path to a single manifest file or a directory containing manifest files
+  -o, --output-accessions OUTPUT_ACCESSIONS
+                        File to write assigned accessions to (TSV, default: ena_accessions.tsv)
   -c, --context {genome,transcriptome,sequence,polysample,reads,taxrefset}
                         Submission type: genome, transcriptome, sequence, polysample, reads, taxrefset
   --mode {submit,validate}
                         submit or validate
   --test                Specify to use test server instead of live
-  --workdir WORKDIR     Path to working directory
+  --fasta-dir FASTA_DIR
+                        Path to the FASTA files declared in the manifest file(s), required if manifest(s) reference file(s) that cannot be accessed from the execution directory
+  --outdir OUTDIR       Base output directory for webin-cli files
   --download-webin-cli  Specify if you do not have ena-webin-cli installed
   --download-webin-cli-directory DOWNLOAD_WEBIN_CLI_DIRECTORY
                         Path to save webin-cli into
@@ -197,13 +201,15 @@ webin_cli_handler
                         Version of ena-webin-cli to download, default: latest
   --webin-cli-jar WEBIN_CLI_JAR
                         Path to pre-downloaded webin-cli.jar file to execute
-  --retries RETRIES     Number of retry attempts (default: 3)
+  --retries RETRIES     Number of retry attempts (must be >= 1, default: 3)
   --retry-delay RETRY_DELAY
-                        Initial retry delay in seconds (default: 5)
+                        Initial retry delay in seconds (must be >= 0, default: 5)
   --java-heap-size-initial JAVA_HEAP_SIZE_INITIAL
-                        Java initial heap size in GB (default: 10)
+                        Java initial heap size in GB (-Xms); only added when explicitly provided
   --java-heap-size-max JAVA_HEAP_SIZE_MAX
-                        Java maximum heap size in GB (default: 10)
+                        Java maximum heap size in GB (-Xmx); only added when explicitly provided
+  --debug               Enable debug logging
+  --resume              Resume previous webin_cli_handler run: skip aliases already present in accessions output file
 ```
 
 ## Devs section

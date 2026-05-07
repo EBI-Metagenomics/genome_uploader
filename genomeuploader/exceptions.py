@@ -20,3 +20,7 @@ class EnaParseError(EnaQueryError):
 
 class NoDataException(EnaQueryError):
     pass
+
+
+class EnaQueueTimeoutError(Exception):
+    pass

@@ -1,6 +1,6 @@
 [project]
 name = "genome_uploader"
-version = "2.5.2"
+version = "3.0.0"
 
 readme = "README.md"
 authors = [
@@ -25,7 +25,8 @@ dependencies = [
     "numpy>=1.21",
     "python-dotenv>=1.0",
     "click==8.1.8",
-    "mgnify-pipelines-toolkit>=1.4.5"
+    "mgnify-pipelines-toolkit>=1.4.22",
+    "retry>=0.9.2"
 ]
 
 [project.urls]

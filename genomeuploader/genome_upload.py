@@ -204,6 +204,13 @@ def save_accessions(alias_accession_dict: dict, accessions_file: Path):
             f.write(f"{elem}\t{alias_accession_dict[elem]}\n")
 
 
+def _apply_retry_suffix(base: Path) -> Path:
+    """
+    Returns a retry-suffixed Path.
+    """
+    return base.with_name(f"{base.stem}_retry{base.suffix}")
+
+
 def create_manifest_dictionary(
     run: str,
     alias: str,
@@ -317,7 +324,7 @@ class GenomeUpload:
             self.upload_dir,
             self.backup_file,
             self.samples_xml,
-            self.submission_xml,
+            self.submission_receipt,
             self.manifest_dir,
             self.accessions_file,
         ) = self.generate_files_and_folders()
@@ -329,7 +336,7 @@ class GenomeUpload:
         """
         Generates required directories and file paths for upload.
         Returns:
-            tuple: Paths for upload_dir, backup_file, samples_xml, submission_xml, manifest_dir, accessions_file
+            tuple: Paths for upload_dir, backup_file, samples_xml, submission_receipt, manifest_dir, accessions_file
         """
         upload_name = "MAG_upload"
         if self.genome_type == "bins":
@@ -339,7 +346,7 @@ class GenomeUpload:
 
         backup_file = upload_dir / "ENA_backup.json"
         samples_xml = upload_dir / "genome_samples.xml"
-        submission_xml = upload_dir / "submission.xml"
+        submission_receipt = upload_dir / "submission_receipt.xml"
         if not self.live:
             manifest_dir = upload_dir / "manifests_test"
         else:
@@ -353,7 +360,7 @@ class GenomeUpload:
             accessions_filename = accessions_filename.replace(".tsv", "_test.tsv")
         accessions_file = upload_dir / accessions_filename
 
-        return upload_dir, backup_file, samples_xml, submission_xml, manifest_dir, accessions_file
+        return upload_dir, backup_file, samples_xml, submission_receipt, manifest_dir, accessions_file
 
     def validate_metadata_tsv(self) -> dict:
         """
@@ -527,7 +534,7 @@ class GenomeUpload:
 
     def get_collection_date(self, collection_date):
         # check if given collection date respects the required ENA format
-        if COLLECTION_DATE_REGEX.match(collection_date):
+        if COLLECTION_DATE_REGEX.match(collection_date) or collection_date == "":
             if collection_date.lower() in [
                 "not collected",
                 "not provided",
@@ -539,7 +546,7 @@ class GenomeUpload:
                 "missing: third party data",
                 "missing: data agreement established pre-2023",
                 "missing: endangered species",
-                "missing: human-identifiable",
+                "missing: human-identifiable"
             ]:
                 collection_date = collection_date.lower()
             if (
@@ -557,15 +564,17 @@ class GenomeUpload:
             return new_collection_date
 
     def get_location_metadata(self, sample_info):
-
-        latitude, longitude = "missing: third party data", "missing: third party data"
+        latitude = "missing: third party data"
+        longitude = "missing: third party data"
         country = "missing: third party data"
 
-        if self.private:
-            latitude = sample_info.get("latitude", "not provided")
-            longitude = sample_info.get("longitude", "not provided")
-            country = sample_info.get("country", "not provided")
-        else:
+        try:
+            latitude = sample_info["latitude"]
+            longitude = sample_info["longitude"]
+            country = sample_info["country"]
+        except KeyError:
+            # trying other fields, as a different checklist might have 
+            # been used, or metadata might be missing
             try:
                 country = sample_info["country"].split(":")[0]
                 location = sample_info["location"]
@@ -583,6 +592,9 @@ class GenomeUpload:
                         longitude = longitude.split("E")[0].strip()
             except KeyError as e:
                 pass
+        except TypeError:
+            # if the dictionary is empty, the sample wasn't found in the private/public api
+            return None
 
         if latitude not in ["missing: third party data", "not provided"]:
             try:
@@ -600,7 +612,13 @@ class GenomeUpload:
 
         if country not in GEOGRAPHIC_LOCATIONS:
             country = "missing: third party data"
-        return latitude, longitude, country
+
+        metadata_dict = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "country": country
+        }
+        return metadata_dict
 
     def get_project_description(self, s):
         ena_query = EnaQuery(s, "study", self.private)
@@ -610,12 +628,23 @@ class GenomeUpload:
             project_description = study_info["study_title"]
         return project_description
 
-    def get_sample_metadata(self, sample_accession):
-        ena_query = EnaQuery(sample_accession, "sample", self.private)
+    def get_metadata_with_privacy(self, sample_accession, privacy_status):
+        ena_query = EnaQuery(sample_accession, "sample", privacy_status)
         sample_info = ena_query.build_query()
-        latitude, longitude, country = self.get_location_metadata(sample_info)
-        collection_date = self.get_collection_date(sample_info["collection_date"])
-        return latitude, longitude, country, collection_date
+        metadata_dict = self.get_location_metadata(sample_info)
+        if metadata_dict:
+            metadata_dict["collection_date"] = self.get_collection_date(sample_info["collection_date"])
+            return metadata_dict
+        else:
+            return None
+
+    def get_sample_metadata(self, sample_accession):
+        metadata_dict = self.get_metadata_with_privacy(sample_accession, self.private)
+        # it may happen that the status of registered samples is different
+        # than runs/assemblies referenced in the input metadata
+        if not metadata_dict:
+            metadata_dict = self.get_metadata_with_privacy(sample_accession, not self.private)
+        return metadata_dict
 
     def extract_ena_info(self, genome_info: dict):
         """
@@ -674,14 +703,14 @@ class GenomeUpload:
                         study_descriptions[study_accession] = self.get_project_description(study_accession)
 
                     sample_accession = general_info.get("sample_accession")
-                    latitude, longitude, country, collection_date = self.get_sample_metadata(sample_accession)
+                    metadata_dict = self.get_sample_metadata(sample_accession)
 
                     temp_dict[acc] = {
                         "instrumentModel": instrument_model,
-                        "collectionDate": collection_date,
-                        "country": country,
-                        "latitude": latitude,
-                        "longitude": longitude,
+                        "collectionDate": metadata_dict["collection_date"],
+                        "country": metadata_dict["country"],
+                        "latitude": metadata_dict["latitude"],
+                        "longitude": metadata_dict["longitude"],
                         "projectDescription": study_descriptions[study_accession],
                         "study": study_accession,
                         "sampleAccession": sample_accession,
@@ -693,7 +722,7 @@ class GenomeUpload:
 
     def create_genome_dictionary(self) -> dict:
         """
-        Orchestrates extraction and writing of genome metadata and XML files.
+        Orchestrates parsing of input metadata and retrieval of additional ENA metadata.
         Returns:
             dict: Final genome information dictionary.
         """
@@ -702,48 +731,17 @@ class GenomeUpload:
         genome_info = self.extract_genomes_info()
 
         self.extract_ena_info(genome_info)
-        logger.info("Writing genome registration XML...")
-
-        self.write_genomes_xml(genome_info)
-        logger.info("All files have been written to " + str(self.upload_dir))
+        logger.info("Genome registration metadata prepared.")
 
         return genome_info
 
-    def write_submission_xml(self, study: bool = True):
-        """
-        Writes the submission XML file for ENA registration.
-        Args:
-            study (bool): If registering a study, include a hold date.
-        Returns:
-            None
-        """
-        today = str(date.today())
-
-        submission = et.Element("SUBMISSION")
-        submission.set("center_name", self.centre_name)
-
-        # template
-        actions = et.SubElement(submission, "ACTIONS")
-        action_sub = et.SubElement(actions, "ACTION")
-        et.SubElement(action_sub, "ADD")
-
-        # attributes: function and hold date
-        if study:
-            action_hold = et.SubElement(actions, "ACTION")
-            hold = et.SubElement(action_hold, "HOLD")
-            hold.set("HoldUntilDate", today)
-
-        with self.submission_xml.open("wb") as submission_file:
-            dom = minidom.parseString(et.tostring(submission, encoding="utf-8"))
-            submission_file.write(dom.toprettyxml().encode("utf-8"))
-
-    def write_genomes_xml(self, genomes: dict):
+    def write_genome_samples_xml(self, genomes: dict) -> Path:
         """
         Writes the genome samples XML file for ENA registration.
         Args:
             genomes (dict): Dictionary of genome metadata.
         Returns:
-            None
+            Path: Path of written XML file.
         """
         map_sample_attributes = [
             # tag - value - unit (optional)
@@ -783,6 +781,12 @@ class GenomeUpload:
         if self.tpa:
             tpa_description = "Third Party Annotation (TPA) "
 
+        submission = et.Element("SUBMISSION")
+        submission.set("center_name", self.centre_name)
+        actions = et.SubElement(submission, "ACTIONS")
+        action_sub = et.SubElement(actions, "ACTION")
+        et.SubElement(action_sub, "ADD")
+
         sample_set = et.Element("SAMPLE_SET")
 
         for g in genomes:
@@ -811,9 +815,59 @@ class GenomeUpload:
             for constant in constant_sample_attributes:
                 create_sample_attribute(sample_attributes, constant)
 
+        webin = et.Element("WEBIN")
+        submission_set = et.SubElement(webin, "SUBMISSION_SET")
+        submission_set.append(submission)
+        webin.append(sample_set)
+
+        dom = minidom.parseString(et.tostring(webin, encoding="utf-8"))
+        xml_bytes = dom.toprettyxml().encode("utf-8")
+
         with self.samples_xml.open("wb") as f:
-            dom = minidom.parseString(et.tostring(sample_set, encoding="utf-8"))
-            f.write(dom.toprettyxml().encode("utf-8"))
+            f.write(xml_bytes)
+
+        return self.samples_xml
+
+    def handle_genome_samples_registration(self, genome_batch: dict) -> dict:
+        """
+        Submits genome registration XML and handles retries for partially registered genomes.
+        Args:
+            genome_batch (dict): Genome metadata included in the submitted XML.
+        Returns:
+            dict: Mapping of alias to ENA sample accession.
+        """
+        ena_submit = EnaSubmit(self.samples_xml, self.submission_receipt, len(genome_batch), self.live)
+
+        alias_accession_map = ena_submit.register_genome_samples_in_ena()
+
+        if len(alias_accession_map) == len(genome_batch):
+            # all genomes were registered
+            return alias_accession_map
+
+        if len(alias_accession_map) > 0:
+            filtered_genome_batch = {k: v for k, v in genome_batch.items() if k not in alias_accession_map}
+            logger.info("Re-writing genome registration XML...")
+            # Update self paths for retry
+            self.samples_xml = _apply_retry_suffix(self.samples_xml)
+            self.submission_receipt = _apply_retry_suffix(self.submission_receipt)
+            self.write_genome_samples_xml(filtered_genome_batch)
+            logger.info("Registering new genome samples XMLs...")
+            ena_submit_new = EnaSubmit(self.samples_xml, self.submission_receipt, len(filtered_genome_batch), self.live)
+            new_alias_accession_map = ena_submit_new.register_genome_samples_in_ena()
+            if len(new_alias_accession_map) == len(filtered_genome_batch):
+                # all genomes from the filtered XML were registered
+                alias_accession_map.update(new_alias_accession_map)
+                return alias_accession_map
+
+            raise Exception(
+                "An error occurred during the registration step. "
+                f"Please, check {self.submission_receipt.name} file for details."
+            )
+
+        raise Exception(
+            "Some genomes could not be submitted to ENA. "
+            f"Please, check the errors above and {self.submission_receipt.name} file."
+        )
 
     def generate_genome_manifest(self, genome_info: dict, alias_to_sample: dict):
         """
@@ -865,49 +919,26 @@ class GenomeUpload:
 
     def genome_upload(self):
         """
-        Main workflow for genome upload: validates, registers, and writes manifests.
+        Main workflow for genome upload: validates input metadata, gathers required information from ENA,
+        builds genome samples XML, registers genome samples in ENA, and writes manifests for genome assembly submission. 
         Returns:
             None
         Raises:
             Exception: If registration fails for any genome.
         """
-        genome_info, manifest_info = {}, {}
-
-        # submission xml existence
-        if not self.submission_xml.exists() or self.force:
-            self.write_submission_xml(study=False)
-
-        # sample xml generation or recovery
+        # XML generation
         genome_info = self.create_genome_dictionary()
 
-        logger.info("Registering genome samples XMLs...")
-        ena_submit = EnaSubmit(self.samples_xml, self.submission_xml, len(genome_info), self.live)
-        alias_accession_map = ena_submit.handle_genomes_registration()
+        logger.info(f"Registering genomes using one XML containing {len(genome_info)} genome(s)...")
 
-        if len(alias_accession_map) == len(genome_info):
-            # all genomes were registered
-            save_accessions(alias_accession_map, self.accessions_file)
-        else:
-            if len(alias_accession_map) > 0:
-                # exclude those from XML
-                if self.samples_xml.exists():
-                    self.samples_xml.unlink(missing_ok=True)
-                filtered_genome_info = {k: v for k, v in genome_info.items() if k not in alias_accession_map}
-                logger.info("Re-writing genome registration XML...")
-                self.write_genomes_xml(filtered_genome_info)
-                logger.info("Registering new genome samples XMLs...")
-                ena_submit_new = EnaSubmit(self.samples_xml, self.submission_xml, len(filtered_genome_info), self.live)
-                new_alias_accession_map = ena_submit_new.handle_genomes_registration()
-                if len(new_alias_accession_map) == len(filtered_genome_info):
-                    # all new genomes were registered
-                    alias_accession_map.update(new_alias_accession_map)
-                    save_accessions(alias_accession_map, self.accessions_file)
-                else:
-                    raise Exception("An error occurred during the registration step. "
-                                    "Please, check submission_receipt_retry.xml file for details.")
-            else:
-                raise Exception("Some genomes could not be submitted to ENA. "
-                                "Please, check the errors above and submission_receipt.xml file.")
+        self.write_genome_samples_xml(genome_info)
+        alias_accession_map = self.handle_genome_samples_registration(genome_info)
+
+        # Write all accessions at once
+        save_accessions(alias_accession_map, self.accessions_file)
+
+        logger.info(f"Submitted sample XML files have been written to {self.upload_dir}")
+
         logger.info("Generating manifest files...")
 
         manifest_info = compute_manifests(genome_info)

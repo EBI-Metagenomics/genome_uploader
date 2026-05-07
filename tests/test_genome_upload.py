@@ -4,10 +4,38 @@ from pathlib import Path
 
 import responses as responses_lib
 
+from genomeuploader.ena_submit import EnaSubmit
 from genomeuploader.genome_upload import *
 
 
 class Tests:
+    @responses_lib.activate
+    def test_register_genome_samples_in_ena_uses_webin_v2_queue(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("genomeuploader.ena_submit.CredentialsManager.get_credentials", lambda: ("user", "password"))
+        monkeypatch.setattr("genomeuploader.ena_submit.time.sleep", lambda _: None)
+
+        payload_xml = tmp_path / "submission.xml"
+        payload_xml.write_text(
+            "<WEBIN><SUBMISSION_SET><SUBMISSION><ACTIONS><ACTION><ADD/></ACTION></ACTIONS></SUBMISSION></SUBMISSION_SET><SAMPLE_SET><SAMPLE alias=\"genome_1\" center_name=\"EMG\"/></SAMPLE_SET></WEBIN>"
+        )
+
+        receipt_path = tmp_path / "submission_receipt.xml"
+        queue_url = "https://wwwdev.ebi.ac.uk/ena/submit/webin-v2/submit/queue"
+        poll_url = "https://wwwdev.ebi.ac.uk/ena/submit/webin-v2/submit/poll/ERA000001"
+        final_receipt = '<RECEIPT success="true"><SAMPLE accession="ERS000001" alias="genome_1"/></RECEIPT>'
+
+        responses_lib.add(responses_lib.POST, queue_url, json={"submissionId": "ERA000001", "_links": {"poll": {"href": poll_url}}}, status=200)
+        responses_lib.add(responses_lib.GET, poll_url, body="queued", status=202)
+        responses_lib.add(responses_lib.GET, poll_url, body=final_receipt, status=200, content_type="application/xml")
+
+        ena_submit = EnaSubmit(payload_xml, receipt_path, 1, live=False)
+        alias_map = ena_submit.register_genome_samples_in_ena()
+
+        assert alias_map == {"genome_1": "ERS000001"}
+        assert receipt_path.read_text() == final_receipt
+        assert b"<WEBIN>" in responses_lib.calls[0].request.body
+
+
     def test_genomeuploader_end_to_end(tmp_path):
         timestamp = str(int(dt.timestamp(dt.now())))
         with open("tests/fixtures/input_fixture.tsv", "r") as f:
@@ -36,8 +64,8 @@ class Tests:
         expected_files = [
             "tests/fixtures/bin_upload/manifests_test/",
             "tests/fixtures/bin_upload/genome_samples.xml",
+            "tests/fixtures/bin_upload/submission_receipt.xml",
             "tests/fixtures/bin_upload/registered_bins_test.tsv",
-            "tests/fixtures/bin_upload/submission.xml",
         ]
         for path in expected_files:
             assert Path(path).exists(), f"Missing expected output: {path}"
@@ -51,7 +79,7 @@ class Tests:
         # should have sample id (ERS) and suffix from --test-suffix command
         assert "ERS" in "".join(lines) and "end-to-end" in "".join(lines)
 
-    def test_genomeuploader_registered_samples(tmp_path):
+    def test_genomeuploader_re_register_samples(tmp_path):
         timestamp = str(int(dt.timestamp(dt.now())))
         with open("tests/fixtures/input_fixture.tsv", "r") as f:
             lines = f.readlines()
@@ -99,8 +127,10 @@ class Tests:
         expected_files = [
             "tests/fixtures/bin_upload/manifests_test/",
             "tests/fixtures/bin_upload/genome_samples.xml",
+            "tests/fixtures/bin_upload/genome_samples_retry.xml",
+            "tests/fixtures/bin_upload/submission_receipt.xml",
+            "tests/fixtures/bin_upload/submission_receipt_retry.xml",
             "tests/fixtures/bin_upload/registered_bins_test.tsv",
-            "tests/fixtures/bin_upload/submission.xml",
         ]
         for path in expected_files:
             assert Path(path).exists(), f"Missing expected output: {path}"
@@ -111,8 +141,11 @@ class Tests:
             lines = f.readlines()
         # should have 3 lines + header
         assert len(lines) == number_of_bins2 + 1
-        # Check sample count, XML should include only new genomes, excluding registered in first round
+        # Check sample count, retry XML should include only new genomes, excluding registered in first round
+        # genome_samples will still contain all of them
         with open("tests/fixtures/bin_upload/genome_samples.xml") as f:
+            assert f.read().count("alias=") == number_of_bins2
+        with open("tests/fixtures/bin_upload/genome_samples_retry.xml") as f:
             assert f.read().count("alias=") == number_of_bins2 - number_of_bins1
 
     @responses_lib.activate
