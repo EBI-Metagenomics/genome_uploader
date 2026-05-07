@@ -79,7 +79,7 @@ class Tests:
         # should have sample id (ERS) and suffix from --test-suffix command
         assert "ERS" in "".join(lines) and "end-to-end" in "".join(lines)
 
-    def test_genomeuploader_registered_samples(tmp_path):
+    def test_genomeuploader_re_register_samples(tmp_path):
         timestamp = str(int(dt.timestamp(dt.now())))
         with open("tests/fixtures/input_fixture.tsv", "r") as f:
             lines = f.readlines()
@@ -141,8 +141,11 @@ class Tests:
             lines = f.readlines()
         # should have 3 lines + header
         assert len(lines) == number_of_bins2 + 1
-        # Check sample count, XML should include only new genomes, excluding registered in first round
+        # Check sample count, retry XML should include only new genomes, excluding registered in first round
+        # genome_samples will still contain all of them
         with open("tests/fixtures/bin_upload/genome_samples.xml") as f:
+            assert f.read().count("alias=") == number_of_bins2
+        with open("tests/fixtures/bin_upload/genome_samples_retry.xml") as f:
             assert f.read().count("alias=") == number_of_bins2 - number_of_bins1
 
     @responses_lib.activate

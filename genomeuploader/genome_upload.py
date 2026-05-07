@@ -534,7 +534,7 @@ class GenomeUpload:
 
     def get_collection_date(self, collection_date):
         # check if given collection date respects the required ENA format
-        if COLLECTION_DATE_REGEX.match(collection_date):
+        if COLLECTION_DATE_REGEX.match(collection_date) or collection_date == "":
             if collection_date.lower() in [
                 "not collected",
                 "not provided",
@@ -546,7 +546,7 @@ class GenomeUpload:
                 "missing: third party data",
                 "missing: data agreement established pre-2023",
                 "missing: endangered species",
-                "missing: human-identifiable",
+                "missing: human-identifiable"
             ]:
                 collection_date = collection_date.lower()
             if (
