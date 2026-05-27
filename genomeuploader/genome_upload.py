@@ -42,6 +42,8 @@ from genomeuploader.constants import (
     MAG_MANDATORY_FIELDS,
     METAGENOMES,
     MQ,
+    MISSING_LOCATION_DATA,
+    MISSING_COLLECTION_DATE
 )
 from genomeuploader.ena import EnaQuery
 from genomeuploader.ena_submit import EnaSubmit
@@ -535,19 +537,7 @@ class GenomeUpload:
     def get_collection_date(self, collection_date):
         # check if given collection date respects the required ENA format
         if COLLECTION_DATE_REGEX.match(collection_date) or collection_date == "":
-            if collection_date.lower() in [
-                "not collected",
-                "not provided",
-                "restricted access",
-                "missing: control sample",
-                "missing: sample group",
-                "missing: synthetic construct",
-                "missing: lab stock",
-                "missing: third party data",
-                "missing: data agreement established pre-2023",
-                "missing: endangered species",
-                "missing: human-identifiable"
-            ]:
+            if collection_date.lower() in MISSING_COLLECTION_DATE:
                 collection_date = collection_date.lower()
             if (
                     not collection_date
@@ -596,13 +586,13 @@ class GenomeUpload:
             # if the dictionary is empty, the sample wasn't found in the private/public api
             return None
 
-        if latitude not in ["missing: third party data", "not provided"]:
+        if latitude not in MISSING_LOCATION_DATA:
             try:
                 latitude = "{:.{}f}".format(round(float(latitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS)
             except ValueError:
                 raise IOError("Latitude could not be parsed. Check metadata for run {}.".format(sample_info.get("sample_accession")))
 
-        if longitude not in ["missing: third party data", "not provided"]:
+        if longitude not in MISSING_LOCATION_DATA:
             try:
                 longitude = "{:.{}f}".format(
                     round(float(longitude), GEOGRAPHY_DIGIT_COORDS), GEOGRAPHY_DIGIT_COORDS

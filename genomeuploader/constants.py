@@ -671,3 +671,33 @@ DATE_FORMATS = [
     "%d-%b-%Y",      # 21-Sep-2015
     "%d-%B-%Y",      # 21-September-2015
 ]
+
+MISSING_LOCATION_DATA =  [
+    "not applicable",
+    "not collected",
+    "not provided",
+    "restricted access",
+    "missing: control sample",
+    "missing: sample group",
+    "missing: synthetic construct",
+    "missing: lab stock",
+    "missing: third party data",
+    "missing: data agreement established pre-2023",
+    "missing: endangered species",
+    "missing: human-identifiable",
+    "missing"
+]
+
+MISSING_COLLECTION_DATE = [
+    "not collected",
+    "not provided",
+    "restricted access",
+    "missing: control sample",
+    "missing: sample group",
+    "missing: synthetic construct",
+    "missing: lab stock",
+    "missing: third party data",
+    "missing: data agreement established pre-2023",
+    "missing: endangered species",
+    "missing: human-identifiable"
+]
