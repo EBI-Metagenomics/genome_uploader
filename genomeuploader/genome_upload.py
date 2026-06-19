@@ -23,6 +23,7 @@ import xml.etree.ElementTree as et
 from datetime import date
 from datetime import datetime as dt
 from pathlib import Path
+from typing import Optional
 from xml.dom.minidom import Element
 
 import click
@@ -224,7 +225,7 @@ def _apply_retry_suffix(base: Path) -> Path:
 
 def create_manifest_dictionary(
     run: str,
-    run_ref: str,
+    run_ref: Optional[str],
     alias: str,
     assembly_software: str,
     sequencing_method: str,
