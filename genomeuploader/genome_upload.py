@@ -124,6 +124,7 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
             instrument_list, collection_list, country_list = [], [], []
             study_list, description_list, samples_list = [], [], []
             long_list, latit_list = [], []
+            run_ref_list = []
             for run in genome_info[g]["accessions"]:
                 instrument_list.append(ena_dict[run]["instrumentModel"])
                 collection_list.append(ena_dict[run]["collectionDate"])
@@ -133,6 +134,9 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
                 samples_list.append(ena_dict[run]["sampleAccession"])
                 long_list.append(ena_dict[run]["longitude"])
                 latit_list.append(ena_dict[run]["latitude"])
+                run_ref = ena_dict[run].get("run_ref")
+                if run_ref:
+                    run_ref_list.append(run_ref)
 
             genome_info[g]["study"] = study_list[0]
             genome_info[g]["description"] = description_list[0]
@@ -174,6 +178,8 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
             if multiple_element_set(samples_list):
                 samples = ",".join(samples_list)
             genome_info[g]["sample_accessions"] = samples
+            if run_ref_list:
+                genome_info[g]["run_ref"] = ",".join(dict.fromkeys(run_ref_list))
         else:
             accession = genome_info[g]["accessions"][0]
             genome_info[g]["sequencingMethod"] = ena_dict[accession]["instrumentModel"]
@@ -187,6 +193,9 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
             genome_info[g]["country"] = ena_dict[accession]["country"]
             genome_info[g]["longitude"] = ena_dict[accession]["longitude"]
             genome_info[g]["latitude"] = ena_dict[accession]["latitude"]
+            run_ref = ena_dict[accession].get("run_ref")
+            if run_ref:
+                genome_info[g]["run_ref"] = run_ref
 
         genome_info[g]["accessions"] = ",".join(genome_info[g]["accessions"])
 
@@ -215,6 +224,7 @@ def _apply_retry_suffix(base: Path) -> Path:
 
 def create_manifest_dictionary(
     run: str,
+    run_ref: str,
     alias: str,
     assembly_software: str,
     sequencing_method: str,
@@ -228,6 +238,7 @@ def create_manifest_dictionary(
     Creates a manifest dictionary for a genome.
     Args:
         run (str): Run accession(s).
+        run_ref (str): Run accession(s) to be used in RUN_REF.
         alias (str): Genome alias.
         assembly_software (str): Assembler name/version.
         sequencing_method (str): Sequencing method.
@@ -241,6 +252,7 @@ def create_manifest_dictionary(
     """
     manifest_dict = {
         "accessions": run,
+        "run_ref": run_ref,
         "alias": alias,
         "assembler": assembly_software,
         "sequencingMethod": sequencing_method,
@@ -266,6 +278,7 @@ def compute_manifests(genomes: dict) -> dict:
     for g in genomes:
         manifest_info[g] = create_manifest_dictionary(
             genomes[g]["accessions"],
+            genomes[g].get("run_ref"),
             genomes[g]["alias"],
             genomes[g]["assembly_software"],
             genomes[g]["sequencingMethod"],
@@ -683,11 +696,14 @@ class GenomeUpload:
                         general_info = assembly_query.build_query() or {}  # format {'analysis_accession': 'ERZ', 'study_accession': 'PRJ', 'sample_accession': 'SAMN', "sampling_platform": ".."}
                         study_accession = general_info.get("study_accession")
                         instrument_model = general_info["sampling_platform"]
+                        run_ref_query = EnaQuery(acc, "run_assembly", self.private)
+                        run_ref = run_ref_query.build_query()
                     else:
                         run_query = EnaQuery(acc, "run", self.private)
                         general_info = run_query.build_query()
                         study_accession = general_info.get("secondary_study_accession")
                         instrument_model = general_info.get("instrument_model")
+                        run_ref = acc
 
                     if study_accession not in study_descriptions:
                         study_descriptions[study_accession] = self.get_project_description(study_accession)
@@ -704,6 +720,7 @@ class GenomeUpload:
                         "projectDescription": study_descriptions[study_accession],
                         "study": study_accession,
                         "sampleAccession": sample_accession,
+                        "run_ref": run_ref,
                     }
                     backup_f.write(json.dumps({acc: temp_dict[acc]}) + "\n")
                     backup_f.flush()
@@ -879,7 +896,7 @@ class GenomeUpload:
         if self.genome_type == "bins":
             assembly_type = "binned metagenome"
 
-        values = (
+        values = [
             ("STUDY", self.upload_study),
             ("SAMPLE", alias_to_sample[genome_info["alias"]]),
             ("ASSEMBLYNAME", genome_info["alias"]),
@@ -896,9 +913,10 @@ class GenomeUpload:
                     f"{genome_info['accessions']}."
                 ),
             ),
-            ("RUN_REF", genome_info["accessions"]),
             ("FASTA", str(Path(genome_info["genome_path"]).resolve())),
-        )
+        ]
+        if genome_info.get("run_ref"):
+            values.insert(-1, ("RUN_REF", genome_info["run_ref"]))
         logger.info(f"Writing manifest file (.manifest) for {genome_info['alias']}.")
         with manifest_path.open("w") as outfile:
             for k, v in values:

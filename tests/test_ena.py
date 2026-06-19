@@ -54,25 +54,49 @@ def test_ena_run(public_run_data, private_run_data, public_run_json, private_run
 
 @responses.activate
 def test_ena_run_from_assembly(public_run_from_assembly_xml, private_run_from_assembly_xml):
+    valid_run_ref_xml = read_xml(private_run_from_assembly_xml)
     responses.add(
         responses.GET,
         "https://www.ebi.ac.uk/ena/browser/api/xml/ERZ2626953",
-        body=read_xml(public_run_from_assembly_xml),
+        body=valid_run_ref_xml,
         content_type="application/xml",
     )
 
     responses.add(
         responses.GET,
         "https://www.ebi.ac.uk/ena/submit/report/analyses/xml/ERZ2626953",
-        body=read_xml(private_run_from_assembly_xml),
+        body=valid_run_ref_xml,
         content_type="application/xml",
     )
 
     ena_run_from_assembly_public = EnaQuery(accession="ERZ2626953", query_type="run_assembly", private=False)
+    ena_run_from_assembly_private = EnaQuery(accession="ERZ2626953", query_type="run_assembly", private=True)
 
-    ena_run_from_assembly_public = EnaQuery(accession="ERZ2626953", query_type="run_assembly", private=True)
+    assert ena_run_from_assembly_public.build_query() == "ERR4918394"
+    assert ena_run_from_assembly_private.build_query() == "ERR4918394"
 
-    assert ena_run_from_assembly_public.build_query() and ena_run_from_assembly_public.build_query() == "ERR4918394"
+
+@responses.activate
+def test_ena_run_from_assembly_missing_run_ref():
+    xml_without_run_ref = "<ANALYSIS_SET><ANALYSIS><IDENTIFIERS><PRIMARY_ID>ERZ0000001</PRIMARY_ID></IDENTIFIERS></ANALYSIS></ANALYSIS_SET>"
+    responses.add(
+        responses.GET,
+        "https://www.ebi.ac.uk/ena/browser/api/xml/ERZ0000001",
+        body=xml_without_run_ref,
+        content_type="application/xml",
+    )
+    responses.add(
+        responses.GET,
+        "https://www.ebi.ac.uk/ena/submit/report/analyses/xml/ERZ0000001",
+        body=xml_without_run_ref,
+        content_type="application/xml",
+    )
+
+    ena_run_from_assembly_public = EnaQuery(accession="ERZ0000001", query_type="run_assembly", private=False)
+    ena_run_from_assembly_private = EnaQuery(accession="ERZ0000001", query_type="run_assembly", private=True)
+
+    assert ena_run_from_assembly_public.build_query() is None
+    assert ena_run_from_assembly_private.build_query() is None
 
 
 @responses.activate
