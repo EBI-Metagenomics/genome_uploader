@@ -82,3 +82,6 @@ venv.bak/
 
 #personal
 cluster_uploader_wrapper.py
+
+# Test-generated temporary directories
+<test_genome_upload.Tests object at *>/
