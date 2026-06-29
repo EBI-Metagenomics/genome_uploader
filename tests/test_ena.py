@@ -54,18 +54,17 @@ def test_ena_run(public_run_data, private_run_data, public_run_json, private_run
 
 @responses.activate
 def test_ena_run_from_assembly(public_run_from_assembly_xml, private_run_from_assembly_xml):
-    run_from_assembly_xml = read_xml(private_run_from_assembly_xml)
     responses.add(
         responses.GET,
         "https://www.ebi.ac.uk/ena/browser/api/xml/ERZ2626953",
-        body=run_from_assembly_xml,
+        body=read_xml(public_run_from_assembly_xml),
         content_type="application/xml",
     )
 
     responses.add(
         responses.GET,
         "https://www.ebi.ac.uk/ena/submit/report/analyses/xml/ERZ2626953",
-        body=run_from_assembly_xml,
+        body=read_xml(private_run_from_assembly_xml),
         content_type="application/xml",
     )
 
