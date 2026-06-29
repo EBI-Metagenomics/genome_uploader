@@ -135,7 +135,7 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
                 samples_list.append(ena_dict[run]["sampleAccession"])
                 long_list.append(ena_dict[run]["longitude"])
                 latit_list.append(ena_dict[run]["latitude"])
-                run_ref = ena_dict[run].get("run_ref")
+                run_ref = ena_dict[run]["run_ref"]
                 if run_ref:
                     run_ref_list.append(run_ref)
 
@@ -180,7 +180,10 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
                 samples = ",".join(samples_list)
             genome_info[g]["sample_accessions"] = samples
             if run_ref_list:
+                # dict.fromkeys() is a Python trick to remove duplicates while preserving order
                 genome_info[g]["run_ref"] = ",".join(dict.fromkeys(run_ref_list))
+            else:
+                genome_info[g]["run_ref"] = None
         else:
             accession = genome_info[g]["accessions"][0]
             genome_info[g]["sequencingMethod"] = ena_dict[accession]["instrumentModel"]
@@ -194,10 +197,7 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
             genome_info[g]["country"] = ena_dict[accession]["country"]
             genome_info[g]["longitude"] = ena_dict[accession]["longitude"]
             genome_info[g]["latitude"] = ena_dict[accession]["latitude"]
-            run_ref = ena_dict[accession].get("run_ref")
-            if run_ref:
-                genome_info[g]["run_ref"] = run_ref
-
+            genome_info[g]["run_ref"] = ena_dict[accession]["run_ref"]
         genome_info[g]["accessions"] = ",".join(genome_info[g]["accessions"])
 
 
@@ -279,7 +279,7 @@ def compute_manifests(genomes: dict) -> dict:
     for g in genomes:
         manifest_info[g] = create_manifest_dictionary(
             genomes[g]["accessions"],
-            genomes[g].get("run_ref"),
+            genomes[g]["run_ref"],
             genomes[g]["alias"],
             genomes[g]["assembly_software"],
             genomes[g]["sequencingMethod"],
@@ -916,7 +916,7 @@ class GenomeUpload:
             ),
             ("FASTA", str(Path(genome_info["genome_path"]).resolve())),
         ]
-        if genome_info.get("run_ref"):
+        if genome_info["run_ref"]:
             values.insert(-1, ("RUN_REF", genome_info["run_ref"]))
         logger.info(f"Writing manifest file (.manifest) for {genome_info['alias']}.")
         with manifest_path.open("w") as outfile:
