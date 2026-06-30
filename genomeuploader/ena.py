@@ -301,7 +301,13 @@ class EnaQuery:
         url = f"{self.private_url}/analyses/xml/{self.accession}"
 
         def reformatter(xml_doc):
-            return xml_doc.getElementsByTagName("RUN_REF")[0].attributes["accession"].value
+            run_refs = xml_doc.getElementsByTagName("RUN_REF")
+            if not run_refs:
+                return None  # No RUN_REF tag found
+            run_ref = run_refs[0]
+            if not run_ref.hasAttribute("accession"):
+                return None  # RUN_REF exists but no accession attribute
+            return run_ref.getAttribute("accession")
 
         result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
         logger.info(f"private run from the assembly {self.accession} returned from ENA")

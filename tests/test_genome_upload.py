@@ -164,6 +164,12 @@ class Tests:
             "https://www.ebi.ac.uk/ena/portal/api/search",
             json=[{"study_accession": "PRJEB71644", "sample_accession": "SAMEA114545946", "sampling_platform": "ILLUMINA"}],
         )
+        responses_lib.add(
+            responses_lib.GET,
+            "https://www.ebi.ac.uk/ena/browser/api/xml/ERZ23498047",
+            body='<ANALYSIS_SET><ANALYSIS><RUN_REF accession="ERR4918394"/></ANALYSIS></ANALYSIS_SET>',
+            content_type="application/xml",
+        )
         # 2. study query (called by get_project_description)
         responses_lib.add(
             responses_lib.POST,
@@ -199,6 +205,7 @@ class Tests:
         assert genome_info["MAG1"]["collectionDate"] == "2021-01-01"
         assert genome_info["MAG1"]["country"] == "USA"
         assert genome_info["MAG1"]["accessions"] == "ERZ23498047"
+        assert genome_info["MAG1"]["run_ref"] == "ERR4918394"
 
     @responses_lib.activate
     def test_genomeuploader_extract_ena_info_run(tmp_path):
@@ -251,3 +258,38 @@ class Tests:
         assert genome_info["MAG1"]["collectionDate"] == "2020-06-15"
         assert genome_info["MAG1"]["country"] == "Germany"
         assert genome_info["MAG1"]["accessions"] == "SRR12059190"
+        assert genome_info["MAG1"]["run_ref"] == "SRR12059190"
+
+    def test_generate_genome_manifest_excludes_run_ref_when_missing(self, tmp_path):
+        args = {
+            "bins": True,
+            "live": False,
+            "private": False,
+            "tpa": False,
+            "centre_name": "EMG",
+            "force": False,
+            "out": str(tmp_path),
+            "upload_study": "ERP000000",
+            "genome_info": str(tmp_path / "genome_info.tsv"),
+            "test_suffix": None,
+        }
+        gu = GenomeUpload(args)
+        genome_info = {
+            "genome_name": "MAG1",
+            "alias": "MAG1",
+            "coverageDepth": 10.0,
+            "assembler": "megahit_v1.0.0",
+            "sequencingMethod": "ILLUMINA",
+            "study": "PRJEB000000",
+            "accessionType": "assembly",
+            "accessions": "ERZ0000001",
+            "genome_path": str(tmp_path / "MAG1.fa.gz"),
+            "co-assembly": False,
+            "run_ref": None,
+        }
+        alias_to_sample = {"MAG1": "ERS0000001"}
+
+        gu.generate_genome_manifest(genome_info, alias_to_sample)
+        manifest_text = (gu.manifest_dir / "MAG1.manifest").read_text()
+
+        assert "RUN_REF\t" not in manifest_text
