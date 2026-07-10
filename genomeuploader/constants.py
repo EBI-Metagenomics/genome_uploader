@@ -689,6 +689,7 @@ MISSING_LOCATION_DATA =  [
 ]
 
 MISSING_COLLECTION_DATE = [
+    "not applicable",
     "not collected",
     "not provided",
     "restricted access",
@@ -699,5 +700,6 @@ MISSING_COLLECTION_DATE = [
     "missing: third party data",
     "missing: data agreement established pre-2023",
     "missing: endangered species",
-    "missing: human-identifiable"
+    "missing: human-identifiable",
+    "missing"
 ]
