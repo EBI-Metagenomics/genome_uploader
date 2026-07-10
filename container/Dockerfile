@@ -8,6 +8,6 @@ RUN micromamba install -y -n base -f /tmp/env.yaml \
 
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 
-RUN pip install --no-cache-dir /tmp/*.whl
+RUN bash -c "pip install --no-cache-dir /tmp/*.whl"
 
 ENTRYPOINT ["genome_upload"]
