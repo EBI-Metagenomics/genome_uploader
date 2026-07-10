@@ -1,9 +1,6 @@
 name: Build and Push Container to Quay.io
 
 on:
-  push:
-    branches:
-      - fix/container-build
   release:
     types: [published]
   workflow_dispatch:
