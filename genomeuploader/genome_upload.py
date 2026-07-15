@@ -550,16 +550,12 @@ class GenomeUpload:
 
     def get_collection_date(self, collection_date):
         # check if given collection date respects the required ENA format
-        if COLLECTION_DATE_REGEX.match(collection_date) or collection_date == "":
-            if collection_date.lower() in MISSING_COLLECTION_DATE:
-                collection_date = collection_date.lower()
-            if (
-                    not collection_date
-                    or collection_date.lower() == "missing"
-                    or collection_date.lower() in ["not available", "na"]
-            ):
-                collection_date = "missing: third party data"
+        if COLLECTION_DATE_REGEX.match(collection_date):
             return collection_date
+        elif collection_date.lower() in MISSING_COLLECTION_DATE:
+            return collection_date.lower()
+        elif collection_date == "" or collection_date.lower() in ["not available", "na"]:
+            return "missing: third party data"
         else:
             # try to reformat the date
             new_collection_date = self.reformat_collection_date(collection_date)
