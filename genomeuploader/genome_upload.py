@@ -137,7 +137,10 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
                 latit_list.append(ena_dict[run]["latitude"])
                 run_ref = ena_dict[run]["run_ref"]
                 if run_ref:
-                    run_ref_list.append(run_ref)
+                    if isinstance(run_ref, list):
+                        run_ref_list.extend(run_ref)
+                    else:
+                        run_ref_list.append(run_ref)
 
             genome_info[g]["study"] = study_list[0]
             genome_info[g]["description"] = description_list[0]
