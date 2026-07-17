@@ -322,8 +322,8 @@ class Tests:
         expected_files = [
             "tests/fixtures/bin_upload/manifests_test/",
             "tests/fixtures/bin_upload/genome_samples.xml",
+            "tests/fixtures/bin_upload/submission_receipt.xml",
             "tests/fixtures/bin_upload/registered_bins_test.tsv",
-            "tests/fixtures/bin_upload/submission.xml",
         ]
         for path in expected_files:
             assert Path(path).exists(), f"Missing expected output: {path}"
@@ -332,7 +332,7 @@ class Tests:
         filepath = "tests/fixtures/bin_upload/registered_bins_test.tsv"
         with open(filepath, "r") as f:
             lines = f.readlines()
-        # should have the same number of genomes
-        assert len(lines) == number_of_bins
+        # should have the same number of genomes (including header)
+        assert len(lines) == number_of_bins + 1
         # should have sample id (ERS) and suffix from --test-suffix command
         assert "ERS" in "".join(lines) and "end-to-end" in "".join(lines)
