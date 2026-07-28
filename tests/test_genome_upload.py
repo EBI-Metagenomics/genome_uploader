@@ -205,7 +205,7 @@ class Tests:
         assert genome_info["MAG1"]["collectionDate"] == "2021-01-01"
         assert genome_info["MAG1"]["country"] == "USA"
         assert genome_info["MAG1"]["accessions"] == "ERZ23498047"
-        assert genome_info["MAG1"]["run_ref"] == "ERR4918394"
+        assert genome_info["MAG1"]["run_ref"] == ["ERR4918394"]
 
     @responses_lib.activate
     def test_genomeuploader_extract_ena_info_run(tmp_path):
@@ -293,3 +293,46 @@ class Tests:
         manifest_text = (gu.manifest_dir / "MAG1.manifest").read_text()
 
         assert "RUN_REF\t" not in manifest_text
+
+    def test_genomeuploader_coassembly_end_to_end(tmp_path):
+        timestamp = str(int(dt.timestamp(dt.now())))
+        with open("tests/fixtures/input_coassembly_fixture.tsv", "r") as f:
+            lines = f.readlines()
+        number_of_bins = len(lines) - 1
+        command = [
+            "python",
+            "genomeuploader/genome_upload.py",
+            "-u",
+            "ERP159782",
+            "--genome_info",
+            "tests/fixtures/input_coassembly_fixture.tsv",
+            "--out",
+            "tests/fixtures/",
+            "--bins",
+            "--test-suffix",
+            f"end-to-end-coassembly-{timestamp}",
+            "--centre_name",
+            "EMG",
+        ]
+
+        result = subprocess.run(command, capture_output=True, text=True)
+        assert result.returncode == 0, f"Run with coassembly submission failed: {result.stderr}"
+
+        # Check required output files
+        expected_files = [
+            "tests/fixtures/bin_upload/manifests_test/",
+            "tests/fixtures/bin_upload/genome_samples.xml",
+            "tests/fixtures/bin_upload/submission_receipt.xml",
+            "tests/fixtures/bin_upload/registered_bins_test.tsv",
+        ]
+        for path in expected_files:
+            assert Path(path).exists(), f"Missing expected output: {path}"
+
+        # check registered samples tsv
+        filepath = "tests/fixtures/bin_upload/registered_bins_test.tsv"
+        with open(filepath, "r") as f:
+            lines = f.readlines()
+        # should have the same number of genomes (including header)
+        assert len(lines) == number_of_bins + 1
+        # should have sample id (ERS) and suffix from --test-suffix command
+        assert "ERS" in "".join(lines) and "end-to-end" in "".join(lines)
