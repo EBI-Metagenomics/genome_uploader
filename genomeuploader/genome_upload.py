@@ -44,7 +44,9 @@ from genomeuploader.constants import (
     METAGENOMES,
     MQ,
     MISSING_LOCATION_DATA,
-    MISSING_COLLECTION_DATE
+    MISSING_COLLECTION_DATE,
+    ASSEMBLY_ACCESSION_RE,
+    RUN_ACCESSION_RE,
 )
 from genomeuploader.ena import EnaQuery
 from genomeuploader.ena_submit import EnaSubmit
@@ -427,16 +429,13 @@ class GenomeUpload:
             raise ValueError("Genomes need to be registered in batches of 5000 genomes or smaller.")
 
         # check whether accessions follow the right format
-        run_accession_re = re.compile(r"\b[ESD]RR\d{6,}\b")
-        primary_accession_re = re.compile(r"\b[ESD]RZ\d{6,}\b")
-
         accession_comparison = pd.DataFrame(columns=["genome_name", "input_accessions", "run_accession_count", "primary_accession_count", "mismatching", "co-assembly"])
         accession_comparison["genome_name"] = metadata["genome_name"]
 
         accession_comparison["input_accessions"] = metadata["accessions"].map(lambda a: len(a.split(",")))
 
-        accession_comparison["run_accession_count"] = metadata["accessions"].map(lambda a: len(run_accession_re.findall(a)))
-        accession_comparison["primary_accession_count"] = metadata["accessions"].map(lambda a: len(primary_accession_re.findall(a)))
+        accession_comparison["run_accession_count"] = metadata["accessions"].map(lambda a: len(RUN_ACCESSION_RE.findall(a)))
+        accession_comparison["primary_accession_count"] = metadata["accessions"].map(lambda a: len(ASSEMBLY_ACCESSION_RE.findall(a)))
 
         accession_comparison["mismatching"] = accession_comparison.apply(
             lambda row: (row["run_accession_count"] + row["primary_accession_count"]) != row["input_accessions"],
