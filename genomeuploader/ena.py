@@ -297,19 +297,19 @@ class EnaQuery:
         logger.info(f"{self.accession} public study returned from ENA")
         return result
 
+    @staticmethod
+    def _reformat_run_refs(xml_doc):
+        run_refs = xml_doc.getElementsByTagName("RUN_REF")
+        if not run_refs:
+            return None  # No RUN_REF tag found
+        accessions = sorted(
+            {node.getAttribute("accession") for node in run_refs if node.hasAttribute("accession")}
+        )
+        return accessions or None
+
     def _get_private_run_from_assembly(self):
         url = f"{self.private_url}/analyses/xml/{self.accession}"
-
-        def reformatter(xml_doc):
-            run_refs = xml_doc.getElementsByTagName("RUN_REF")
-            if not run_refs:
-                return None  # No RUN_REF tag found
-            accessions = sorted(
-                {node.getAttribute("accession") for node in run_refs if node.hasAttribute("accession")}
-            )
-            return accessions or None
-
-        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=self._reformat_run_refs)
         if result:
             logger.info(f"private runs {result} for assembly {self.accession} returned from ENA")
         return result
@@ -370,17 +370,7 @@ class EnaQuery:
 
     def _get_public_run_from_assembly(self):
         url = f"{self.browser_url}/{self.accession}"
-
-        def reformatter(xml_doc):
-            run_refs = xml_doc.getElementsByTagName("RUN_REF")
-            if not run_refs:
-                return None  # No RUN_REF tag found
-            accessions = sorted(
-                {node.getAttribute("accession") for node in run_refs if node.hasAttribute("accession")}
-            )
-            return accessions or None
-
-        result = self._fetch_ena_data(url=url, mode="xml", reformatter=reformatter)
+        result = self._fetch_ena_data(url=url, mode="xml", reformatter=self._reformat_run_refs)
         if result:
             logger.info(f"public runs {result} from the assembly {self.accession} returned from ENA")
         return result
