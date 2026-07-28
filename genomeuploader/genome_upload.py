@@ -429,16 +429,18 @@ class GenomeUpload:
             raise ValueError("Genomes need to be registered in batches of 5000 genomes or smaller.")
 
         # check whether accessions follow the right format
-        accession_comparison = pd.DataFrame(columns=["genome_name", "input_accessions", "run_accession_count", "primary_accession_count", "mismatching", "co-assembly"])
+        # we compare the number of accessions from "accessions" column of the input file (input_accessions) 
+        # with the number of the same accessions divided into run and assembly accessions based on the regexes (run_accession_count and assembly_accession_count)
+        accession_comparison = pd.DataFrame(columns=["genome_name", "input_accessions", "run_accession_count", "assembly_accession_count", "mismatching", "co-assembly"])
         accession_comparison["genome_name"] = metadata["genome_name"]
 
         accession_comparison["input_accessions"] = metadata["accessions"].map(lambda a: len(a.split(",")))
 
         accession_comparison["run_accession_count"] = metadata["accessions"].map(lambda a: len(RUN_ACCESSION_RE.findall(a)))
-        accession_comparison["primary_accession_count"] = metadata["accessions"].map(lambda a: len(ASSEMBLY_ACCESSION_RE.findall(a)))
+        accession_comparison["assembly_accession_count"] = metadata["accessions"].map(lambda a: len(ASSEMBLY_ACCESSION_RE.findall(a)))
 
         accession_comparison["mismatching"] = accession_comparison.apply(
-            lambda row: (row["run_accession_count"] + row["primary_accession_count"]) != row["input_accessions"],
+            lambda row: (row["run_accession_count"] + row["assembly_accession_count"]) != row["input_accessions"],
             axis=1
         ).isna()
 
@@ -462,7 +464,7 @@ class GenomeUpload:
             (
                 (accession_comparison["run_accession_count"] < 2)
                 & (accession_comparison["co-assembly"])
-                & (accession_comparison["primary_accession_count"] == 0)
+                & (accession_comparison["assembly_accession_count"] == 0)
             )
             | (
                 (accession_comparison["run_accession_count"] > 1)
