@@ -36,6 +36,7 @@ With columns indicating:
   * _broad_environment_: `string` (explanation following)
   * _local_environment_: `string` (explanation following)
   * _environmental_medium_: `string` (explanation following)
+  * _single_contig_: `True/False` (optional column, defaults to `False` if omitted). Set to `True` if the genome consists of a single contig. See [Single-contig genomes](#single-contig-genomes) below.
 
 According to ENA checklist's guidelines, `broad_environment` describes the broad ecological context of a sample - desert, taiga, coral reef, ... `local_environment` is more local - lake, harbour, cliff, ... `environmental_medium` is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ...
 For host-associated metagenomic samples, the three variables can be defined similarly to the following example for the chicken gut metagenome: "chicken digestive system", "digestive tube", "caecum". More information can be found at [ERC000050](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) for bins and [ERC000047](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>) for MAGs under field names "broad-scale environmental context", "local environmental context", "environmental medium"
@@ -53,6 +54,9 @@ If you already generated these for your bins, our recommendation is to include t
 Raw-read runs or assemblies from which genomes were generated should already be available on the INSDC (ENA by EBI, GenBank by NCBI, or DDBJ) for this script to work. Therefore, at least a DRR|ERR|SRR accession (for runs) or a ERZ|SRZ|DRZ accession (for assemblies) should be available.  
 
 If you are working with your own, private data on ENA, you will need to add the `--private` flag to access private metadata through ENA API. This implies that if you are working on public data, you can omit the flag. However, you will need to submit two different batches of data if you are handling both private and public data.
+
+### Single-contig genomes
+Single contig high-quality genomes need to be submitted as chromosomes. Refer to the [ENA documentation](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome/mag.html#contig-assembly>) if you are unsure. If a genome consists of a single contig, mark it by setting `single_contig` to `True` in the input tsv (see [Prepare Input TSV](#prepare-input-tsv) above). The script will check that the corresponding fasta file contains exactly one contig, and will fail with an error if it doesn't. A chromosome list file is generated per genome alongside the manifest and referenced from it via `CHROMOSOME_LIST`. Only mark a genome as single-contig if you are confident it is highly complete.
 
 ### TPA generation and upload
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.
@@ -139,7 +143,7 @@ Sample xmls won't be regenerated automatically if a previous xml already exists.
 The script produces the following files and folders:
 ```bash
 bin_upload/MAG_upload
-├── manifests
+├── manifests                       # also contains a *_chromosome_list.txt.gz per single-contig genome
 │    └── ...
 ├── manifests_test                  # folder generated for validation in test mode
 │    └── ...

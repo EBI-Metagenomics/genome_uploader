@@ -2,6 +2,7 @@ import subprocess
 from datetime import datetime as dt
 from pathlib import Path
 
+import pytest
 import responses as responses_lib
 
 from genomeuploader.ena_submit import EnaSubmit
@@ -293,3 +294,77 @@ class Tests:
         manifest_text = (gu.manifest_dir / "MAG1.manifest").read_text()
 
         assert "RUN_REF\t" not in manifest_text
+
+    def test_single_contig_genome_extracts_contig_id_and_writes_chromosome_list(self, tmp_path):
+        args = {
+            "bins": True,
+            "live": False,
+            "private": False,
+            "tpa": False,
+            "centre_name": "EMG",
+            "force": False,
+            "out": str(tmp_path),
+            "upload_study": "ERP000000",
+            "genome_info": "tests/fixtures/input_single_contig_fixture.tsv",
+            "test_suffix": "single-contig-unittest",
+        }
+        gu = GenomeUpload(args)
+        genome_info = gu.extract_genomes_info()
+        alias = next(iter(genome_info))
+
+        assert genome_info[alias]["single_contig"] is True
+        assert genome_info[alias]["contig_id"] == "contig1"
+
+        # don't call API again, force assign info for the next step
+        genome_info[alias]["run_ref"] = "ERR6769700"
+        genome_info[alias]["study"] = "ERP000000"
+        genome_info[alias]["sequencingMethod"] = "ILLUMINA"
+
+        manifest_info = compute_manifests(genome_info)[alias]
+        gu.generate_genome_manifest(manifest_info, {alias: "ERS0000001"})
+
+        manifest_text = (gu.manifest_dir / f"{alias}.manifest").read_text()
+        chromosome_list_path = gu.manifest_dir / f"{alias}_chromosome_list.txt.gz"
+
+        assert chromosome_list_path.exists()
+        assert f"CHROMOSOME_LIST\t{chromosome_list_path.resolve()}" in manifest_text
+        with gzip.open(chromosome_list_path, "rt") as f:
+            assert f.read() == "contig1\t1\tCircular-Chromosome\n"
+
+    def test_single_contig_genome_with_multiple_contigs_raises(self, tmp_path):
+        args = {
+            "bins": True,
+            "live": False,
+            "private": False,
+            "tpa": False,
+            "centre_name": "EMG",
+            "force": False,
+            "out": str(tmp_path),
+            "upload_study": "ERP000000",
+            "genome_info": "tests/fixtures/input_single_contig_invalid_fixture.tsv",
+            "test_suffix": "single-contig-invalid-unittest",
+        }
+        gu = GenomeUpload(args)
+
+        with pytest.raises(ValueError, match="expected exactly 1"):
+            gu.extract_genomes_info()
+
+    def test_single_contig_column_absent_defaults_to_false(self, tmp_path):
+        args = {
+            "bins": True,
+            "live": False,
+            "private": False,
+            "tpa": False,
+            "centre_name": "EMG",
+            "force": False,
+            "out": str(tmp_path),
+            "upload_study": "ERP000000",
+            "genome_info": "tests/fixtures/input_fixture.tsv",
+            "test_suffix": "no-single-contig-column-unittest",
+        }
+        gu = GenomeUpload(args)
+        genome_info = gu.extract_genomes_info()
+        alias = next(iter(genome_info))
+
+        assert genome_info[alias]["single_contig"] is False
+        assert genome_info[alias]["contig_id"] is None
