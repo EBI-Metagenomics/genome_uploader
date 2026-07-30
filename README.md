@@ -102,6 +102,11 @@ ENA_WEBIN_PASSWORD=your_password_here
 
 ### Alternatively, set the environment variables directly in your shell
 
+> **Important**
+>
+> If your ENA password contains **special characters** (for example `$`, `!`, `&`, `=`), **you must wrap it in single quotes** when exporting it as an environment variable.
+> Otherwise, your shell may interpret parts of the password and silently change its value, leading to authentication errors.
+
 ```bash
 export ENA_WEBIN=your_username_here
 export ENA_WEBIN_PASSWORD=your_password_here

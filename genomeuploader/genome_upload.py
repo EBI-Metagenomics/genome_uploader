@@ -49,6 +49,8 @@ from genomeuploader.constants import (
     MISSING_COLLECTION_DATE,
     SINGLE_CONTIG_CHROMOSOME_TYPE,
     SINGLE_CONTIG_FIELD,
+    ASSEMBLY_ACCESSION_RE,
+    RUN_ACCESSION_RE,
 )
 from genomeuploader.ena import EnaQuery
 from genomeuploader.ena_submit import EnaSubmit
@@ -141,7 +143,10 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
                 latit_list.append(ena_dict[run]["latitude"])
                 run_ref = ena_dict[run]["run_ref"]
                 if run_ref:
-                    run_ref_list.append(run_ref)
+                    if isinstance(run_ref, list):
+                        run_ref_list.extend(run_ref)
+                    else:
+                        run_ref_list.append(run_ref)
 
             genome_info[g]["study"] = study_list[0]
             genome_info[g]["description"] = description_list[0]
@@ -459,17 +464,19 @@ class GenomeUpload:
             raise ValueError("Genomes need to be registered in batches of 5000 genomes or smaller.")
 
         # check whether accessions follow the right format
-        accessions_reg_exp = re.compile(r"([E|S|D]R[R|Z]\d{6,})")
-
-        accession_comparison = pd.DataFrame(columns=["genome_name", "input_accessions", "correct", "mismatching", "co-assembly"])
+        # we compare the number of accessions from "accessions" column of the input file (input_accessions) 
+        # with the number of the same accessions divided into run and assembly accessions based on the regexes (run_accession_count and assembly_accession_count)
+        accession_comparison = pd.DataFrame(columns=["genome_name", "input_accessions", "run_accession_count", "assembly_accession_count", "mismatching", "co-assembly"])
         accession_comparison["genome_name"] = metadata["genome_name"]
 
         accession_comparison["input_accessions"] = metadata["accessions"].map(lambda a: len(a.split(",")))
 
-        accession_comparison["correct"] = metadata["accessions"].map(lambda a: len(accessions_reg_exp.findall(a)))
+        accession_comparison["run_accession_count"] = metadata["accessions"].map(lambda a: len(RUN_ACCESSION_RE.findall(a)))
+        accession_comparison["assembly_accession_count"] = metadata["accessions"].map(lambda a: len(ASSEMBLY_ACCESSION_RE.findall(a)))
 
         accession_comparison["mismatching"] = accession_comparison.apply(
-            lambda row: True if row["input_accessions"] == row["correct"] else None, axis=1
+            lambda row: (row["run_accession_count"] + row["assembly_accession_count"]) != row["input_accessions"],
+            axis=1
         ).isna()
 
         mismatching_accessions = accession_comparison[accession_comparison["mismatching"]]["genome_name"]
@@ -486,16 +493,23 @@ class GenomeUpload:
         except ValueError:
             raise ValueError("Completeness, contamination and coverage values should be formatted as floats")
 
-        # check whether all co-assemblies have more than one run associated and vice versa
+        # check whether all co-assemblies have more than one run or one assembly associated and vice versa
         accession_comparison["co-assembly"] = metadata["co-assembly"]
-        coassembly_discrepancy = metadata[
-            ((accession_comparison["correct"] < 2) & (accession_comparison["co-assembly"]))
-            | ((accession_comparison["correct"] > 1) & (~accession_comparison["co-assembly"]))
+        coassembly_discrepancy = accession_comparison[
+            (
+                (accession_comparison["run_accession_count"] < 2)
+                & (accession_comparison["co-assembly"])
+                & (accession_comparison["assembly_accession_count"] == 0)
+            )
+            | (
+                (accession_comparison["run_accession_count"] > 1)
+                & (~accession_comparison["co-assembly"])
+            )
         ]["genome_name"]
         if not coassembly_discrepancy.empty:
             raise ValueError(
-                "The following genomes show discrepancy between number of runs "
-                "involved and co-assembly status: " + ",".join(coassembly_discrepancy.values)
+                "The following genomes show discrepancy between number of runs involved and co-assembly status: "
+                ",".join(coassembly_discrepancy.values)
             )
 
         # are provided metagenomes part of the accepted metagenome list?

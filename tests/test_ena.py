@@ -53,11 +53,18 @@ def test_ena_run(public_run_data, private_run_data, public_run_json, private_run
 
 
 @responses.activate
-def test_ena_run_from_assembly(public_run_from_assembly_xml, private_run_from_assembly_xml):
+def test_ena_run_from_assembly(public_run_from_assembly_xml, public_runs_from_coassembly_xml, private_run_from_assembly_xml):
     responses.add(
         responses.GET,
         "https://www.ebi.ac.uk/ena/browser/api/xml/ERZ2626953",
         body=read_xml(public_run_from_assembly_xml),
+        content_type="application/xml",
+    )
+
+    responses.add(
+        responses.GET,
+        "https://www.ebi.ac.uk/ena/browser/api/xml/ERZ27230724",
+        body=read_xml(public_runs_from_coassembly_xml),
         content_type="application/xml",
     )
 
@@ -70,9 +77,11 @@ def test_ena_run_from_assembly(public_run_from_assembly_xml, private_run_from_as
 
     ena_run_from_assembly_public = EnaQuery(accession="ERZ2626953", query_type="run_assembly", private=False)
     ena_run_from_assembly_private = EnaQuery(accession="ERZ2626953", query_type="run_assembly", private=True)
+    ena_runs_from_coassembly_public = EnaQuery(accession="ERZ27230724", query_type="run_assembly", private=False)
 
-    assert ena_run_from_assembly_public.build_query() == "ERR4918394"
-    assert ena_run_from_assembly_private.build_query() == "ERR4918394"
+    assert ena_run_from_assembly_public.build_query() == ["ERR4918394"]
+    assert ena_run_from_assembly_private.build_query() == ["ERR4918394"]
+    assert ena_runs_from_coassembly_public.build_query() == ["SRR1632795", "SRR1632796", "SRR1632797"]
 
 
 @responses.activate
