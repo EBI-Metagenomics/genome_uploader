@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gzip
 import importlib.metadata
 import json
 import logging
@@ -28,6 +29,7 @@ from xml.dom.minidom import Element
 
 import click
 import pandas as pd
+from Bio import SeqIO
 
 from genomeuploader.constants import (
     BIN_CHECKLIST,
@@ -45,6 +47,8 @@ from genomeuploader.constants import (
     MQ,
     MISSING_LOCATION_DATA,
     MISSING_COLLECTION_DATE,
+    SINGLE_CONTIG_CHROMOSOME_TYPE,
+    SINGLE_CONTIG_FIELD,
     ASSEMBLY_ACCESSION_RE,
     RUN_ACCESSION_RE,
 )
@@ -206,6 +210,18 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
         genome_info[g]["accessions"] = ",".join(genome_info[g]["accessions"])
 
 
+def get_fasta_contig_ids(fasta_path: Path) -> list[str]:
+    """
+    Extracts sequence identifiers from a FASTA file, gzip-compressed or not.
+    Args:
+        fasta_path (Path): Path to the FASTA file.
+    Returns:
+        list[str]: Contig/sequence identifiers found in the FASTA file.
+    """
+    with gzip.open(fasta_path, "rt") as contigs:
+        return [record.id for record in SeqIO.parse(contigs, "fasta")]
+
+
 def save_accessions(alias_accession_dict: dict, accessions_file: Path):
     """
     Saves alias-accession mappings to a file.
@@ -239,6 +255,8 @@ def create_manifest_dictionary(
     study: str,
     coverage: float,
     is_coassembly: bool,
+    is_single_contig: bool,
+    contig_id: Optional[str],
 ) -> dict:
     """
     Creates a manifest dictionary for a genome.
@@ -253,6 +271,8 @@ def create_manifest_dictionary(
         study (str): Study accession.
         coverage (float): Genome coverage depth.
         is_coassembly (bool): Whether the genome comes from a co-assembly.
+        is_single_contig (bool): Whether the genome is a single-contig assembly.
+        contig_id (str): Identifier of the genome's single contig, if applicable.
     Returns:
         dict: Manifest dictionary for the genome.
     """
@@ -267,6 +287,8 @@ def create_manifest_dictionary(
         "study": study,
         "coverageDepth": coverage,
         "co-assembly": is_coassembly,
+        "single_contig": is_single_contig,
+        "contig_id": contig_id,
     }
 
     return manifest_dict
@@ -293,6 +315,8 @@ def compute_manifests(genomes: dict) -> dict:
             genomes[g]["study"],
             genomes[g]["genome_coverage"],
             genomes[g]["co-assembly"],
+            genomes[g]["single_contig"],
+            genomes[g]["contig_id"],
         )
         manifest_info[g]["accessionType"] = genomes[g]["accessionType"]
 
@@ -412,7 +436,18 @@ class GenomeUpload:
         logger.info("Retrieving info for genomes to submit...")
 
         all_fields = MAG_MANDATORY_FIELDS + BIN_MANDATORY_FIELDS
-        metadata = pd.read_csv(self.genome_metadata, sep="\t", usecols=all_fields)
+
+        # single_contig is an optional column: only read it if the input file provides it
+        header_columns = pd.read_csv(self.genome_metadata, sep="\t", nrows=0).columns
+        fields_to_read = list(all_fields)
+
+        #   keep this field non-mandatory for now so it doesn't break any other scripts
+        if SINGLE_CONTIG_FIELD in header_columns:
+            fields_to_read.append(SINGLE_CONTIG_FIELD)
+
+        metadata = pd.read_csv(self.genome_metadata, sep="\t", usecols=fields_to_read)
+        if SINGLE_CONTIG_FIELD not in metadata.columns:
+            metadata[SINGLE_CONTIG_FIELD] = False
 
         # make sure there are no empty cells
         clean_columns = list(metadata.dropna(axis=1))
@@ -546,6 +581,25 @@ class GenomeUpload:
                 genome_info[gen]["co-assembly"] = False
 
             genome_info[gen]["alias"] = gen
+
+
+            if genome_info[gen][SINGLE_CONTIG_FIELD]:
+                genome_info[gen]["single_contig"] = str(genome_info[gen][SINGLE_CONTIG_FIELD]).strip().lower() == "true"
+            else:
+                genome_info[gen]["single_contig"] = False
+            genome_info[gen]["contig_id"] = None
+            if genome_info[gen]["single_contig"]:
+                contig_ids = get_fasta_contig_ids(Path(genome_info[gen]["genome_path"]))
+                if len(contig_ids) != 1:
+                    raise ValueError(
+                        f"Genome '{gen}' is marked as single-contig but its FASTA file "
+                        f"({genome_info[gen]['genome_path']}) contains {len(contig_ids)} contig(s); expected exactly 1."
+                    )
+                genome_info[gen]["contig_id"] = contig_ids[0]
+                logger.warning(
+                    f"Genome '{gen}' confirmed as a single-contig: it will be submitted as a chromosome."
+                    "Make sure it is highly complete before submission."
+                )
 
             submittable_taxonomy = TaxonFinder(genome_info[gen]["NCBI_lineage"])
             genome_info[gen]["taxID"] = submittable_taxonomy.taxid
@@ -887,6 +941,20 @@ class GenomeUpload:
             f"Please, check the errors above and {self.submission_receipt.name} file."
         )
 
+    def write_chromosome_list(self, alias: str, contig_id: str) -> Path:
+        """
+        Writes a gzip-compressed chromosome list file for a single-contig genome.
+        Args:
+            alias (str): Genome alias.
+            contig_id (str): Identifier of the genome's single contig.
+        Returns:
+            Path: Path of the written chromosome list file.
+        """
+        chromosome_list_path = self.manifest_dir / f"{alias}_chromosome_list.txt.gz"
+        with gzip.open(chromosome_list_path, "wt") as f:
+            f.write(f"{contig_id}\t1\t{SINGLE_CONTIG_CHROMOSOME_TYPE}\n")
+        return chromosome_list_path
+
     def generate_genome_manifest(self, genome_info: dict, alias_to_sample: dict):
         """
         Generates a manifest file for a genome.
@@ -928,6 +996,9 @@ class GenomeUpload:
         ]
         if genome_info["run_ref"]:
             values.insert(-1, ("RUN_REF", genome_info["run_ref"]))
+        if genome_info.get("single_contig"):
+            chromosome_list_path = self.write_chromosome_list(genome_info["alias"], genome_info["contig_id"])
+            values.append(("CHROMOSOME_LIST", str(chromosome_list_path.resolve())))
         logger.info(f"Writing manifest file (.manifest) for {genome_info['alias']}.")
         with manifest_path.open("w") as outfile:
             for k, v in values:
