@@ -633,7 +633,43 @@ GEOGRAPHIC_LOCATIONS = [
 ]
 
 SINGLE_CONTIG_FIELD = "single_contig"
-SINGLE_CONTIG_CHROMOSOME_TYPE = "Circular-Chromosome"
+SINGLE_CONTIG_CHROMOSOME_NAME = "single_contig_name"
+SINGLE_CONTIG_CHROMOSOME_TYPE = "single_contig_type"
+SINGLE_CONTIG_CHROMOSOME_LOCATION = "single_contig_chromosome_location"
+
+SINGLE_CONTIG_CHROMOSOME_NAMES = [
+    "Circular-Chromosome",
+    "Linear-Chromosome",
+    "Linear-Chromosome Mitochondrion"
+]
+SINGLE_CONTIG_CHROMOSOME_TYPES = {
+    "chromosome": "1",
+    "plasmid": "2",
+    "linkage_group": "3",
+    "monopartite": "4",
+    "segmented": "5",
+    "multipartite": "6"
+}
+SINGLE_CONTIG_CHROMOSOME_LOCATIONS_LIST = [
+    "Macronuclear",
+    "Nucleomorph",
+    "Mitochondrion",
+    "Kinetoplast",
+    "Chloroplast",
+    "Chromoplast",
+    "Plastid",
+    "Virion",
+    "Phage",
+    "Proviral",
+    "Prophage",
+    "Viroid",
+    "Cyanelle",
+    "Apicoplast",
+    "Leucoplast",
+    "Proplastid",
+    "Hydrogenosome",
+    "Chromatophore",
+]
 
 BIN_MANDATORY_FIELDS = [
     "genome_name",

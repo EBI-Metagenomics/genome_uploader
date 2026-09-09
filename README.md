@@ -37,6 +37,9 @@ With columns indicating:
   * _local_environment_: `string` (explanation following)
   * _environmental_medium_: `string` (explanation following)
   * _single_contig_: `True/False` (optional column, defaults to `False` if omitted). Set to `True` if the genome consists of a single contig. See [Single-contig genomes](#single-contig-genomes) below.
+  * _single_contig_name_: chromosome name written to the chromosome list file. Required whenever the `single_contig` column is present. Accepted values: `Circular-Chromosome`, `Linear-Chromosome`, `Linear-Chromosome Mitochondrion`. See [Single-contig genomes](#single-contig-genomes) below.
+  * _single_contig_type_: chromosome type written to the chromosome list file. Required whenever the `single_contig` column is present. Accepted values: `chromosome`, `plasmid`, `linkage_group`, `monopartite`, `segmented`, `multipartite`. See [Single-contig genomes](#single-contig-genomes) below.
+  * _single_contig_chromosome_location_: optional organelle/location written to the chromosome list file. Accepted values: `Macronuclear`, `Nucleomorph`, `Mitochondrion`, `Kinetoplast`, `Chloroplast`, `Chromoplast`, `Plastid`, `Virion`, `Phage`, `Proviral`, `Prophage`, `Viroid`, `Cyanelle`, `Apicoplast`, `Leucoplast`, `Proplastid`, `Hydrogenosome`, `Chromatophore`. See [Single-contig genomes](#single-contig-genomes) below.
 
 According to ENA checklist's guidelines, `broad_environment` describes the broad ecological context of a sample - desert, taiga, coral reef, ... `local_environment` is more local - lake, harbour, cliff, ... `environmental_medium` is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ...
 For host-associated metagenomic samples, the three variables can be defined similarly to the following example for the chicken gut metagenome: "chicken digestive system", "digestive tube", "caecum". More information can be found at [ERC000050](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) for bins and [ERC000047](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>) for MAGs under field names "broad-scale environmental context", "local environmental context", "environmental medium"
@@ -57,6 +60,18 @@ If you are working with your own, private data on ENA, you will need to add the 
 
 ### Single-contig genomes
 Single contig high-quality genomes need to be submitted as chromosomes. Refer to the [ENA documentation](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome/mag.html#contig-assembly>) if you are unsure. If a genome consists of a single contig, mark it by setting `single_contig` to `True` in the input tsv (see [Prepare Input TSV](#prepare-input-tsv) above). The script will check that the corresponding fasta file contains exactly one contig, and will fail with an error if it doesn't. A chromosome list file is generated per genome alongside the manifest and referenced from it via `CHROMOSOME_LIST`. Only mark a genome as single-contig if you are confident it is highly complete.
+
+The chromosome list file is populated from three additional columns:
+
+| Column | Required | Accepted values |
+| --- | --- | --- |
+| `single_contig_name` | Yes, whenever the `single_contig` column is present | `Circular-Chromosome`, `Linear-Chromosome`, `Linear-Chromosome Mitochondrion` |
+| `single_contig_type` | Yes, whenever the `single_contig` column is present | `chromosome`, `plasmid`, `linkage_group`, `monopartite`, `segmented`, `multipartite` |
+| `single_contig_chromosome_location` | No (leave the cell empty to omit it) | `Macronuclear`, `Nucleomorph`, `Mitochondrion`, `Kinetoplast`, `Chloroplast`, `Chromoplast`, `Plastid`, `Virion`, `Phage`, `Proviral`, `Prophage`, `Viroid`, `Cyanelle`, `Apicoplast`, `Leucoplast`, `Proplastid`, `Hydrogenosome`, `Chromatophore` |
+
+If the `single_contig` column is present but `single_contig_name` or `single_contig_type` is not, the script stops with an error. These columns only need values for the genomes marked as single-contig; leave the cells empty for the others.
+
+Each single-contig genome whose `single_contig_name`, `single_contig_type` or (when provided) `single_contig_chromosome_location` value is not in the list above is **skipped** rather than submitted: the run continues with the remaining genomes, and the reasons are written to `single_contig_submission.log` in the output folder. If every genome is skipped this way, the script stops with an error.
 
 ### TPA generation and upload
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.
@@ -153,6 +168,7 @@ bin_upload/MAG_upload
 ├── manifests_test                  # folder generated for validation in test mode
 │    └── ...
 ├── ENA_backup.json                 # backup file to prevent re-download of metadata from ENA. Regeneration can be forced with --force
+├── single_contig_submission.log    # only created when a single-contig genome is skipped; lists the invalid values
 ├── genome_samples.xml              # xml generated to register samples on ENA before the upload
 ├── registered_bins/MAGs.tsv        # list of genomes registered on ENA in live mode - needed for manifest generation
 ├── registered_bins/MAGs_test.tsv   # list of genomes registered on ENA in test mode - needed for manifest generation

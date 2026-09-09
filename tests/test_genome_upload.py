@@ -314,6 +314,12 @@ class Tests:
 
         assert genome_info[alias]["single_contig"] is True
         assert genome_info[alias]["contig_id"] == "contig1"
+        # the chromosome columns are normalised in place and kept on the genome dict
+        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_NAME] == "Circular-Chromosome"
+        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_TYPE] == "chromosome"
+        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_LOCATION] == ""
+        # no chromosome metadata problems -> dedicated log is not created
+        assert not gu.single_contig_log.exists()
 
         # don't call API again, force assign info for the next step
         genome_info[alias]["run_ref"] = "ERR6769700"
@@ -368,7 +374,41 @@ class Tests:
 
         assert genome_info[alias]["single_contig"] is False
         assert genome_info[alias]["contig_id"] is None
-        
+        # the optional chromosome columns are backfilled even when absent from the tsv,
+        # so compute_manifests / generate_genome_manifest don't KeyError later on
+        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_NAME] is None
+        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_TYPE] is None
+        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_LOCATION] is None
+        assert not gu.single_contig_log.exists()
+
+    def test_single_contig_genome_with_wrong_type_is_skipped_and_logged(self, tmp_path):
+        args = {
+            "bins": True,
+            "live": False,
+            "private": False,
+            "tpa": False,
+            "centre_name": "EMG",
+            "force": False,
+            "out": str(tmp_path),
+            "upload_study": "ERP000000",
+            "genome_info": "tests/fixtures/input_single_contig_wrong_type_fixture.tsv",
+            "test_suffix": "single-contig-wrong-type-unittest",
+        }
+        gu = GenomeUpload(args)
+
+        # both genomes carry a single_contig_type that is not a SINGLE_CONTIG_CHROMOSOME_TYPES
+        # key, so both are skipped and nothing is left to submit
+        with pytest.raises(ValueError, match="No genomes left"):
+            gu.extract_genomes_info()
+
+        assert gu.single_contig_log.exists()
+        log_text = gu.single_contig_log.read_text()
+        assert "single_contig_type 'not_a_real_type' is not one of" in log_text
+        assert "single_contig_type 'linear' is not one of" in log_text
+        assert "ERR6769700_bin.1" in log_text
+        assert "ERR6769700_bin.2" in log_text
+        assert "2 genome(s) excluded from single-contig submission" in log_text
+
     def test_genomeuploader_coassembly_end_to_end(tmp_path):
         timestamp = str(int(dt.timestamp(dt.now())))
         with open("tests/fixtures/input_coassembly_fixture.tsv", "r") as f:
