@@ -1117,27 +1117,9 @@ class GenomeUpload:
                 column only when a non-empty value is given.
         Returns:
             Path: Path of the written chromosome list file.
-        Raises:
-            ValueError: If the chromosome name or type is empty, or the type is not a
-                recognised constants.SINGLE_CONTIG_CHROMOSOME_TYPES key.
         """
-        # values are normally validated/normalised in extract_genomes_info; re-normalise
-        # here as a safety net since NaN is truthy and would break the checks below
-        chromosome_name = normalise_na(chromosome_name)
-        chromosome_type = normalise_na(chromosome_type)
-        chromosome_location = normalise_na(chromosome_location)
-
-        if not chromosome_name or not chromosome_type:
-            raise ValueError(
-                f"Genome '{alias}' is marked as single-contig but is missing a value for "
-                f"'{SINGLE_CONTIG_CHROMOSOME_NAME}' and/or '{SINGLE_CONTIG_CHROMOSOME_TYPE}'."
-            )
-        if chromosome_type not in SINGLE_CONTIG_CHROMOSOME_TYPES:
-            raise ValueError(
-                f"Genome '{alias}': '{SINGLE_CONTIG_CHROMOSOME_TYPE}' value '{chromosome_type}' is not "
-                f"one of {sorted(SINGLE_CONTIG_CHROMOSOME_TYPES)}."
-            )
-
+        # the three chromosome values are validated and normalised upstream in
+        # extract_genomes_info(); genomes with invalid values never reach this point
         # TODO: check ENA docs because CHROMOSOME_TYPE should be third column, here it is second (???)
         chromosome_list_path = self.manifest_dir / f"{alias}_chromosome_list.txt.gz"
         line = f"{contig_id}\t{SINGLE_CONTIG_CHROMOSOME_TYPES[chromosome_type]}\t{chromosome_name}"
