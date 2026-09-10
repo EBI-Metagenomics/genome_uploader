@@ -1,4 +1,4 @@
-# ENA public Bins and MAGs uploader
+# ENA bins and MAGs uploader
 This repository allows to:
 
   * Generate xmls and manifests necessary for genome submission
@@ -56,7 +56,7 @@ Raw-read runs or assemblies from which genomes were generated should already be 
 If you are working with your own, private data on ENA, you will need to add the `--private` flag to access private metadata through ENA API. This implies that if you are working on public data, you can omit the flag. However, you will need to submit two different batches of data if you are handling both private and public data.
 
 ### Single-contig genomes
-Single contig high-quality genomes need to be submitted as chromosomes. Refer to the [ENA documentation](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome/mag.html#contig-assembly>) if you are unsure. If a genome consists of a single contig, mark it by setting `single_contig` to `True` in the input tsv (see [Prepare Input TSV](#prepare-input-tsv) above). The script will check that the corresponding fasta file contains exactly one contig, and will fail with an error if it doesn't. A chromosome list file is generated per genome alongside the manifest and referenced from it via `CHROMOSOME_LIST`. Only mark a genome as single-contig if you are confident it is highly complete.
+Single contig high-quality genomes need to be submitted as chromosomes. Refer to the [ENA documentation](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome/mag.html#chromosome-assembly>) if you are unsure. If a genome consists of a single contig, mark it by setting `single_contig` to `True` in the input tsv (see [Prepare Input TSV](#prepare-input-tsv) above). The script will check that the corresponding fasta file contains exactly one contig, and will fail with an error if it doesn't. A chromosome list file is generated per genome alongside the manifest and referenced from it via `CHROMOSOME_LIST`. Only mark a genome as single-contig if you are confident it is highly complete.
 
 ### TPA generation and upload
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.
