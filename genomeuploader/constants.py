@@ -632,6 +632,9 @@ GEOGRAPHIC_LOCATIONS = [
     "Zimbabwe",
 ]
 
+SINGLE_CONTIG_FIELD = "single_contig"
+SINGLE_CONTIG_CHROMOSOME_TYPE = "Circular-Chromosome"
+
 BIN_MANDATORY_FIELDS = [
     "genome_name",
     "accessions",
