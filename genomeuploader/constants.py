@@ -632,23 +632,28 @@ GEOGRAPHIC_LOCATIONS = [
     "Zimbabwe",
 ]
 
-SINGLE_CONTIG_FIELD = "single_contig"
+SINGLE_CONTIG_GENOME_NAME_FIELD = "genome_name"
 SINGLE_CONTIG_CHROMOSOME_NAME = "single_contig_name"
 SINGLE_CONTIG_CHROMOSOME_TYPE = "single_contig_type"
+SINGLE_CONTIG_CHROMOSOME_TOPOLOGY = "single_contig_topology"
 SINGLE_CONTIG_CHROMOSOME_LOCATION = "single_contig_chromosome_location"
 
-SINGLE_CONTIG_CHROMOSOME_NAMES = [
-    "Circular-Chromosome",
-    "Linear-Chromosome",
-    "Linear-Chromosome Mitochondrion"
+# single_contig_name (CHROMOSOME_NAME in the chromosome list file) has no fixed vocabulary
+# anymore: it must be a digit string (chromosome/plasmid number) or the literal "MIT" for
+# the mitochondrial chromosome
+SINGLE_CONTIG_CHROMOSOME_NAME_REGEX = re.compile(r"^(?:[0-9]+|MIT)$")
+
+SINGLE_CONTIG_CHROMOSOME_TOPOLOGIES = [
+    "Circular",
+    "Linear"
 ]
 SINGLE_CONTIG_CHROMOSOME_TYPES = {
-    "chromosome": "1",
-    "plasmid": "2",
-    "linkage_group": "3",
-    "monopartite": "4",
-    "segmented": "5",
-    "multipartite": "6"
+    "Chromosome",
+    "Plasmid",
+    "Linkage_group",
+    "Monopartite",
+    "Segmented",
+    "Multipartite"
 }
 SINGLE_CONTIG_CHROMOSOME_LOCATIONS_LIST = [
     "Macronuclear",
