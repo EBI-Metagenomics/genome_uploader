@@ -632,6 +632,50 @@ GEOGRAPHIC_LOCATIONS = [
     "Zimbabwe",
 ]
 
+GENOME_NAME_FIELD = "genome_name"
+CHROMOSOME_NAME_FIELD = "chromosome_name"
+CHROMOSOME_TYPE_FIELD = "chromosome_type"
+CHROMOSOME_TOPOLOGY_FIELD = "chromosome_topology"
+CHROMOSOME_LOCATION_FIELD = "chromosome_location"
+
+# chromosome_name (CHROMOSOME_NAME in the chromosome list file) has no fixed vocabulary
+# anymore: it must be a digit string (chromosome/plasmid number) or the literal "MIT" for
+# the mitochondrial chromosome
+CHROMOSOME_NAME_REGEX = re.compile(r"^(?:[0-9]+|MIT)$")
+
+CHROMOSOME_TOPOLOGIES = [
+    "Circular",
+    "Linear"
+]
+CHROMOSOME_TYPES = {
+    "Chromosome",
+    "Plasmid",
+    "Linkage_group",
+    "Monopartite",
+    "Segmented",
+    "Multipartite"
+}
+CHROMOSOME_LOCATIONS_LIST = [
+    "Macronuclear",
+    "Nucleomorph",
+    "Mitochondrion",
+    "Kinetoplast",
+    "Chloroplast",
+    "Chromoplast",
+    "Plastid",
+    "Virion",
+    "Phage",
+    "Proviral",
+    "Prophage",
+    "Viroid",
+    "Cyanelle",
+    "Apicoplast",
+    "Leucoplast",
+    "Proplastid",
+    "Hydrogenosome",
+    "Chromatophore",
+]
+
 BIN_MANDATORY_FIELDS = [
     "genome_name",
     "accessions",

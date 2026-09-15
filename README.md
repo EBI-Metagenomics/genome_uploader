@@ -1,4 +1,4 @@
-# ENA public Bins and MAGs uploader
+# ENA bins and MAGs uploader
 This repository allows to:
 
   * Generate xmls and manifests necessary for genome submission
@@ -37,6 +37,8 @@ With columns indicating:
   * _local_environment_: `string` (explanation following)
   * _environmental_medium_: `string` (explanation following)
 
+Genomes that consist of a single contig and need to be submitted as chromosomes are **not** marked in this table; they are listed in a separate, optional TSV instead - see [Single-contig genomes](#single-contig-genomes) below.
+
 According to ENA checklist's guidelines, `broad_environment` describes the broad ecological context of a sample - desert, taiga, coral reef, ... `local_environment` is more local - lake, harbour, cliff, ... `environmental_medium` is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ...
 For host-associated metagenomic samples, the three variables can be defined similarly to the following example for the chicken gut metagenome: "chicken digestive system", "digestive tube", "caecum". More information can be found at [ERC000050](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) for bins and [ERC000047](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>) for MAGs under field names "broad-scale environmental context", "local environmental context", "environmental medium"
 
@@ -53,6 +55,31 @@ If you already generated these for your bins, our recommendation is to include t
 Raw-read runs or assemblies from which genomes were generated should already be available on the INSDC (ENA by EBI, GenBank by NCBI, or DDBJ) for this script to work. Therefore, at least a DRR|ERR|SRR accession (for runs) or a ERZ|SRZ|DRZ accession (for assemblies) should be available.  
 
 If you are working with your own, private data on ENA, you will need to add the `--private` flag to access private metadata through ENA API. This implies that if you are working on public data, you can omit the flag. However, you will need to submit two different batches of data if you are handling both private and public data.
+
+### Single-contig genomes
+Single contig high-quality genomes need to be submitted as chromosomes. Refer to the [ENA documentation](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome/mag.html#contig-assembly>) if you are unsure.
+
+Genomes to submit this way are listed in a **separate, optional TSV** passed with `--single-contig-info`, rather than a column in the main `--genome_info` table. Any `genome_name` present in this file is treated as single-contig; genomes absent from it (or every genome, if the flag is omitted entirely) are submitted normally. The file has these columns:
+
+| Column | Required | Accepted values |
+| --- | --- | --- |
+| `genome_name` | Yes | must match a `genome_name` from the main `--genome_info` table |
+| `chromosome_name` | Yes | a digit string (chromosome/plasmid number, e.g. `1`, `2`) or `MIT` for the mitochondrial chromosome - there's no fixed list |
+| `chromosome_type` | Yes | `Chromosome`, `Plasmid`, `Linkage_group`, `Monopartite`, `Segmented`, `Multipartite` |
+| `chromosome_topology` | Yes | `Circular`, `Linear` |
+| `chromosome_location` | No (leave the cell empty to omit it) | `Macronuclear`, `Nucleomorph`, `Mitochondrion`, `Kinetoplast`, `Chloroplast`, `Chromoplast`, `Plastid`, `Virion`, `Phage`, `Proviral`, `Prophage`, `Viroid`, `Cyanelle`, `Apicoplast`, `Leucoplast`, `Proplastid`, `Hydrogenosome`, `Chromatophore` |
+
+Example:
+
+| genome_name | chromosome_name | chromosome_type | chromosome_topology | chromosome_location |
+| --- | --- | --- | --- | --- |
+| ERR4647712_crispatus | 1 | Chromosome | Circular | |
+
+For every genome matched this way, the script checks that its fasta file contains exactly one contig, and fails with an error if it doesn't. A chromosome list file is generated alongside the manifest and referenced from it via `CHROMOSOME_LIST`. Each entry is written as `<contig_id>\t<chromosome_name>\t<chromosome_topology>-<chromosome_type>[\t<chromosome_location>]` - so the row above produces `..._crispatus_contig\t1\tCircular-Chromosome`. Only list a genome as single-contig if you are confident it is highly complete.
+
+If `--single-contig-info` is missing the `genome_name`, `chromosome_name`, `chromosome_type` or `chromosome_topology` column, or contains duplicate `genome_name` values, the script stops with an error before processing any genome.
+
+Each listed genome whose `chromosome_name`, `chromosome_type`, `chromosome_topology` or (when provided) `chromosome_location` value is not accepted per the table above is **skipped** rather than submitted: the run continues with the remaining genomes, and the reasons are written to `single_contig_submission.log` in the output folder. A `genome_name` in `--single-contig-info` that doesn't match any genome in `--genome_info` is also reported there as a warning, but isn't fatal. If every genome ends up excluded, the script stops with an error.
 
 ### TPA generation and upload
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.
@@ -119,12 +146,14 @@ genome_upload \
   --genome_info METADATA_FILE \
   (--mags | --bins) \
   --centre_name CENTRE_NAME \
+  [--single-contig-info SINGLE_CONTIG_FILE] \
   [--out] [--force] [--live] [--tpa]
 ```
 
 where
   * `-u UPLOAD_STUDY`: study accession for genomes upload to ENA (in format ERPxxxxxx or PRJEBxxxxxx)
   * `--genome_info METADATA_FILE` : genomes metadata file in tsv format
+  * `--single-contig-info SINGLE_CONTIG_FILE`: optional tsv listing genomes to submit as single-contig chromosomes. See [Single-contig genomes](#single-contig-genomes) below.
   * `-m, --mags, --b, --bins`: select either of these for bin **or** MAG upload. If in doubt, check [which definition fits best according to ENA](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome.html>)
   * `--out`: output folder (default: working directory)
   * `--force`: forces reset of sample xmls generation. This is useful if you changed something in your tsv table, or if ENA metadata haven't been downloaded correctly (you can check this in `ENA_backup.json`).
@@ -144,11 +173,12 @@ Sample xmls won't be regenerated automatically if a previous xml already exists.
 The script produces the following files and folders:
 ```bash
 bin_upload/MAG_upload
-├── manifests
+├── manifests                       # also contains a *_chromosome_list.txt.gz per single-contig genome
 │    └── ...
 ├── manifests_test                  # folder generated for validation in test mode
 │    └── ...
 ├── ENA_backup.json                 # backup file to prevent re-download of metadata from ENA. Regeneration can be forced with --force
+├── single_contig_submission.log    # only created when --single-contig-info has a problem to report
 ├── genome_samples.xml              # xml generated to register samples on ENA before the upload
 ├── registered_bins/MAGs.tsv        # list of genomes registered on ENA in live mode - needed for manifest generation
 ├── registered_bins/MAGs_test.tsv   # list of genomes registered on ENA in test mode - needed for manifest generation
