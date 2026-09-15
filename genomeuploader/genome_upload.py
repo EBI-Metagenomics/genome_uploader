@@ -215,14 +215,17 @@ def combine_ena_info(genome_info: dict, ena_dict: dict):
 
 def get_fasta_contig_ids(fasta_path: Path) -> list[str]:
     """
-    Extracts sequence identifiers from a FASTA file, gzip-compressed or not.
+    Extracts sequence identifiers from a gzip-compressed FASTA file.
     Args:
-        fasta_path (Path): Path to the FASTA file.
+        fasta_path (Path): Path to the gzip-compressed FASTA file.
     Returns:
         list[str]: Contig/sequence identifiers found in the FASTA file.
     """
     with gzip.open(fasta_path, "rt") as contigs:
-        return [record.id for record in SeqIO.parse(contigs, "fasta")]
+        try:
+            return [record.id for record in SeqIO.parse(contigs, "fasta")]
+        except gzip.BadGzipFile:
+            raise ValueError(f"Genome file {fasta_path} is not gzip-compressed. Genome files must be gzip-compressed.")
 
 
 def save_accessions(alias_accession_dict: dict, accessions_file: Path):

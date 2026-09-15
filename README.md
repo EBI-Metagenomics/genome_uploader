@@ -1,4 +1,4 @@
-# ENA public Bins and MAGs uploader
+# ENA bins and MAGs uploader
 This repository allows to:
 
   * Generate xmls and manifests necessary for genome submission
