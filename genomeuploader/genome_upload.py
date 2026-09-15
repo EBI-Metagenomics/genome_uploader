@@ -21,7 +21,6 @@ import logging
 import re
 import xml.dom.minidom as minidom
 import xml.etree.ElementTree as et
-from datetime import date
 from datetime import datetime as dt
 from pathlib import Path
 from typing import Optional
@@ -47,11 +46,15 @@ from genomeuploader.constants import (
     MQ,
     MISSING_LOCATION_DATA,
     MISSING_COLLECTION_DATE,
-    SINGLE_CONTIG_CHROMOSOME_TYPE,
-    SINGLE_CONTIG_FIELD,
+    GENOME_NAME_FIELD,
+    CHROMOSOME_NAME_FIELD,
+    CHROMOSOME_TYPE_FIELD,
+    CHROMOSOME_TOPOLOGY_FIELD,
+    CHROMOSOME_LOCATION_FIELD,
     ASSEMBLY_ACCESSION_RE,
     RUN_ACCESSION_RE,
 )
+from genomeuploader import single_contig
 from genomeuploader.ena import EnaQuery
 from genomeuploader.ena_submit import EnaSubmit
 from genomeuploader.taxon_finder import TaxonFinder
@@ -260,6 +263,10 @@ def create_manifest_dictionary(
     is_coassembly: bool,
     is_single_contig: bool,
     contig_id: Optional[str],
+    chromosome_name: Optional[str],
+    chromosome_type: Optional[str],
+    chromosome_topology: Optional[str],
+    chromosome_location: Optional[str],
 ) -> dict:
     """
     Creates a manifest dictionary for a genome.
@@ -276,6 +283,14 @@ def create_manifest_dictionary(
         is_coassembly (bool): Whether the genome comes from a co-assembly.
         is_single_contig (bool): Whether the genome is a single-contig assembly.
         contig_id (str): Identifier of the genome's single contig, if applicable.
+        chromosome_name (str, optional): CHROMOSOME_NAME value for the
+            single contig's entry in the ENA chromosome list file - a digit string or "MIT".
+        chromosome_type (str, optional): chromosome type (one of
+            constants.CHROMOSOME_TYPES) for the single contig.
+        chromosome_topology (str, optional): chromosome topology (one of
+            constants.CHROMOSOME_TOPOLOGIES) for the single contig.
+        chromosome_location (str, optional): CHROMOSOME_LOCATION value for
+            the single contig (organelle/location); empty when not provided.
     Returns:
         dict: Manifest dictionary for the genome.
     """
@@ -292,6 +307,10 @@ def create_manifest_dictionary(
         "co-assembly": is_coassembly,
         "single_contig": is_single_contig,
         "contig_id": contig_id,
+        CHROMOSOME_NAME_FIELD: chromosome_name,
+        CHROMOSOME_TYPE_FIELD: chromosome_type,
+        CHROMOSOME_TOPOLOGY_FIELD: chromosome_topology,
+        CHROMOSOME_LOCATION_FIELD: chromosome_location,
     }
 
     return manifest_dict
@@ -320,6 +339,10 @@ def compute_manifests(genomes: dict) -> dict:
             genomes[g]["co-assembly"],
             genomes[g]["single_contig"],
             genomes[g]["contig_id"],
+            genomes[g][CHROMOSOME_NAME_FIELD],
+            genomes[g][CHROMOSOME_TYPE_FIELD],
+            genomes[g][CHROMOSOME_TOPOLOGY_FIELD],
+            genomes[g][CHROMOSOME_LOCATION_FIELD],
         )
         manifest_info[g]["accessionType"] = genomes[g]["accessionType"]
 
@@ -380,6 +403,14 @@ class GenomeUpload:
         self.genome_metadata = Path(args["genome_info"])
         self.test_suffix = args["test_suffix"]
 
+        # optional TSV listing genomes to submit as single-contig chromosomes;
+        # see genomeuploader.single_contig.load_single_contig_metadata()
+        single_contig_info = args.get("single_contig_info")
+        self.single_contig_metadata = Path(single_contig_info) if single_contig_info else None
+
+        # dedicated log for single-contig submission issues; created lazily on first write
+        self.single_contig_log = single_contig.SingleContigLog(self.upload_dir / "single_contig_submission.log")
+
     def generate_files_and_folders(self):
         """
         Generates required directories and file paths for upload.
@@ -431,6 +462,9 @@ class GenomeUpload:
             co-assembly: True/False, whether the genome was generated from a co-assembly
             genome_coverage : genome coverage
             genome_path: path to genome to upload
+        Genomes to submit as single-contig chromosomes are not marked in this file; they are
+        listed by genome_name in the separate, optional --single-contig-info TSV instead (see
+        load_single_contig_metadata()).
         Returns:
             dict: Dictionary of validated genome metadata.
         Raises:
@@ -440,17 +474,7 @@ class GenomeUpload:
 
         all_fields = MAG_MANDATORY_FIELDS + BIN_MANDATORY_FIELDS
 
-        # single_contig is an optional column: only read it if the input file provides it
-        header_columns = pd.read_csv(self.genome_metadata, sep="\t", nrows=0).columns
-        fields_to_read = list(all_fields)
-
-        # keep this field non-mandatory for now so it doesn't break any other scripts
-        if SINGLE_CONTIG_FIELD in header_columns:
-            fields_to_read.append(SINGLE_CONTIG_FIELD)
-
-        metadata = pd.read_csv(self.genome_metadata, sep="\t", usecols=fields_to_read)
-        if SINGLE_CONTIG_FIELD not in metadata.columns:
-            metadata[SINGLE_CONTIG_FIELD] = False
+        metadata = pd.read_csv(self.genome_metadata, sep="\t", usecols=all_fields)
 
         # make sure there are no empty cells
         clean_columns = list(metadata.dropna(axis=1))
@@ -551,11 +575,21 @@ class GenomeUpload:
     def extract_genomes_info(self) -> dict:
         """
         Extracts and processes genome information from validated metadata.
+
+        A genome is treated as chromosome level assembly when its genome_name appears in the
+        optional --chromosomes-info TSV (see chromosome_assembly.load_chromosome_metadata()).
+        Single-contig genomes whose chromosome metadata (CHROMOSOME_NAME/TYPE/
+        TOPOLOGY/LOCATION) does not match the accepted values cause the genome_uploader to fail.
         Returns:
             dict: Dictionary of processed genome information.
+        Raises:
+            ValueError: If no genomes remain after excluding invalid single-contig genomes.
         """
         genome_info = self.validate_metadata_tsv()
-        for gen in genome_info:
+        single_contig_metadata = single_contig.load_single_contig_metadata(self.single_contig_metadata)
+        matched_single_contig_genomes = set()
+        excluded_single_contig = []
+        for gen in list(genome_info):
             genome_info[gen]["accessions"] = genome_info[gen]["accessions"].split(",")
             accession_type = "run"
             assembly_reg_exp = re.compile(r"([E|S|D]RZ\d{6,})")
@@ -585,19 +619,41 @@ class GenomeUpload:
 
             genome_info[gen]["alias"] = gen
 
-
-            if genome_info[gen][SINGLE_CONTIG_FIELD]:
-                genome_info[gen]["single_contig"] = str(genome_info[gen][SINGLE_CONTIG_FIELD]).strip().lower() == "true"
-            else:
-                genome_info[gen]["single_contig"] = False
+            genome_info[gen]["single_contig"] = False
             genome_info[gen]["contig_id"] = None
-            if genome_info[gen]["single_contig"]:
+            genome_info[gen][CHROMOSOME_NAME_FIELD] = None
+            genome_info[gen][CHROMOSOME_TYPE_FIELD] = None
+            genome_info[gen][CHROMOSOME_TOPOLOGY_FIELD] = None
+            genome_info[gen][CHROMOSOME_LOCATION_FIELD] = None
+
+            single_contig_entry = single_contig_metadata.get(genome_info[gen][GENOME_NAME_FIELD])
+            if single_contig_entry is not None:
+                matched_single_contig_genomes.add(genome_info[gen][GENOME_NAME_FIELD])
+                genome_info[gen][CHROMOSOME_NAME_FIELD] = single_contig_entry[CHROMOSOME_NAME_FIELD]
+                genome_info[gen][CHROMOSOME_TYPE_FIELD] = single_contig_entry[CHROMOSOME_TYPE_FIELD]
+                genome_info[gen][CHROMOSOME_TOPOLOGY_FIELD] = single_contig_entry[CHROMOSOME_TOPOLOGY_FIELD]
+                genome_info[gen][CHROMOSOME_LOCATION_FIELD] = single_contig_entry[CHROMOSOME_LOCATION_FIELD]
+
+                chromosome_errors = single_contig.validate_single_contig_fields(gen, genome_info[gen])
+                if chromosome_errors:
+                    for error in chromosome_errors:
+                        self.single_contig_log.error(error)
+                    self.single_contig_log.error(
+                        f"Genome '{gen}' excluded from submission because of the errors above."
+                    )
+                    logger.warning(
+                        f"Genome '{gen}' skipped: invalid single-contig chromosome metadata "
+                        f"(details in {self.single_contig_log})."
+                    )
+                    excluded_single_contig.append(gen)
+                    continue
                 contig_ids = get_fasta_contig_ids(Path(genome_info[gen]["genome_path"]))
                 if len(contig_ids) != 1:
                     raise ValueError(
                         f"Genome '{gen}' is marked as single-contig but its FASTA file "
                         f"({genome_info[gen]['genome_path']}) contains {len(contig_ids)} contig(s); expected exactly 1."
                     )
+                genome_info[gen]["single_contig"] = True
                 genome_info[gen]["contig_id"] = contig_ids[0]
                 logger.warning(
                     f"Genome '{gen}' confirmed as a single-contig: it will be submitted as a chromosome."
@@ -607,6 +663,35 @@ class GenomeUpload:
             submittable_taxonomy = TaxonFinder(genome_info[gen]["NCBI_lineage"])
             genome_info[gen]["taxID"] = submittable_taxonomy.taxid
             genome_info[gen]["scientific_name"] = submittable_taxonomy.scientific_name
+
+        for gen in excluded_single_contig:
+            del genome_info[gen]
+        if excluded_single_contig:
+            self.single_contig_log.warning(
+                f"{len(excluded_single_contig)} genome(s) excluded from single-contig submission: "
+                f"{', '.join(excluded_single_contig)}."
+            )
+            logger.warning(
+                f"{len(excluded_single_contig)} genome(s) excluded because of invalid single-contig "
+                f"chromosome metadata: {', '.join(excluded_single_contig)}. See {self.single_contig_log}."
+            )
+
+        unmatched_single_contig_genomes = sorted(set(single_contig_metadata) - matched_single_contig_genomes)
+        if unmatched_single_contig_genomes:
+            self.single_contig_log.warning(
+                "The following genome_name value(s) from --single-contig-info do not match any "
+                f"genome in --genome_info and were ignored: {', '.join(unmatched_single_contig_genomes)}."
+            )
+            logger.warning(
+                f"{len(unmatched_single_contig_genomes)} genome_name value(s) in --single-contig-info "
+                f"do not match any genome in --genome_info; see {self.single_contig_log}."
+            )
+
+        if not genome_info:
+            raise ValueError(
+                "No genomes left to submit after excluding those with invalid single-contig "
+                f"chromosome metadata. See {self.single_contig_log}."
+            )
 
         return genome_info
 
@@ -944,20 +1029,6 @@ class GenomeUpload:
             f"Please, check the errors above and {self.submission_receipt.name} file."
         )
 
-    def write_chromosome_list(self, alias: str, contig_id: str) -> Path:
-        """
-        Writes a gzip-compressed chromosome list file for a single-contig genome.
-        Args:
-            alias (str): Genome alias.
-            contig_id (str): Identifier of the genome's single contig.
-        Returns:
-            Path: Path of the written chromosome list file.
-        """
-        chromosome_list_path = self.manifest_dir / f"{alias}_chromosome_list.txt.gz"
-        with gzip.open(chromosome_list_path, "wt") as f:
-            f.write(f"{contig_id}\t1\t{SINGLE_CONTIG_CHROMOSOME_TYPE}\n")
-        return chromosome_list_path
-
     def generate_genome_manifest(self, genome_info: dict, alias_to_sample: dict):
         """
         Generates a manifest file for a genome.
@@ -1000,7 +1071,15 @@ class GenomeUpload:
         if genome_info["run_ref"]:
             values.insert(-1, ("RUN_REF", genome_info["run_ref"]))
         if genome_info.get("single_contig"):
-            chromosome_list_path = self.write_chromosome_list(genome_info["alias"], genome_info["contig_id"])
+            chromosome_list_path = single_contig.write_chromosome_list(
+                self.manifest_dir,
+                genome_info["alias"],
+                genome_info["contig_id"],
+                genome_info[CHROMOSOME_NAME_FIELD],
+                genome_info[CHROMOSOME_TYPE_FIELD],
+                genome_info[CHROMOSOME_TOPOLOGY_FIELD],
+                genome_info[CHROMOSOME_LOCATION_FIELD],
+            )
             values.append(("CHROMOSOME_LIST", str(chromosome_list_path.resolve())))
         logger.info(f"Writing manifest file (.manifest) for {genome_info['alias']}.")
         with manifest_path.open("w") as outfile:
@@ -1047,6 +1126,14 @@ __version__ = importlib.metadata.version("genome_uploader")
 @click.version_option(__version__, message="genome_uploader %(version)s")
 @click.option("-u", "--upload_study", required=True, help="Study accession for genomes upload")
 @click.option("--genome_info", type=click.Path(exists=True), required=True, help="Genomes metadata file")
+@click.option(
+    "--single-contig-info",
+    type=click.Path(exists=True),
+    required=False,
+    help="Optional TSV listing genomes to submit as single-contig chromosomes. Columns: genome_name "
+    "(must match a genome_name in --genome_info), chromosome_name, chromosome_type, and "
+    "chromosome_location (optional). Genomes not listed here are submitted normally.",
+)
 @click.option("-m", "--mags", is_flag=True, help="Select for MAG upload")
 @click.option("-b", "--bins", is_flag=True, help="Select for bin upload")
 @click.option("--out", type=click.Path(), default=Path.cwd(), help="Output folder. Default: working directory")
@@ -1069,7 +1156,7 @@ __version__ = importlib.metadata.version("genome_uploader")
     help="If data is private",
 )
 @click.option("--verbose", is_flag=True, help="Enable debug logging")
-def main(upload_study, genome_info, mags, bins, out, force, live, test_suffix, tpa, centre_name, private, verbose):
+def main(upload_study, genome_info, single_contig_info, mags, bins, out, force, live, test_suffix, tpa, centre_name, private, verbose):
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
@@ -1082,6 +1169,7 @@ def main(upload_study, genome_info, mags, bins, out, force, live, test_suffix, t
     args = {
         "upload_study": upload_study,
         "genome_info": genome_info,
+        "single_contig_info": single_contig_info,
         "mags": mags,
         "bins": bins,
         "out": out,
