@@ -573,12 +573,10 @@ class GenomeUpload:
         """
         Extracts and processes genome information from validated metadata.
 
-        A genome is treated as single-contig when its genome_name appears in the
-        optional --single-contig-info TSV (see single_contig.load_single_contig_metadata()).
-        Single-contig genomes whose chromosome metadata (SINGLE_CONTIG_CHROMOSOME_NAME/TYPE/
-        TOPOLOGY/LOCATION) does not match the accepted values are excluded from the returned
-        dictionary; the reasons are written to self.single_contig_log, as are genome_name
-        values from --single-contig-info that don't match any genome in --genome_info.
+        A genome is treated as chromosome level assembly when its genome_name appears in the
+        optional --chromosomes-info TSV (see chromosome_assembly.load_chromosome_metadata()).
+        Single-contig genomes whose chromosome metadata (CHROMOSOME_NAME/TYPE/
+        TOPOLOGY/LOCATION) does not match the accepted values cause the genome_uploader to fail.
         Returns:
             dict: Dictionary of processed genome information.
         Raises:
