@@ -632,11 +632,11 @@ GEOGRAPHIC_LOCATIONS = [
     "Zimbabwe",
 ]
 
-SINGLE_CONTIG_GENOME_NAME_FIELD = "genome_name"
-SINGLE_CONTIG_CHROMOSOME_NAME = "single_contig_name"
-SINGLE_CONTIG_CHROMOSOME_TYPE = "single_contig_type"
-SINGLE_CONTIG_CHROMOSOME_TOPOLOGY = "single_contig_topology"
-SINGLE_CONTIG_CHROMOSOME_LOCATION = "single_contig_chromosome_location"
+GENOME_NAME_FIELD = "genome_name"
+CHROMOSOME_NAME_FIELD = "chromosome_name"
+CHROMOSOME_TYPE_FIELD = "chromosome_type"
+CHROMOSOME_TOPOLOGY_FIELD = "chromosome_topology"
+CHROMOSOME_LOCATION_FIELD = "chromosome_location"
 
 # single_contig_name (CHROMOSOME_NAME in the chromosome list file) has no fixed vocabulary
 # anymore: it must be a digit string (chromosome/plasmid number) or the literal "MIT" for
