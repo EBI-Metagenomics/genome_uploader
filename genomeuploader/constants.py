@@ -633,6 +633,7 @@ GEOGRAPHIC_LOCATIONS = [
 ]
 
 GENOME_NAME_FIELD = "genome_name"
+GENOME_CONTIG_FIELD = "contig_name"
 CHROMOSOME_NAME_FIELD = "chromosome_name"
 CHROMOSOME_TYPE_FIELD = "chromosome_type"
 CHROMOSOME_TOPOLOGY_FIELD = "chromosome_topology"
