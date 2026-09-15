@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from genomeuploader.genome_upload import *  # noqa: F401,F403 - GenomeUpload, compute_manifests, SINGLE_CONTIG_* constants
+from genomeuploader.genome_upload import *  # noqa: F401,F403 - GenomeUpload, compute_manifests, CHROMOSOME_*_FIELD constants
 
 # All input files (genome metadata tsv, single-contig-info tsv, fasta.gz) used by these
 # tests are built on the fly under `tmp_path` - nothing here is read from tests/fixtures.
@@ -35,9 +35,9 @@ NCBI_LINEAGE = (
 
 SINGLE_CONTIG_INFO_HEADER = [
     "genome_name",
-    "single_contig_name",
-    "single_contig_type",
-    "single_contig_topology",
+    "chromosome_name",
+    "chromosome_type",
+    "chromosome_topology",
 ]
 
 
@@ -118,10 +118,10 @@ class Tests:
         assert genome_info[alias]["single_contig"] is True
         assert genome_info[alias]["contig_id"] == "contig1"
         # the chromosome columns are normalised in place and kept on the genome dict
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_NAME] == "1"
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_TYPE] == "Chromosome"
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_TOPOLOGY] == "Circular"
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_LOCATION] == ""
+        assert genome_info[alias][CHROMOSOME_NAME_FIELD] == "1"
+        assert genome_info[alias][CHROMOSOME_TYPE_FIELD] == "Chromosome"
+        assert genome_info[alias][CHROMOSOME_TOPOLOGY_FIELD] == "Circular"
+        assert genome_info[alias][CHROMOSOME_LOCATION_FIELD] == ""
         # no chromosome metadata problems -> dedicated log is not created
         assert not gu.single_contig_log.exists()
 
@@ -168,10 +168,10 @@ class Tests:
         # the chromosome columns are always present on the genome dict, even when
         # --single-contig-info wasn't given, so compute_manifests / generate_genome_manifest
         # don't KeyError later on
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_NAME] is None
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_TYPE] is None
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_TOPOLOGY] is None
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_LOCATION] is None
+        assert genome_info[alias][CHROMOSOME_NAME_FIELD] is None
+        assert genome_info[alias][CHROMOSOME_TYPE_FIELD] is None
+        assert genome_info[alias][CHROMOSOME_TOPOLOGY_FIELD] is None
+        assert genome_info[alias][CHROMOSOME_LOCATION_FIELD] is None
         assert not gu.single_contig_log.exists()
 
     def test_genome_not_listed_in_single_contig_info_defaults_to_false(self, tmp_path):
@@ -215,15 +215,15 @@ class Tests:
         args = _base_args(tmp_path, genome_info_path, single_contig_info_path, test_suffix="single-contig-wrong-type-unittest")
         gu = GenomeUpload(args)
 
-        # both genomes carry a single_contig_type that is not a SINGLE_CONTIG_CHROMOSOME_TYPES
+        # both genomes carry a chromosome_type that is not a CHROMOSOME_TYPES
         # key, so both are skipped and nothing is left to submit
         with pytest.raises(ValueError, match="No genomes left"):
             gu.extract_genomes_info()
 
         assert gu.single_contig_log.exists()
         log_text = gu.single_contig_log.read_text()
-        assert "single_contig_type 'not_a_real_type' is not one of" in log_text
-        assert "single_contig_type 'Segment' is not one of" in log_text
+        assert "chromosome_type 'not_a_real_type' is not one of" in log_text
+        assert "chromosome_type 'Segment' is not one of" in log_text
         assert "ERR6769700_bin.1" in log_text
         assert "ERR6769700_bin.2" in log_text
         assert "2 genome(s) excluded from single-contig submission" in log_text
@@ -238,14 +238,14 @@ class Tests:
         args = _base_args(tmp_path, genome_info_path, single_contig_info_path, test_suffix="single-contig-wrong-name-unittest")
         gu = GenomeUpload(args)
 
-        # single_contig_name "chr1" is neither a digit string nor "MIT", so the only
+        # chromosome_name "chr1" is neither a digit string nor "MIT", so the only
         # genome is skipped and nothing is left to submit
         with pytest.raises(ValueError, match="No genomes left"):
             gu.extract_genomes_info()
 
         assert gu.single_contig_log.exists()
         log_text = gu.single_contig_log.read_text()
-        assert "single_contig_name 'chr1' must be a digit string" in log_text
+        assert "chromosome_name 'chr1' must be a digit string" in log_text
 
     def test_single_contig_mitochondrion_name_writes_chromosome_list(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "single_contig_bin.fa.gz", ["contig1"])
@@ -260,9 +260,9 @@ class Tests:
         alias = next(iter(genome_info))
 
         assert genome_info[alias]["single_contig"] is True
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_NAME] == "MIT"
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_TYPE] == "Chromosome"
-        assert genome_info[alias][SINGLE_CONTIG_CHROMOSOME_TOPOLOGY] == "Linear"
+        assert genome_info[alias][CHROMOSOME_NAME_FIELD] == "MIT"
+        assert genome_info[alias][CHROMOSOME_TYPE_FIELD] == "Chromosome"
+        assert genome_info[alias][CHROMOSOME_TOPOLOGY_FIELD] == "Linear"
 
         genome_info[alias]["run_ref"] = "ERR6769700"
         genome_info[alias]["study"] = "ERP000000"
@@ -278,12 +278,12 @@ class Tests:
     def test_single_contig_info_missing_mandatory_column_raises(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
         genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("MAG1", genome_path)])
-        # single_contig_topology is missing, even though name and type are present
+        # chromosome_topology is missing, even though name and type are present
         single_contig_info_path = tmp_path / "single_contig_info.tsv"
-        single_contig_info_path.write_text("genome_name\tsingle_contig_name\tsingle_contig_type\nMAG1\t1\tChromosome\n")
+        single_contig_info_path.write_text("genome_name\tchromosome_name\tchromosome_type\nMAG1\t1\tChromosome\n")
 
         args = _base_args(tmp_path, genome_info_path, single_contig_info_path, test_suffix="single-contig-missing-column-unittest")
         gu = GenomeUpload(args)
 
-        with pytest.raises(ValueError, match="single_contig_topology"):
+        with pytest.raises(ValueError, match="chromosome_topology"):
             gu.extract_genomes_info()

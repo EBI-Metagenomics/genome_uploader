@@ -638,16 +638,16 @@ CHROMOSOME_TYPE_FIELD = "chromosome_type"
 CHROMOSOME_TOPOLOGY_FIELD = "chromosome_topology"
 CHROMOSOME_LOCATION_FIELD = "chromosome_location"
 
-# single_contig_name (CHROMOSOME_NAME in the chromosome list file) has no fixed vocabulary
+# chromosome_name (CHROMOSOME_NAME in the chromosome list file) has no fixed vocabulary
 # anymore: it must be a digit string (chromosome/plasmid number) or the literal "MIT" for
 # the mitochondrial chromosome
-SINGLE_CONTIG_CHROMOSOME_NAME_REGEX = re.compile(r"^(?:[0-9]+|MIT)$")
+CHROMOSOME_NAME_REGEX = re.compile(r"^(?:[0-9]+|MIT)$")
 
-SINGLE_CONTIG_CHROMOSOME_TOPOLOGIES = [
+CHROMOSOME_TOPOLOGIES = [
     "Circular",
     "Linear"
 ]
-SINGLE_CONTIG_CHROMOSOME_TYPES = {
+CHROMOSOME_TYPES = {
     "Chromosome",
     "Plasmid",
     "Linkage_group",
@@ -655,7 +655,7 @@ SINGLE_CONTIG_CHROMOSOME_TYPES = {
     "Segmented",
     "Multipartite"
 }
-SINGLE_CONTIG_CHROMOSOME_LOCATIONS_LIST = [
+CHROMOSOME_LOCATIONS_LIST = [
     "Macronuclear",
     "Nucleomorph",
     "Mitochondrion",

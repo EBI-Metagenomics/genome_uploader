@@ -64,22 +64,22 @@ Genomes to submit this way are listed in a **separate, optional TSV** passed wit
 | Column | Required | Accepted values |
 | --- | --- | --- |
 | `genome_name` | Yes | must match a `genome_name` from the main `--genome_info` table |
-| `single_contig_name` | Yes | a digit string (chromosome/plasmid number, e.g. `1`, `2`) or `MIT` for the mitochondrial chromosome - there's no fixed list |
-| `single_contig_type` | Yes | `Chromosome`, `Plasmid`, `Linkage_group`, `Monopartite`, `Segmented`, `Multipartite` |
-| `single_contig_topology` | Yes | `Circular`, `Linear` |
-| `single_contig_chromosome_location` | No (leave the cell empty to omit it) | `Macronuclear`, `Nucleomorph`, `Mitochondrion`, `Kinetoplast`, `Chloroplast`, `Chromoplast`, `Plastid`, `Virion`, `Phage`, `Proviral`, `Prophage`, `Viroid`, `Cyanelle`, `Apicoplast`, `Leucoplast`, `Proplastid`, `Hydrogenosome`, `Chromatophore` |
+| `chromosome_name` | Yes | a digit string (chromosome/plasmid number, e.g. `1`, `2`) or `MIT` for the mitochondrial chromosome - there's no fixed list |
+| `chromosome_type` | Yes | `Chromosome`, `Plasmid`, `Linkage_group`, `Monopartite`, `Segmented`, `Multipartite` |
+| `chromosome_topology` | Yes | `Circular`, `Linear` |
+| `chromosome_location` | No (leave the cell empty to omit it) | `Macronuclear`, `Nucleomorph`, `Mitochondrion`, `Kinetoplast`, `Chloroplast`, `Chromoplast`, `Plastid`, `Virion`, `Phage`, `Proviral`, `Prophage`, `Viroid`, `Cyanelle`, `Apicoplast`, `Leucoplast`, `Proplastid`, `Hydrogenosome`, `Chromatophore` |
 
 Example:
 
-| genome_name | single_contig_name | single_contig_type | single_contig_topology | single_contig_chromosome_location |
+| genome_name | chromosome_name | chromosome_type | chromosome_topology | chromosome_location |
 | --- | --- | --- | --- | --- |
 | ERR4647712_crispatus | 1 | Chromosome | Circular | |
 
-For every genome matched this way, the script checks that its fasta file contains exactly one contig, and fails with an error if it doesn't. A chromosome list file is generated alongside the manifest and referenced from it via `CHROMOSOME_LIST`. Each entry is written as `<contig_id>\t<single_contig_name>\t<single_contig_topology>-<single_contig_type>[\t<single_contig_chromosome_location>]` - so the row above produces `..._crispatus_contig\t1\tCircular-Chromosome`. Only list a genome as single-contig if you are confident it is highly complete.
+For every genome matched this way, the script checks that its fasta file contains exactly one contig, and fails with an error if it doesn't. A chromosome list file is generated alongside the manifest and referenced from it via `CHROMOSOME_LIST`. Each entry is written as `<contig_id>\t<chromosome_name>\t<chromosome_topology>-<chromosome_type>[\t<chromosome_location>]` - so the row above produces `..._crispatus_contig\t1\tCircular-Chromosome`. Only list a genome as single-contig if you are confident it is highly complete.
 
-If `--single-contig-info` is missing the `genome_name`, `single_contig_name`, `single_contig_type` or `single_contig_topology` column, or contains duplicate `genome_name` values, the script stops with an error before processing any genome.
+If `--single-contig-info` is missing the `genome_name`, `chromosome_name`, `chromosome_type` or `chromosome_topology` column, or contains duplicate `genome_name` values, the script stops with an error before processing any genome.
 
-Each listed genome whose `single_contig_name`, `single_contig_type`, `single_contig_topology` or (when provided) `single_contig_chromosome_location` value is not accepted per the table above is **skipped** rather than submitted: the run continues with the remaining genomes, and the reasons are written to `single_contig_submission.log` in the output folder. A `genome_name` in `--single-contig-info` that doesn't match any genome in `--genome_info` is also reported there as a warning, but isn't fatal. If every genome ends up excluded, the script stops with an error.
+Each listed genome whose `chromosome_name`, `chromosome_type`, `chromosome_topology` or (when provided) `chromosome_location` value is not accepted per the table above is **skipped** rather than submitted: the run continues with the remaining genomes, and the reasons are written to `single_contig_submission.log` in the output folder. A `genome_name` in `--single-contig-info` that doesn't match any genome in `--genome_info` is also reported there as a warning, but isn't fatal. If every genome ends up excluded, the script stops with an error.
 
 ### TPA generation and upload
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.

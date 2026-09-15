@@ -28,15 +28,15 @@ from typing import Optional
 import pandas as pd
 
 from genomeuploader.constants import (
-    SINGLE_CONTIG_GENOME_NAME_FIELD,
-    SINGLE_CONTIG_CHROMOSOME_NAME,
-    SINGLE_CONTIG_CHROMOSOME_NAME_REGEX,
-    SINGLE_CONTIG_CHROMOSOME_TYPE,
-    SINGLE_CONTIG_CHROMOSOME_TYPES,
-    SINGLE_CONTIG_CHROMOSOME_TOPOLOGY,
-    SINGLE_CONTIG_CHROMOSOME_TOPOLOGIES,
-    SINGLE_CONTIG_CHROMOSOME_LOCATION,
-    SINGLE_CONTIG_CHROMOSOME_LOCATIONS_LIST,
+    GENOME_NAME_FIELD,
+    CHROMOSOME_NAME_FIELD,
+    CHROMOSOME_NAME_REGEX,
+    CHROMOSOME_TYPE_FIELD,
+    CHROMOSOME_TYPES,
+    CHROMOSOME_TOPOLOGY_FIELD,
+    CHROMOSOME_TOPOLOGIES,
+    CHROMOSOME_LOCATION_FIELD,
+    CHROMOSOME_LOCATIONS_LIST,
 )
 
 
@@ -62,16 +62,16 @@ def load_single_contig_metadata(single_contig_info: Optional[Path]) -> dict:
 
     Every genome_name listed in this file is submitted as a single-contig chromosome;
     genomes from the main --genome_info file that are absent from it are submitted
-    normally. The file needs columns genome_name, single_contig_name, single_contig_type
-    and single_contig_topology; single_contig_chromosome_location is optional. Values are
+    normally. The file needs columns genome_name, chromosome_name, chromosome_type
+    and chromosome_topology; chromosome_location is optional. Values are
     not validated against the controlled vocabularies here - that happens per genome via
     validate_single_contig_fields().
     Args:
         single_contig_info (Path, optional): Path to the --single-contig-info TSV, or
             None/empty when the flag wasn't given.
     Returns:
-        dict: genome_name -> {SINGLE_CONTIG_CHROMOSOME_NAME: str, SINGLE_CONTIG_CHROMOSOME_TYPE: str,
-            SINGLE_CONTIG_CHROMOSOME_TOPOLOGY: str, SINGLE_CONTIG_CHROMOSOME_LOCATION: str}.
+        dict: genome_name -> {CHROMOSOME_NAME_FIELD: str, CHROMOSOME_TYPE_FIELD: str,
+            CHROMOSOME_TOPOLOGY_FIELD: str, CHROMOSOME_LOCATION_FIELD: str}.
             Empty when single_contig_info was not given.
     Raises:
         ValueError: If a mandatory column is missing, or genome_name values are duplicated.
@@ -81,10 +81,10 @@ def load_single_contig_metadata(single_contig_info: Optional[Path]) -> dict:
 
     header_columns = pd.read_csv(single_contig_info, sep="\t", nrows=0).columns
     mandatory_columns = [
-        SINGLE_CONTIG_GENOME_NAME_FIELD,
-        SINGLE_CONTIG_CHROMOSOME_NAME,
-        SINGLE_CONTIG_CHROMOSOME_TYPE,
-        SINGLE_CONTIG_CHROMOSOME_TOPOLOGY,
+        GENOME_NAME_FIELD,
+        CHROMOSOME_NAME_FIELD,
+        CHROMOSOME_TYPE_FIELD,
+        CHROMOSOME_TOPOLOGY_FIELD,
     ]
     missing_columns = [c for c in mandatory_columns if c not in header_columns]
     if missing_columns:
@@ -94,27 +94,27 @@ def load_single_contig_metadata(single_contig_info: Optional[Path]) -> dict:
         )
 
     columns_to_read = list(mandatory_columns)
-    if SINGLE_CONTIG_CHROMOSOME_LOCATION in header_columns:
-        columns_to_read.append(SINGLE_CONTIG_CHROMOSOME_LOCATION)
+    if CHROMOSOME_LOCATION_FIELD in header_columns:
+        columns_to_read.append(CHROMOSOME_LOCATION_FIELD)
 
     metadata = pd.read_csv(single_contig_info, sep="\t", usecols=columns_to_read)
-    if SINGLE_CONTIG_CHROMOSOME_LOCATION not in metadata.columns:
-        metadata[SINGLE_CONTIG_CHROMOSOME_LOCATION] = None
+    if CHROMOSOME_LOCATION_FIELD not in metadata.columns:
+        metadata[CHROMOSOME_LOCATION_FIELD] = None
 
-    if metadata[SINGLE_CONTIG_GENOME_NAME_FIELD].nunique() != metadata[SINGLE_CONTIG_GENOME_NAME_FIELD].size:
+    if metadata[GENOME_NAME_FIELD].nunique() != metadata[GENOME_NAME_FIELD].size:
         raise ValueError("Duplicate genome_name values found in the single-contig metadata file (--single-contig-info)")
 
-    return metadata.set_index(SINGLE_CONTIG_GENOME_NAME_FIELD).to_dict(orient="index")
+    return metadata.set_index(GENOME_NAME_FIELD).to_dict(orient="index")
 
 
 def validate_single_contig_fields(genome_name: str, genome: dict) -> list:
     """
     Validates a single-contig genome's chromosome metadata.
 
-    single_contig_name has no fixed vocabulary: it must be a digit string
+    chromosome_name has no fixed vocabulary: it must be a digit string
     (chromosome/plasmid number) or "MIT" for the mitochondrial chromosome
-    (SINGLE_CONTIG_CHROMOSOME_NAME_REGEX). single_contig_type and single_contig_topology
-    must each be one of the corresponding constants vocabulary. single_contig_chromosome_location
+    (CHROMOSOME_NAME_REGEX). chromosome_type and chromosome_topology
+    must each be one of the corresponding constants vocabulary. chromosome_location
     is optional and only checked against its vocabulary when a value is present.
 
     The values are normalised in place (NaN/None -> "") so downstream writers
@@ -125,36 +125,36 @@ def validate_single_contig_fields(genome_name: str, genome: dict) -> list:
     Returns:
         list: Human-readable error messages, empty when every field is valid.
     """
-    name = normalise_na(genome.get(SINGLE_CONTIG_CHROMOSOME_NAME))
-    chromosome_type = normalise_na(genome.get(SINGLE_CONTIG_CHROMOSOME_TYPE))
-    topology = normalise_na(genome.get(SINGLE_CONTIG_CHROMOSOME_TOPOLOGY))
-    location = normalise_na(genome.get(SINGLE_CONTIG_CHROMOSOME_LOCATION))
+    name = normalise_na(genome.get(CHROMOSOME_NAME_FIELD))
+    chromosome_type = normalise_na(genome.get(CHROMOSOME_TYPE_FIELD))
+    topology = normalise_na(genome.get(CHROMOSOME_TOPOLOGY_FIELD))
+    location = normalise_na(genome.get(CHROMOSOME_LOCATION_FIELD))
 
-    genome[SINGLE_CONTIG_CHROMOSOME_NAME] = name
-    genome[SINGLE_CONTIG_CHROMOSOME_TYPE] = chromosome_type
-    genome[SINGLE_CONTIG_CHROMOSOME_TOPOLOGY] = topology
-    genome[SINGLE_CONTIG_CHROMOSOME_LOCATION] = location
+    genome[CHROMOSOME_NAME_FIELD] = name
+    genome[CHROMOSOME_TYPE_FIELD] = chromosome_type
+    genome[CHROMOSOME_TOPOLOGY_FIELD] = topology
+    genome[CHROMOSOME_LOCATION_FIELD] = location
 
     errors = []
-    if not SINGLE_CONTIG_CHROMOSOME_NAME_REGEX.match(name):
+    if not CHROMOSOME_NAME_REGEX.match(name):
         errors.append(
-            f"Genome '{genome_name}': {SINGLE_CONTIG_CHROMOSOME_NAME} '{name}' must be a digit "
+            f"Genome '{genome_name}': {CHROMOSOME_NAME_FIELD} '{name}' must be a digit "
             "string (e.g. '1', '2', ...) or 'MIT' for the mitochondrial chromosome."
         )
-    if chromosome_type not in SINGLE_CONTIG_CHROMOSOME_TYPES:
+    if chromosome_type not in CHROMOSOME_TYPES:
         errors.append(
-            f"Genome '{genome_name}': {SINGLE_CONTIG_CHROMOSOME_TYPE} '{chromosome_type}' is not one of "
-            f"{sorted(SINGLE_CONTIG_CHROMOSOME_TYPES)}."
+            f"Genome '{genome_name}': {CHROMOSOME_TYPE_FIELD} '{chromosome_type}' is not one of "
+            f"{sorted(CHROMOSOME_TYPES)}."
         )
-    if topology not in SINGLE_CONTIG_CHROMOSOME_TOPOLOGIES:
+    if topology not in CHROMOSOME_TOPOLOGIES:
         errors.append(
-            f"Genome '{genome_name}': {SINGLE_CONTIG_CHROMOSOME_TOPOLOGY} '{topology}' is not one of "
-            f"{SINGLE_CONTIG_CHROMOSOME_TOPOLOGIES}."
+            f"Genome '{genome_name}': {CHROMOSOME_TOPOLOGY_FIELD} '{topology}' is not one of "
+            f"{CHROMOSOME_TOPOLOGIES}."
         )
-    if location and location not in SINGLE_CONTIG_CHROMOSOME_LOCATIONS_LIST:
+    if location and location not in CHROMOSOME_LOCATIONS_LIST:
         errors.append(
-            f"Genome '{genome_name}': {SINGLE_CONTIG_CHROMOSOME_LOCATION} '{location}' is not one of "
-            f"{SINGLE_CONTIG_CHROMOSOME_LOCATIONS_LIST}."
+            f"Genome '{genome_name}': {CHROMOSOME_LOCATION_FIELD} '{location}' is not one of "
+            f"{CHROMOSOME_LOCATIONS_LIST}."
         )
     return errors
 
@@ -182,9 +182,9 @@ def write_chromosome_list(
         contig_id (str): Identifier of the genome's single contig (OBJECT_NAME,
             must match the FASTA header).
         chromosome_name (str): CHROMOSOME_NAME value: a digit string or "MIT".
-        chromosome_type (str): chromosome type, one of constants.SINGLE_CONTIG_CHROMOSOME_TYPES.
+        chromosome_type (str): chromosome type, one of constants.CHROMOSOME_TYPES.
         chromosome_topology (str): chromosome topology, one of
-            constants.SINGLE_CONTIG_CHROMOSOME_TOPOLOGIES. Combined with chromosome_type
+            constants.CHROMOSOME_TOPOLOGIES. Combined with chromosome_type
             (as "<topology>-<type>") to form the third column.
         chromosome_location (str): CHROMOSOME_LOCATION value; appended as a fourth
             column only when a non-empty value is given.

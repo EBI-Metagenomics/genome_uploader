@@ -46,11 +46,11 @@ from genomeuploader.constants import (
     MQ,
     MISSING_LOCATION_DATA,
     MISSING_COLLECTION_DATE,
-    SINGLE_CONTIG_GENOME_NAME_FIELD,
-    SINGLE_CONTIG_CHROMOSOME_NAME,
-    SINGLE_CONTIG_CHROMOSOME_TYPE,
-    SINGLE_CONTIG_CHROMOSOME_TOPOLOGY,
-    SINGLE_CONTIG_CHROMOSOME_LOCATION,
+    GENOME_NAME_FIELD,
+    CHROMOSOME_NAME_FIELD,
+    CHROMOSOME_TYPE_FIELD,
+    CHROMOSOME_TOPOLOGY_FIELD,
+    CHROMOSOME_LOCATION_FIELD,
     ASSEMBLY_ACCESSION_RE,
     RUN_ACCESSION_RE,
 )
@@ -260,10 +260,10 @@ def create_manifest_dictionary(
     is_coassembly: bool,
     is_single_contig: bool,
     contig_id: Optional[str],
-    single_contig_chromosome_name: Optional[str],
-    single_contig_chromosome_type: Optional[str],
-    single_contig_chromosome_topology: Optional[str],
-    single_contig_chromosome_location: Optional[str],
+    chromosome_name: Optional[str],
+    chromosome_type: Optional[str],
+    chromosome_topology: Optional[str],
+    chromosome_location: Optional[str],
 ) -> dict:
     """
     Creates a manifest dictionary for a genome.
@@ -280,13 +280,13 @@ def create_manifest_dictionary(
         is_coassembly (bool): Whether the genome comes from a co-assembly.
         is_single_contig (bool): Whether the genome is a single-contig assembly.
         contig_id (str): Identifier of the genome's single contig, if applicable.
-        single_contig_chromosome_name (str, optional): CHROMOSOME_NAME value for the
+        chromosome_name (str, optional): CHROMOSOME_NAME value for the
             single contig's entry in the ENA chromosome list file - a digit string or "MIT".
-        single_contig_chromosome_type (str, optional): chromosome type (one of
-            constants.SINGLE_CONTIG_CHROMOSOME_TYPES) for the single contig.
-        single_contig_chromosome_topology (str, optional): chromosome topology (one of
-            constants.SINGLE_CONTIG_CHROMOSOME_TOPOLOGIES) for the single contig.
-        single_contig_chromosome_location (str, optional): CHROMOSOME_LOCATION value for
+        chromosome_type (str, optional): chromosome type (one of
+            constants.CHROMOSOME_TYPES) for the single contig.
+        chromosome_topology (str, optional): chromosome topology (one of
+            constants.CHROMOSOME_TOPOLOGIES) for the single contig.
+        chromosome_location (str, optional): CHROMOSOME_LOCATION value for
             the single contig (organelle/location); empty when not provided.
     Returns:
         dict: Manifest dictionary for the genome.
@@ -304,10 +304,10 @@ def create_manifest_dictionary(
         "co-assembly": is_coassembly,
         "single_contig": is_single_contig,
         "contig_id": contig_id,
-        SINGLE_CONTIG_CHROMOSOME_NAME: single_contig_chromosome_name,
-        SINGLE_CONTIG_CHROMOSOME_TYPE: single_contig_chromosome_type,
-        SINGLE_CONTIG_CHROMOSOME_TOPOLOGY: single_contig_chromosome_topology,
-        SINGLE_CONTIG_CHROMOSOME_LOCATION: single_contig_chromosome_location,
+        CHROMOSOME_NAME_FIELD: chromosome_name,
+        CHROMOSOME_TYPE_FIELD: chromosome_type,
+        CHROMOSOME_TOPOLOGY_FIELD: chromosome_topology,
+        CHROMOSOME_LOCATION_FIELD: chromosome_location,
     }
 
     return manifest_dict
@@ -336,10 +336,10 @@ def compute_manifests(genomes: dict) -> dict:
             genomes[g]["co-assembly"],
             genomes[g]["single_contig"],
             genomes[g]["contig_id"],
-            genomes[g][SINGLE_CONTIG_CHROMOSOME_NAME],
-            genomes[g][SINGLE_CONTIG_CHROMOSOME_TYPE],
-            genomes[g][SINGLE_CONTIG_CHROMOSOME_TOPOLOGY],
-            genomes[g][SINGLE_CONTIG_CHROMOSOME_LOCATION],
+            genomes[g][CHROMOSOME_NAME_FIELD],
+            genomes[g][CHROMOSOME_TYPE_FIELD],
+            genomes[g][CHROMOSOME_TOPOLOGY_FIELD],
+            genomes[g][CHROMOSOME_LOCATION_FIELD],
         )
         manifest_info[g]["accessionType"] = genomes[g]["accessionType"]
 
@@ -618,18 +618,18 @@ class GenomeUpload:
 
             genome_info[gen]["single_contig"] = False
             genome_info[gen]["contig_id"] = None
-            genome_info[gen][SINGLE_CONTIG_CHROMOSOME_NAME] = None
-            genome_info[gen][SINGLE_CONTIG_CHROMOSOME_TYPE] = None
-            genome_info[gen][SINGLE_CONTIG_CHROMOSOME_TOPOLOGY] = None
-            genome_info[gen][SINGLE_CONTIG_CHROMOSOME_LOCATION] = None
+            genome_info[gen][CHROMOSOME_NAME_FIELD] = None
+            genome_info[gen][CHROMOSOME_TYPE_FIELD] = None
+            genome_info[gen][CHROMOSOME_TOPOLOGY_FIELD] = None
+            genome_info[gen][CHROMOSOME_LOCATION_FIELD] = None
 
-            single_contig_entry = single_contig_metadata.get(genome_info[gen][SINGLE_CONTIG_GENOME_NAME_FIELD])
+            single_contig_entry = single_contig_metadata.get(genome_info[gen][GENOME_NAME_FIELD])
             if single_contig_entry is not None:
-                matched_single_contig_genomes.add(genome_info[gen][SINGLE_CONTIG_GENOME_NAME_FIELD])
-                genome_info[gen][SINGLE_CONTIG_CHROMOSOME_NAME] = single_contig_entry[SINGLE_CONTIG_CHROMOSOME_NAME]
-                genome_info[gen][SINGLE_CONTIG_CHROMOSOME_TYPE] = single_contig_entry[SINGLE_CONTIG_CHROMOSOME_TYPE]
-                genome_info[gen][SINGLE_CONTIG_CHROMOSOME_TOPOLOGY] = single_contig_entry[SINGLE_CONTIG_CHROMOSOME_TOPOLOGY]
-                genome_info[gen][SINGLE_CONTIG_CHROMOSOME_LOCATION] = single_contig_entry[SINGLE_CONTIG_CHROMOSOME_LOCATION]
+                matched_single_contig_genomes.add(genome_info[gen][GENOME_NAME_FIELD])
+                genome_info[gen][CHROMOSOME_NAME_FIELD] = single_contig_entry[CHROMOSOME_NAME_FIELD]
+                genome_info[gen][CHROMOSOME_TYPE_FIELD] = single_contig_entry[CHROMOSOME_TYPE_FIELD]
+                genome_info[gen][CHROMOSOME_TOPOLOGY_FIELD] = single_contig_entry[CHROMOSOME_TOPOLOGY_FIELD]
+                genome_info[gen][CHROMOSOME_LOCATION_FIELD] = single_contig_entry[CHROMOSOME_LOCATION_FIELD]
 
                 chromosome_errors = single_contig.validate_single_contig_fields(gen, genome_info[gen])
                 if chromosome_errors:
@@ -1072,10 +1072,10 @@ class GenomeUpload:
                 self.manifest_dir,
                 genome_info["alias"],
                 genome_info["contig_id"],
-                genome_info[SINGLE_CONTIG_CHROMOSOME_NAME],
-                genome_info[SINGLE_CONTIG_CHROMOSOME_TYPE],
-                genome_info[SINGLE_CONTIG_CHROMOSOME_TOPOLOGY],
-                genome_info[SINGLE_CONTIG_CHROMOSOME_LOCATION],
+                genome_info[CHROMOSOME_NAME_FIELD],
+                genome_info[CHROMOSOME_TYPE_FIELD],
+                genome_info[CHROMOSOME_TOPOLOGY_FIELD],
+                genome_info[CHROMOSOME_LOCATION_FIELD],
             )
             values.append(("CHROMOSOME_LIST", str(chromosome_list_path.resolve())))
         logger.info(f"Writing manifest file (.manifest) for {genome_info['alias']}.")
@@ -1128,8 +1128,8 @@ __version__ = importlib.metadata.version("genome_uploader")
     type=click.Path(exists=True),
     required=False,
     help="Optional TSV listing genomes to submit as single-contig chromosomes. Columns: genome_name "
-    "(must match a genome_name in --genome_info), single_contig_name, single_contig_type, and "
-    "single_contig_chromosome_location (optional). Genomes not listed here are submitted normally.",
+    "(must match a genome_name in --genome_info), chromosome_name, chromosome_type, and "
+    "chromosome_location (optional). Genomes not listed here are submitted normally.",
 )
 @click.option("-m", "--mags", is_flag=True, help="Select for MAG upload")
 @click.option("-b", "--bins", is_flag=True, help="Select for bin upload")
