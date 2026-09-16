@@ -20,7 +20,6 @@ import logging
 import re
 import xml.dom.minidom as minidom
 import xml.etree.ElementTree as et
-from datetime import date
 from datetime import datetime as dt
 from pathlib import Path
 from typing import Optional
@@ -45,9 +44,12 @@ from genomeuploader.constants import (
     MQ,
     MISSING_LOCATION_DATA,
     MISSING_COLLECTION_DATE,
+    GENOME_NAME_FIELD,
+    GENOME_CONTIG_FIELD,
     ASSEMBLY_ACCESSION_RE,
     RUN_ACCESSION_RE,
 )
+from genomeuploader import chromosome_file
 from genomeuploader.ena import EnaQuery
 from genomeuploader.ena_submit import EnaSubmit
 from genomeuploader.taxon_finder import TaxonFinder
@@ -239,6 +241,8 @@ def create_manifest_dictionary(
     study: str,
     coverage: float,
     is_coassembly: bool,
+    has_chromosome: bool,
+    chromosome_records: list,
 ) -> dict:
     """
     Creates a manifest dictionary for a genome.
@@ -253,6 +257,10 @@ def create_manifest_dictionary(
         study (str): Study accession.
         coverage (float): Genome coverage depth.
         is_coassembly (bool): Whether the genome comes from a co-assembly.
+        has_chromosome (bool): Whether the genome has one or more chromosome records.
+        chromosome_records (list): The genome's chromosome records (one dict per contig
+            submitted as a chromosome; see chromosome_file.load_chromosome_metadata()),
+            empty when has_chromosome is False.
     Returns:
         dict: Manifest dictionary for the genome.
     """
@@ -267,6 +275,8 @@ def create_manifest_dictionary(
         "study": study,
         "coverageDepth": coverage,
         "co-assembly": is_coassembly,
+        "has_chromosome": has_chromosome,
+        "chromosome_records": chromosome_records,
     }
 
     return manifest_dict
@@ -293,6 +303,8 @@ def compute_manifests(genomes: dict) -> dict:
             genomes[g]["study"],
             genomes[g]["genome_coverage"],
             genomes[g]["co-assembly"],
+            genomes[g]["has_chromosome"],
+            genomes[g]["chromosome_records"],
         )
         manifest_info[g]["accessionType"] = genomes[g]["accessionType"]
 
@@ -331,6 +343,9 @@ class GenomeUpload:
         Initialises the GenomeUpload class with user arguments.
         Args:
             args (dict): Dictionary of user arguments and options.
+        Raises:
+            ValueError: If args["chromosome_info"] is given but the file is invalid
+                (see chromosome_file.load_chromosome_metadata()).
         """
         self.genome_type = "bins" if args["bins"] else "MAGs"
         self.live = args["live"]
@@ -352,6 +367,14 @@ class GenomeUpload:
         self.upload_study = args["upload_study"]
         self.genome_metadata = Path(args["genome_info"])
         self.test_suffix = args["test_suffix"]
+
+        # optional TSV listing genomes to submit as chromosomes; loaded and fully
+        # validated up front so a broken --chromosome-info file fails immediately,
+        # before any other processing (see chromosome_file.load_chromosome_metadata())
+        chromosome_info = args.get("chromosome_info")
+        self.chromosome_metadata = chromosome_file.load_chromosome_metadata(
+            Path(chromosome_info) if chromosome_info else None
+        )
 
     def generate_files_and_folders(self):
         """
@@ -404,6 +427,9 @@ class GenomeUpload:
             co-assembly: True/False, whether the genome was generated from a co-assembly
             genome_coverage : genome coverage
             genome_path: path to genome to upload
+        Genomes to submit as chromosomes are not marked in this file; they are listed by
+        genome_name in the separate, optional --chromosome-info TSV instead (see
+        load_chromosome_metadata()).
         Returns:
             dict: Dictionary of validated genome metadata.
         Raises:
@@ -412,6 +438,7 @@ class GenomeUpload:
         logger.info("Retrieving info for genomes to submit...")
 
         all_fields = MAG_MANDATORY_FIELDS + BIN_MANDATORY_FIELDS
+
         metadata = pd.read_csv(self.genome_metadata, sep="\t", usecols=all_fields)
 
         # make sure there are no empty cells
@@ -513,11 +540,29 @@ class GenomeUpload:
     def extract_genomes_info(self) -> dict:
         """
         Extracts and processes genome information from validated metadata.
+
+        A genome has one or more chromosome records when its genome_name appears in
+        self.chromosome_metadata (loaded and validated up front from --chromosome-info
+        in __init__); each record's contig_name identifies one of that genome's fasta
+        sequences. Every contig_name is checked against the genome's actual fasta
+        headers before any genome is otherwise processed - a reference to a contig that
+        doesn't exist fails the whole run. Genomes not listed in --chromosome-info are
+        submitted normally. Every genome_name in --chromosome-info must match a genome
+        in --genome_info, or the whole run fails.
         Returns:
             dict: Dictionary of processed genome information.
+        Raises:
+            ValueError: If any contig_name in --chromosome-info doesn't exist in its
+                genome's fasta file, or if any genome_name in --chromosome-info doesn't
+                match a genome in --genome_info.
         """
         genome_info = self.validate_metadata_tsv()
-        for gen in genome_info:
+
+        genome_paths = {genome_info[gen][GENOME_NAME_FIELD]: Path(genome_info[gen]["genome_path"]) for gen in genome_info}
+        chromosome_file.validate_contig_names(self.chromosome_metadata, genome_paths)
+
+        matched_chromosome_genomes = set()
+        for gen in list(genome_info):
             genome_info[gen]["accessions"] = genome_info[gen]["accessions"].split(",")
             accession_type = "run"
             assembly_reg_exp = re.compile(r"([E|S|D]RZ\d{6,})")
@@ -547,9 +592,28 @@ class GenomeUpload:
 
             genome_info[gen]["alias"] = gen
 
+            chromosome_records = self.chromosome_metadata.get(genome_info[gen][GENOME_NAME_FIELD], [])
+            genome_info[gen]["has_chromosome"] = bool(chromosome_records)
+            genome_info[gen]["chromosome_records"] = chromosome_records
+            if chromosome_records:
+                matched_chromosome_genomes.add(genome_info[gen][GENOME_NAME_FIELD])
+                contig_names = ", ".join(record[GENOME_CONTIG_FIELD] for record in chromosome_records)
+                logger.warning(
+                    f"Genome '{gen}' will be submitted with {len(chromosome_records)} chromosome record(s) "
+                    f"({contig_names}). Make sure it is highly complete before submission."
+                )
+
             submittable_taxonomy = TaxonFinder(genome_info[gen]["NCBI_lineage"])
             genome_info[gen]["taxID"] = submittable_taxonomy.taxid
             genome_info[gen]["scientific_name"] = submittable_taxonomy.scientific_name
+
+        unmatched_chromosome_genomes = sorted(set(self.chromosome_metadata) - matched_chromosome_genomes)
+        if unmatched_chromosome_genomes:
+            raise ValueError(
+                f"{len(unmatched_chromosome_genomes)} genome_name value(s) in --chromosome-info "
+                "do not match any genome in --genome_info: "
+                f"{', '.join(unmatched_chromosome_genomes)}."
+            )
 
         return genome_info
 
@@ -928,6 +992,13 @@ class GenomeUpload:
         ]
         if genome_info["run_ref"]:
             values.insert(-1, ("RUN_REF", genome_info["run_ref"]))
+        if genome_info.get("has_chromosome"):
+            chromosome_list_path = chromosome_file.write_chromosome_list(
+                self.manifest_dir,
+                genome_info["alias"],
+                genome_info["chromosome_records"],
+            )
+            values.append(("CHROMOSOME_LIST", str(chromosome_list_path.resolve())))
         logger.info(f"Writing manifest file (.manifest) for {genome_info['alias']}.")
         with manifest_path.open("w") as outfile:
             for k, v in values:
@@ -973,6 +1044,16 @@ __version__ = importlib.metadata.version("genome_uploader")
 @click.version_option(__version__, message="genome_uploader %(version)s")
 @click.option("-u", "--upload_study", required=True, help="Study accession for genomes upload")
 @click.option("--genome_info", type=click.Path(exists=True), required=True, help="Genomes metadata file")
+@click.option(
+    "--chromosome-info",
+    type=click.Path(exists=True),
+    required=False,
+    help="Optional TSV listing contigs to submit as chromosomes, one row per contig. Columns: "
+    "genome_name (must match a genome_name in --genome_info; a genome can have several rows, "
+    "one per contig), contig_name (must match a sequence header in that genome's fasta; unique "
+    "per genome_name), chromosome_name, chromosome_type, chromosome_topology, and "
+    "chromosome_location (optional). Genomes not listed here are submitted normally.",
+)
 @click.option("-m", "--mags", is_flag=True, help="Select for MAG upload")
 @click.option("-b", "--bins", is_flag=True, help="Select for bin upload")
 @click.option("--out", type=click.Path(), default=Path.cwd(), help="Output folder. Default: working directory")
@@ -995,7 +1076,7 @@ __version__ = importlib.metadata.version("genome_uploader")
     help="If data is private",
 )
 @click.option("--verbose", is_flag=True, help="Enable debug logging")
-def main(upload_study, genome_info, mags, bins, out, force, live, test_suffix, tpa, centre_name, private, verbose):
+def main(upload_study, genome_info, chromosome_info, mags, bins, out, force, live, test_suffix, tpa, centre_name, private, verbose):
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
@@ -1008,6 +1089,7 @@ def main(upload_study, genome_info, mags, bins, out, force, live, test_suffix, t
     args = {
         "upload_study": upload_study,
         "genome_info": genome_info,
+        "chromosome_info": chromosome_info,
         "mags": mags,
         "bins": bins,
         "out": out,
