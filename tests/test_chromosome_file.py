@@ -144,12 +144,11 @@ class Tests:
         gu.generate_genome_manifest(manifest_info, {alias: "ERS0000001"})
 
         manifest_text = (gu.manifest_dir / f"{alias}.manifest").read_text()
-        chromosome_list_path = gu.manifest_dir / f"{alias}_chromosome_list.txt.gz"
+        chromosome_list_path = gu.manifest_dir / f"{alias}_chromosome_list.txt"
 
         assert chromosome_list_path.exists()
         assert f"CHROMOSOME_LIST\t{chromosome_list_path.resolve()}" in manifest_text
-        with gzip.open(chromosome_list_path, "rt") as f:
-            assert f.read() == "contig1\t1\tCircular-Chromosome\n"
+        assert chromosome_list_path.read_text() == "contig1\t1\tCircular-Chromosome\n"
 
     def test_genome_with_multiple_chromosome_records_writes_all_lines(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "chromosome_bin.fa.gz", ["chr1", "chr2"])
@@ -178,9 +177,8 @@ class Tests:
         manifest_info = compute_manifests(genome_info)[alias]
         gu.generate_genome_manifest(manifest_info, {alias: "ERS0000001"})
 
-        chromosome_list_path = gu.manifest_dir / f"{alias}_chromosome_list.txt.gz"
-        with gzip.open(chromosome_list_path, "rt") as f:
-            assert f.read() == "chr1\t1\tCircular-Chromosome\nchr2\t2\tLinear-Plasmid\n"
+        chromosome_list_path = gu.manifest_dir / f"{alias}_chromosome_list.txt"
+        assert chromosome_list_path.read_text() == "chr1\t1\tCircular-Chromosome\nchr2\t2\tLinear-Plasmid\n"
 
     def test_no_chromosome_info_provided_defaults_to_false(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
@@ -194,7 +192,26 @@ class Tests:
         assert genome_info[alias]["has_chromosome"] is False
         assert genome_info[alias]["chromosome_records"] == []
 
-    def test_genome_not_listed_in_chromosome_info_defaults_to_false(self, tmp_path, caplog):
+    def test_genome_not_listed_in_chromosome_info_defaults_to_false(self, tmp_path):
+        genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
+        genome_info_path = _write_genome_tsv(
+            tmp_path / "genome_info.tsv",
+            [_genome_row("MAG1", genome_path), _genome_row("MAG2", genome_path)],
+        )
+        chromosome_info_path = _write_chromosome_info_tsv(
+            tmp_path / "chromosome_info.tsv",
+            [["MAG1", "contig1", "1", "Chromosome", "Circular"]],
+        )
+        args = _base_args(tmp_path, genome_info_path, chromosome_info_path, test_suffix="chromosome-unmatched-unittest")
+        gu = GenomeUpload(args)
+        genome_info = gu.extract_genomes_info()
+
+        # MAG2 isn't listed in the chromosome info file, so it's submitted normally
+        mag2_alias = next(alias for alias in genome_info if genome_info[alias]["genome_name"] == "MAG2")
+        assert genome_info[mag2_alias]["has_chromosome"] is False
+        assert genome_info[mag2_alias]["chromosome_records"] == []
+
+    def test_chromosome_info_genome_name_not_in_genome_info_raises(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
         genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("MAG1", genome_path)])
         chromosome_info_path = _write_chromosome_info_tsv(
@@ -204,16 +221,11 @@ class Tests:
         args = _base_args(tmp_path, genome_info_path, chromosome_info_path, test_suffix="chromosome-unmatched-unittest")
         gu = GenomeUpload(args)
 
-        with caplog.at_level("WARNING", logger="genomeuploader.genome_upload"):
-            genome_info = gu.extract_genomes_info()
-        alias = next(iter(genome_info))
-
-        # the only genome isn't listed in the chromosome info file, so it's submitted normally,
-        # and the unmatched genome_name's contig_name is never checked against any fasta
-        assert genome_info[alias]["has_chromosome"] is False
-
-        assert "genome_that_does_not_exist" in caplog.text
-        assert "do not match any genome" in caplog.text
+        # a chromosome-info genome_name that doesn't match any --genome_info genome now
+        # fails the whole run, rather than being silently ignored
+        with pytest.raises(ValueError, match="do not match any genome") as exc_info:
+            gu.extract_genomes_info()
+        assert "genome_that_does_not_exist" in str(exc_info.value)
 
     def test_chromosome_info_contig_name_not_in_fasta_raises(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "chromosome_bin.fa.gz", ["contig1"])
@@ -309,9 +321,8 @@ class Tests:
         manifest_info = compute_manifests(genome_info)[alias]
         gu.generate_genome_manifest(manifest_info, {alias: "ERS0000001"})
 
-        chromosome_list_path = gu.manifest_dir / f"{alias}_chromosome_list.txt.gz"
-        with gzip.open(chromosome_list_path, "rt") as f:
-            assert f.read() == "contig1\tMIT\tLinear-Chromosome\n"
+        chromosome_list_path = gu.manifest_dir / f"{alias}_chromosome_list.txt"
+        assert chromosome_list_path.read_text() == "contig1\tMIT\tLinear-Chromosome\n"
 
     def test_chromosome_info_missing_mandatory_column_raises(self, tmp_path):
         # chromosome_topology is missing, even though the others are present

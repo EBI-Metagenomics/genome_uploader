@@ -255,7 +255,7 @@ def validate_chromosome_fields(genome_name: str, genome: dict) -> list:
 
 def write_chromosome_list(manifest_dir: Path, alias: str, chromosome_records: list) -> Path:
     """
-    Writes a gzip-compressed chromosome list file for a genome, one line per chromosome record.
+    Writes a chromosome list file for a genome, one line per chromosome record.
 
     Each line is tab-separated:
     ``<contig_name>\t<chromosome_name>\t<topology>-<type>[\t<chromosome_location>]``
@@ -275,7 +275,7 @@ def write_chromosome_list(manifest_dir: Path, alias: str, chromosome_records: li
     """
     # the chromosome values are validated and normalised upstream via
     # load_chromosome_metadata(); genomes with invalid values never reach this point
-    chromosome_list_path = manifest_dir / f"{alias}_chromosome_list.txt.gz"
+    chromosome_list_path = manifest_dir / f"{alias}_chromosome_list.txt"
     lines = []
     for record in chromosome_records:
         line = (
@@ -285,6 +285,6 @@ def write_chromosome_list(manifest_dir: Path, alias: str, chromosome_records: li
         if record[CHROMOSOME_LOCATION_FIELD]:
             line += f"\t{record[CHROMOSOME_LOCATION_FIELD]}"
         lines.append(line)
-    with gzip.open(chromosome_list_path, "wt") as f:
+    with open(chromosome_list_path, "w") as f:
         f.write("\n".join(lines) + "\n")
     return chromosome_list_path

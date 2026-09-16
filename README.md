@@ -79,7 +79,7 @@ Example - a genome with a main chromosome and a plasmid:
 
 For every genome matched this way, the script checks that each listed `contig_name` actually exists among that genome's fasta sequence headers, and fails with an error if it doesn't. A chromosome list file is generated alongside the manifest and referenced from it via `CHROMOSOME_LIST`, with one line per row: `<contig_name>\t<chromosome_name>\t<chromosome_topology>-<chromosome_type>[\t<chromosome_location>]` - so the example above produces `contig_1\t1\tCircular-Chromosome` and `contig_7\t2\tCircular-Plasmid`. Only list a contig this way if you are confident the genome is highly complete.
 
-`--chromosome-info` is read and fully validated **before anything else runs**: if it is missing the `genome_name`, `contig_name`, `chromosome_name`, `chromosome_type` or `chromosome_topology` column, lists the same `genome_name`/`contig_name` pair more than once, or any row's `chromosome_name`, `chromosome_type`, `chromosome_topology` or (when provided) `chromosome_location` value is not accepted per the table above, the script stops immediately with an error listing every problem found. The `contig_name` -> fasta cross-check runs as soon as genome paths are known (before any genome is otherwise processed) and also stops the whole run on the first mismatch - no genome is skipped or partially processed. A `genome_name` in `--chromosome-info` that doesn't match any genome in `--genome_info` is reported as a warning once genomes are processed, but isn't fatal.
+`--chromosome-info` is read and fully validated **before anything else runs**: if it is missing the `genome_name`, `contig_name`, `chromosome_name`, `chromosome_type` or `chromosome_topology` column, lists the same `genome_name`/`contig_name` pair more than once, or any row's `chromosome_name`, `chromosome_type`, `chromosome_topology` or (when provided) `chromosome_location` value is not accepted per the table above, the script stops immediately with an error listing every problem found. The `contig_name` -> fasta cross-check runs as soon as genome paths are known (before any genome is otherwise processed) and also stops the whole run if any contig is missing. Every `genome_name` in `--chromosome-info` must match a `genome_name` in `--genome_info`; if any don't, the script stops with an error listing them - no genome is skipped or partially processed.
 
 ### TPA generation and upload
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.
@@ -173,7 +173,7 @@ Sample xmls won't be regenerated automatically if a previous xml already exists.
 The script produces the following files and folders:
 ```bash
 bin_upload/MAG_upload
-├── manifests                       # also contains a *_chromosome_list.txt.gz per genome submitted as a chromosome
+├── manifests                       # also contains a *_chromosome_list.txt per genome submitted as a chromosome
 │    └── ...
 ├── manifests_test                  # folder generated for validation in test mode
 │    └── ...

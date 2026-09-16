@@ -547,13 +547,14 @@ class GenomeUpload:
         sequences. Every contig_name is checked against the genome's actual fasta
         headers before any genome is otherwise processed - a reference to a contig that
         doesn't exist fails the whole run. Genomes not listed in --chromosome-info are
-        submitted normally. A genome_name in --chromosome-info that doesn't match any
-        genome in --genome_info is reported as a warning but is not fatal.
+        submitted normally. Every genome_name in --chromosome-info must match a genome
+        in --genome_info, or the whole run fails.
         Returns:
             dict: Dictionary of processed genome information.
         Raises:
             ValueError: If any contig_name in --chromosome-info doesn't exist in its
-                genome's fasta file.
+                genome's fasta file, or if any genome_name in --chromosome-info doesn't
+                match a genome in --genome_info.
         """
         genome_info = self.validate_metadata_tsv()
 
@@ -608,9 +609,9 @@ class GenomeUpload:
 
         unmatched_chromosome_genomes = sorted(set(self.chromosome_metadata) - matched_chromosome_genomes)
         if unmatched_chromosome_genomes:
-            logger.warning(
+            raise ValueError(
                 f"{len(unmatched_chromosome_genomes)} genome_name value(s) in --chromosome-info "
-                f"do not match any genome in --genome_info and were ignored: "
+                "do not match any genome in --genome_info: "
                 f"{', '.join(unmatched_chromosome_genomes)}."
             )
 
