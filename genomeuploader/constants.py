@@ -639,22 +639,37 @@ CHROMOSOME_TYPE_FIELD = "chromosome_type"
 CHROMOSOME_TOPOLOGY_FIELD = "chromosome_topology"
 CHROMOSOME_LOCATION_FIELD = "chromosome_location"
 
-# chromosome_name (CHROMOSOME_NAME in the chromosome list file) has no fixed vocabulary
-# anymore: it must be a digit string (chromosome/plasmid number) or the literal "MIT" for
-# the mitochondrial chromosome
-CHROMOSOME_NAME_REGEX = re.compile(r"^(?:[0-9]+|MIT)$")
+# chromosome_name (CHROMOSOME_NAME in the chromosome list file) has no fixed vocabulary; it
+# appears as the /chromosome, /plasmid or /segment qualifier in the EMBL-Bank flat files.
+# ENA rules (https://ena-docs.readthedocs.io/en/latest/submit/fileprep/assembly.html#chromosome-list-file):
+# match the pattern below, be shorter than 33 characters, be unique within an assembly and
+# not contain any of CHROMOSOME_NAME_FORBIDDEN_SUBSTRINGS (case insensitive).
+# The hyphen is escaped so the class means the literal characters _ # - . (ENA's
+# "_#-." would otherwise be read as the range '#' to '.').
+CHROMOSOME_NAME_REGEX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_#\-.]*$")
+CHROMOSOME_NAME_MAX_LENGTH = 32
+CHROMOSOME_NAME_FORBIDDEN_SUBSTRINGS = [
+    "chr",
+    "chrm",
+    "chrom",
+    "chromosome",
+    "linkage group",
+    "linkage-group",
+    "linkage_group",
+    "plasmid",
+]
 
 CHROMOSOME_TOPOLOGIES = [
-    "Circular",
-    "Linear"
+    "circular",
+    "linear"
 ]
 CHROMOSOME_TYPES = {
-    "Chromosome",
-    "Plasmid",
-    "Linkage_group",
-    "Monopartite",
-    "Segmented",
-    "Multipartite"
+    "chromosome",
+    "plasmid",
+    "linkage_group",
+    "monopartite",
+    "segmented",
+    "multipartite"
 }
 CHROMOSOME_LOCATIONS_LIST = [
     "Macronuclear",

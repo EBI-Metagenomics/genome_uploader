@@ -116,7 +116,7 @@ class Tests:
         genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path)])
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
-            [["ERR6769700_bin.1", "contig1", "1", "Chromosome", "Circular"]],
+            [["ERR6769700_bin.1", "contig1", "1", "chromosome", "circular"]],
         )
         args = _base_args(tmp_path, genome_info_path, chromosome_info_path)
         gu = GenomeUpload(args)
@@ -131,8 +131,8 @@ class Tests:
         assert len(records) == 1
         assert records[0][GENOME_CONTIG_FIELD] == "contig1"
         assert records[0][CHROMOSOME_NAME_FIELD] == "1"
-        assert records[0][CHROMOSOME_TYPE_FIELD] == "Chromosome"
-        assert records[0][CHROMOSOME_TOPOLOGY_FIELD] == "Circular"
+        assert records[0][CHROMOSOME_TYPE_FIELD] == "chromosome"
+        assert records[0][CHROMOSOME_TOPOLOGY_FIELD] == "circular"
         assert records[0][CHROMOSOME_LOCATION_FIELD] == ""
 
         # don't call API again, force assign info for the next step
@@ -148,7 +148,7 @@ class Tests:
 
         assert chromosome_list_path.exists()
         assert f"CHROMOSOME_LIST\t{chromosome_list_path.resolve()}" in manifest_text
-        assert chromosome_list_path.read_text() == "contig1\t1\tCircular-Chromosome\n"
+        assert chromosome_list_path.read_text() == "contig1\t1\tcircular-chromosome\n"
 
     def test_genome_with_multiple_chromosome_records_writes_all_lines(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "chromosome_bin.fa.gz", ["chr1", "chr2"])
@@ -156,8 +156,8 @@ class Tests:
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
             [
-                ["ERR6769700_bin.1", "chr1", "1", "Chromosome", "Circular"],
-                ["ERR6769700_bin.1", "chr2", "2", "Plasmid", "Linear"],
+                ["ERR6769700_bin.1", "chr1", "1", "chromosome", "circular"],
+                ["ERR6769700_bin.1", "chr2", "2", "plasmid", "linear"],
             ],
         )
         args = _base_args(tmp_path, genome_info_path, chromosome_info_path, test_suffix="chromosome-multi-unittest")
@@ -178,7 +178,7 @@ class Tests:
         gu.generate_genome_manifest(manifest_info, {alias: "ERS0000001"})
 
         chromosome_list_path = gu.manifest_dir / f"{alias}_chromosome_list.txt"
-        assert chromosome_list_path.read_text() == "chr1\t1\tCircular-Chromosome\nchr2\t2\tLinear-Plasmid\n"
+        assert chromosome_list_path.read_text() == "chr1\t1\tcircular-chromosome\nchr2\t2\tlinear-plasmid\n"
 
     def test_no_chromosome_info_provided_defaults_to_false(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
@@ -200,7 +200,7 @@ class Tests:
         )
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
-            [["MAG1", "contig1", "1", "Chromosome", "Circular"]],
+            [["MAG1", "contig1", "1", "chromosome", "circular"]],
         )
         args = _base_args(tmp_path, genome_info_path, chromosome_info_path, test_suffix="chromosome-unmatched-unittest")
         gu = GenomeUpload(args)
@@ -216,7 +216,7 @@ class Tests:
         genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("MAG1", genome_path)])
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
-            [["genome_that_does_not_exist", "contig1", "1", "Chromosome", "Circular"]],
+            [["genome_that_does_not_exist", "contig1", "1", "chromosome", "circular"]],
         )
         args = _base_args(tmp_path, genome_info_path, chromosome_info_path, test_suffix="chromosome-unmatched-unittest")
         gu = GenomeUpload(args)
@@ -232,7 +232,7 @@ class Tests:
         genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path)])
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
-            [["ERR6769700_bin.1", "contig_that_does_not_exist", "1", "Chromosome", "Circular"]],
+            [["ERR6769700_bin.1", "contig_that_does_not_exist", "1", "chromosome", "circular"]],
         )
         args = _base_args(tmp_path, genome_info_path, chromosome_info_path, test_suffix="chromosome-missing-contig-unittest")
         gu = GenomeUpload(args)
@@ -246,8 +246,8 @@ class Tests:
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
             [
-                ["ERR6769700_bin.1", "contig1", "1", "Chromosome", "Circular"],
-                ["ERR6769700_bin.1", "contig1", "2", "Plasmid", "Linear"],
+                ["ERR6769700_bin.1", "contig1", "1", "chromosome", "circular"],
+                ["ERR6769700_bin.1", "contig1", "2", "plasmid", "linear"],
             ],
         )
         args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-duplicate-contig-unittest")
@@ -259,8 +259,8 @@ class Tests:
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
             [
-                ["ERR6769700_bin.1", "contig1", "1", "not_a_real_type", "Circular"],
-                ["ERR6769700_bin.2", "contig1", "2", "Segment", "Circular"],
+                ["ERR6769700_bin.1", "contig1", "1", "not_a_real_type", "circular"],
+                ["ERR6769700_bin.2", "contig1", "2", "Segment", "circular"],
             ],
         )
         args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-wrong-type-unittest")
@@ -271,37 +271,131 @@ class Tests:
             GenomeUpload(args)
 
         assert "chromosome_type 'not_a_real_type' is not one of" in str(exc_info.value)
-        assert "chromosome_type 'Segment' is not one of" in str(exc_info.value)
+        assert "chromosome_type 'segment' is not one of" in str(exc_info.value)
         assert "ERR6769700_bin.1" in str(exc_info.value)
         assert "ERR6769700_bin.2" in str(exc_info.value)
 
     def test_chromosome_info_with_wrong_name_format_raises(self, tmp_path):
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
-            [["ERR6769700_bin.1", "contig1", "chr1", "Chromosome", "Circular"]],
+            [["ERR6769700_bin.1", "contig1", "chr1", "chromosome", "circular"]],
         )
         args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-wrong-name-unittest")
 
-        # chromosome_name "chr1" is neither a digit string nor "MIT"
-        with pytest.raises(ValueError, match="must be a digit string"):
+        # chromosome_name "chr1" contains the forbidden substring "chr"
+        with pytest.raises(ValueError, match="must not contain 'chr'"):
             GenomeUpload(args)
+
+    def test_chromosome_info_chromosome_name_rules_raise(self, tmp_path):
+        long_name = "a" * 33
+        chromosome_info_path = _write_chromosome_info_tsv(
+            tmp_path / "chromosome_info.tsv",
+            [
+                ["ERR6769700_bin.1", "contig1", "_1", "chromosome", "circular"],
+                ["ERR6769700_bin.1", "contig2", "1$", "chromosome", "circular"],
+                ["ERR6769700_bin.1", "contig3", long_name, "chromosome", "circular"],
+                ["ERR6769700_bin.1", "contig4", "pPLASMID1", "plasmid", "circular"],
+                ["ERR6769700_bin.1", "contig5", "Linkage-Group2", "linkage_group", "linear"],
+            ],
+        )
+        args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-name-rules-unittest")
+
+        with pytest.raises(ValueError, match="failed validation") as exc_info:
+            GenomeUpload(args)
+
+        message = str(exc_info.value)
+        assert "chromosome_name '_1' must match the pattern" in message
+        assert "chromosome_name '1$' must match the pattern" in message
+        assert f"chromosome_name '{long_name}' must be shorter than 33 characters" in message
+        assert "chromosome_name 'pPLASMID1' must not contain 'plasmid'" in message
+        assert "chromosome_name 'Linkage-Group2' must not contain 'linkage-group'" in message
+
+    def test_chromosome_info_valid_chromosome_names_load(self, tmp_path):
+        chromosome_info_path = _write_chromosome_info_tsv(
+            tmp_path / "chromosome_info.tsv",
+            [
+                ["ERR6769700_bin.1", "contig1", "1", "chromosome", "circular"],
+                ["ERR6769700_bin.1", "contig2", "MIT", "chromosome", "linear"],
+                ["ERR6769700_bin.1", "contig3", "pA_2#b-c.d", "plasmid", "circular"],
+                ["ERR6769700_bin.1", "contig4", "a" * 32, "plasmid", "circular"],
+            ],
+        )
+        args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-valid-names-unittest")
+
+        gu = GenomeUpload(args)
+        names = [r[CHROMOSOME_NAME_FIELD] for r in gu.chromosome_metadata["ERR6769700_bin.1"]]
+        assert names == ["1", "MIT", "pA_2#b-c.d", "a" * 32]
+
+    def test_chromosome_info_duplicate_chromosome_name_for_genome_raises(self, tmp_path):
+        chromosome_info_path = _write_chromosome_info_tsv(
+            tmp_path / "chromosome_info.tsv",
+            [
+                ["ERR6769700_bin.1", "contig1", "1", "chromosome", "circular"],
+                ["ERR6769700_bin.1", "contig2", "1", "plasmid", "circular"],
+                # the same name in a different genome (assembly) is fine
+                ["ERR6769700_bin.2", "contig1", "1", "chromosome", "circular"],
+            ],
+        )
+        args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-duplicate-name-unittest")
+
+        with pytest.raises(ValueError, match="failed validation") as exc_info:
+            GenomeUpload(args)
+
+        message = str(exc_info.value)
+        assert "Genome 'ERR6769700_bin.1': chromosome_name '1' is listed in more than one chromosome record" in message
+        assert "ERR6769700_bin.2" not in message
+
+    def test_chromosome_type_and_topology_are_case_insensitive(self, tmp_path):
+        chromosome_info_path = _write_chromosome_info_tsv(
+            tmp_path / "chromosome_info.tsv",
+            [
+                ["ERR6769700_bin.1", "contig1", "1", "CHROMOSOME", "Circular"],
+                ["ERR6769700_bin.1", "contig2", "2", "Linkage_Group", "LINEAR"],
+            ],
+        )
+        args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-case-insensitive-unittest")
+
+        gu = GenomeUpload(args)
+        records = gu.chromosome_metadata["ERR6769700_bin.1"]
+        assert [r[CHROMOSOME_TYPE_FIELD] for r in records] == ["chromosome", "linkage_group"]
+        assert [r[CHROMOSOME_TOPOLOGY_FIELD] for r in records] == ["circular", "linear"]
 
     def test_chromosome_info_empty_contig_name_raises(self, tmp_path):
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
-            [["ERR6769700_bin.1", "", "1", "Chromosome", "Circular"]],
+            [["ERR6769700_bin.1", "", "1", "chromosome", "circular"]],
         )
         args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-empty-contig-unittest")
 
         with pytest.raises(ValueError, match="contig_name must not be empty"):
             GenomeUpload(args)
 
+    def test_chromosome_info_empty_mandatory_fields_raises(self, tmp_path):
+        chromosome_info_path = _write_chromosome_info_tsv(
+            tmp_path / "chromosome_info.tsv",
+            [
+                ["", "contig1", "1", "chromosome", "circular"],
+                ["ERR6769700_bin.1", "contig2", "", "", "linear"],
+            ],
+        )
+        args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-empty-fields-unittest")
+
+        with pytest.raises(ValueError, match="failed validation") as exc_info:
+            GenomeUpload(args)
+
+        message = str(exc_info.value)
+        assert "Row 2 (genome ''): mandatory field(s) genome_name must not be empty" in message
+        assert "Row 3 (genome 'ERR6769700_bin.1'): mandatory field(s) chromosome_name, chromosome_type must not be empty" in message
+        # empty values are reported once, not again as vocabulary mismatches
+        assert "is not one of" not in message
+        assert "must match the pattern" not in message
+
     def test_mitochondrion_name_writes_chromosome_list(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "chromosome_bin.fa.gz", ["contig1"])
         genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path)])
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
-            [["ERR6769700_bin.1", "contig1", "MIT", "Chromosome", "Linear"]],
+            [["ERR6769700_bin.1", "contig1", "MIT", "chromosome", "linear"]],
         )
         args = _base_args(tmp_path, genome_info_path, chromosome_info_path, test_suffix="chromosome-mitochondrion-unittest")
         gu = GenomeUpload(args)
@@ -311,8 +405,8 @@ class Tests:
         records = genome_info[alias]["chromosome_records"]
         assert genome_info[alias]["has_chromosome"] is True
         assert records[0][CHROMOSOME_NAME_FIELD] == "MIT"
-        assert records[0][CHROMOSOME_TYPE_FIELD] == "Chromosome"
-        assert records[0][CHROMOSOME_TOPOLOGY_FIELD] == "Linear"
+        assert records[0][CHROMOSOME_TYPE_FIELD] == "chromosome"
+        assert records[0][CHROMOSOME_TOPOLOGY_FIELD] == "linear"
 
         genome_info[alias]["run_ref"] = "ERR6769700"
         genome_info[alias]["study"] = "ERP000000"
@@ -322,13 +416,13 @@ class Tests:
         gu.generate_genome_manifest(manifest_info, {alias: "ERS0000001"})
 
         chromosome_list_path = gu.manifest_dir / f"{alias}_chromosome_list.txt"
-        assert chromosome_list_path.read_text() == "contig1\tMIT\tLinear-Chromosome\n"
+        assert chromosome_list_path.read_text() == "contig1\tMIT\tlinear-chromosome\n"
 
     def test_chromosome_info_missing_mandatory_column_raises(self, tmp_path):
         # chromosome_topology is missing, even though the others are present
         chromosome_info_path = tmp_path / "chromosome_info.tsv"
         chromosome_info_path.write_text(
-            "genome_name\tcontig_name\tchromosome_name\tchromosome_type\nMAG1\tcontig1\t1\tChromosome\n"
+            "genome_name\tcontig_name\tchromosome_name\tchromosome_type\nMAG1\tcontig1\t1\tchromosome\n"
         )
 
         args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-missing-column-unittest")
@@ -339,7 +433,7 @@ class Tests:
     def test_chromosome_info_missing_contig_name_column_raises(self, tmp_path):
         chromosome_info_path = tmp_path / "chromosome_info.tsv"
         chromosome_info_path.write_text(
-            "genome_name\tchromosome_name\tchromosome_type\tchromosome_topology\nMAG1\t1\tChromosome\tCircular\n"
+            "genome_name\tchromosome_name\tchromosome_type\tchromosome_topology\nMAG1\t1\tchromosome\tcircular\n"
         )
 
         args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-missing-contig-column-unittest")

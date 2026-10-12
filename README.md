@@ -65,21 +65,21 @@ Contigs to submit this way are listed in a **separate, optional TSV** passed wit
 | --- | --- | --- |
 | `genome_name` | Yes | must match a `genome_name` from the main `--genome_info` table; repeat it for each additional contig of the same genome |
 | `contig_name` | Yes | must match a sequence header in that genome's fasta file; unique within each `genome_name` - two rows for the same genome can't point at the same contig |
-| `chromosome_name` | Yes | a digit string (chromosome/plasmid number, e.g. `1`, `2`) or `MIT` for the mitochondrial chromosome - there's no fixed list |
-| `chromosome_type` | Yes | `Chromosome`, `Plasmid`, `Linkage_group`, `Monopartite`, `Segmented`, `Multipartite` |
-| `chromosome_topology` | Yes | `Circular`, `Linear` |
+| `chromosome_name` | Yes | no fixed list (e.g. `1`, `2`, `MIT`); appears as the `/chromosome`, `/plasmid` or `/segment` qualifier in the EMBL-Bank flat files. Names must: match the pattern `^[A-Za-z0-9][A-Za-z0-9_#\-.]*$` (start with a letter or digit, then only letters, digits, `_`, `#`, `-` or `.`); be shorter than 33 characters; be unique within an assembly (i.e. within each `genome_name`); not contain any of the following as part of the name (case insensitive): `chr`, `chrm`, `chrom`, `chromosome`, `linkage group`, `linkage-group`, `linkage_group`, `plasmid` |
+| `chromosome_type` | Yes | case insensitive, written lowercase: `chromosome`, `plasmid`, `linkage_group`, `monopartite`, `segmented`, `multipartite` |
+| `chromosome_topology` | Yes | case insensitive, written lowercase: `circular`, `linear` |
 | `chromosome_location` | No (leave the cell empty to omit it) | `Macronuclear`, `Nucleomorph`, `Mitochondrion`, `Kinetoplast`, `Chloroplast`, `Chromoplast`, `Plastid`, `Virion`, `Phage`, `Proviral`, `Prophage`, `Viroid`, `Cyanelle`, `Apicoplast`, `Leucoplast`, `Proplastid`, `Hydrogenosome`, `Chromatophore` |
 
 Example - a genome with a main chromosome and a plasmid:
 
 | genome_name | contig_name | chromosome_name | chromosome_type | chromosome_topology | chromosome_location |
 | --- | --- | --- | --- | --- | --- |
-| ERR4647712_crispatus | contig_1 | 1 | Chromosome | Circular | |
-| ERR4647712_crispatus | contig_7 | 2 | Plasmid | Circular | |
+| ERR4647712_crispatus | contig_1 | 1 | chromosome | circular | |
+| ERR4647712_crispatus | contig_7 | 2 | plasmid | circular | |
 
-For every genome matched this way, the script checks that each listed `contig_name` actually exists among that genome's fasta sequence headers, and fails with an error if it doesn't. A chromosome list file is generated alongside the manifest and referenced from it via `CHROMOSOME_LIST`, with one line per row: `<contig_name>\t<chromosome_name>\t<chromosome_topology>-<chromosome_type>[\t<chromosome_location>]` - so the example above produces `contig_1\t1\tCircular-Chromosome` and `contig_7\t2\tCircular-Plasmid`. Only list a contig this way if you are confident the genome is highly complete.
+For every genome matched this way, the script checks that each listed `contig_name` actually exists among that genome's fasta sequence headers, and fails with an error if it doesn't. A chromosome list file is generated alongside the manifest and referenced from it via `CHROMOSOME_LIST`, with one line per row: `<contig_name>\t<chromosome_name>\t<chromosome_topology>-<chromosome_type>[\t<chromosome_location>]` - so the example above produces `contig_1\t1\tcircular-chromosome` and `contig_7\t2\tcircular-plasmid`. Only list a contig this way if you are confident the genome is highly complete.
 
-`--chromosome-info` is read and fully validated **before anything else runs**: if it is missing the `genome_name`, `contig_name`, `chromosome_name`, `chromosome_type` or `chromosome_topology` column, lists the same `genome_name`/`contig_name` pair more than once, or any row's `chromosome_name`, `chromosome_type`, `chromosome_topology` or (when provided) `chromosome_location` value is not accepted per the table above, the script stops immediately with an error listing every problem found. The `contig_name` -> fasta cross-check runs as soon as genome paths are known (before any genome is otherwise processed) and also stops the whole run if any contig is missing. Every `genome_name` in `--chromosome-info` must match a `genome_name` in `--genome_info`; if any don't, the script stops with an error listing them - no genome is skipped or partially processed.
+`--chromosome-info` is read and fully validated **before anything else runs**: if it is missing the `genome_name`, `contig_name`, `chromosome_name`, `chromosome_type` or `chromosome_topology` column, lists the same `genome_name`/`contig_name` or `genome_name`/`chromosome_name` pair more than once, or any row's `chromosome_name`, `chromosome_type`, `chromosome_topology` or (when provided) `chromosome_location` value is not accepted per the table above, the script stops immediately with an error listing every problem found. The `contig_name` -> fasta cross-check runs as soon as genome paths are known (before any genome is otherwise processed) and also stops the whole run if any contig is missing. Every `genome_name` in `--chromosome-info` must match a `genome_name` in `--genome_info`; if any don't, the script stops with an error listing them - no genome is skipped or partially processed.
 
 ### TPA generation and upload
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.
