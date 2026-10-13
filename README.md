@@ -56,10 +56,10 @@ Raw-read runs or assemblies from which genomes were generated should already be 
 
 If you are working with your own, private data on ENA, you will need to add the `--private` flag to access private metadata through ENA API. This implies that if you are working on public data, you can omit the flag. However, you will need to submit two different batches of data if you are handling both private and public data.
 
-### Chromosome submission
-High-quality genome contigs (a whole single-contig genome, or individual chromosomes/plasmids/the mitochondrion within a multi-contig genome) can be submitted as chromosomes. Refer to the [ENA documentation](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome/mag.html#contig-assembly>) if you are unsure.
+### Submission of chromosome-level genome assembly
+By default `genome_uploader` submits input MAGs and bins as contig-level assemblies. High-quality genome MAG/bin assemblies, e.g. a complete genome assembled to one or more chromosomes, or individual chromosomes/plasmids/mitochondrion, or a combination of them, can be submitted as chromosome-level assembly. Refer to the [official ENA documentation](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome/mag.html#contig-assembly>) for more details.
 
-Contigs to submit this way are listed in a **separate, optional TSV** passed with `--chromosome-info`, rather than a column in the main `--genome_info` table - **one row per contig**. A genome can have several rows (e.g. one for the main chromosome, one for a plasmid, one for the mitochondrion), all sharing the same `genome_name`; genomes absent from the file (or every genome, if the flag is omitted entirely) are submitted normally. The file has these columns:
+Genomes to submit this way have to be listed in a **separate, optional TSV** providing additional metadata passed with `--chromosome-info` - **one row per each sequence** in each assembly. A genome can have several rows (e.g. one for the main chromosome and one for a plasmid), all sharing the same `genome_name`; genomes absent from the file (or every genome, if the flag is omitted entirely) are submitted normally as contig-level assemblies. The file has these columns:
 
 | Column | Required | Accepted values |
 | --- | --- | --- |
