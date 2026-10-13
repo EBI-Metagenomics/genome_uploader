@@ -70,7 +70,7 @@ Genomes to submit this way have to be listed in a **separate, optional TSV** pro
 | `chromosome_topology` | Yes | case insensitive, written lowercase: `circular`, `linear` |
 | `chromosome_location` | No (leave the cell empty to omit it) | `Macronuclear`, `Nucleomorph`, `Mitochondrion`, `Kinetoplast`, `Chloroplast`, `Chromoplast`, `Plastid`, `Virion`, `Phage`, `Proviral`, `Prophage`, `Viroid`, `Cyanelle`, `Apicoplast`, `Leucoplast`, `Proplastid`, `Hydrogenosome`, `Chromatophore` |
 
-Example - a genome with a main chromosome and a plasmid:
+Example - a genome with a one chromosome and a plasmid:
 
 | genome_name | contig_name | chromosome_name | chromosome_type | chromosome_topology | chromosome_location |
 | --- | --- | --- | --- | --- | --- |
