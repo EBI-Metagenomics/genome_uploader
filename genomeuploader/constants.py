@@ -632,24 +632,111 @@ GEOGRAPHIC_LOCATIONS = [
     "Zimbabwe",
 ]
 
-BIN_MANDATORY_FIELDS = [
-    "genome_name",
-    "accessions",
-    "assembly_software",
-    "binning_software",
-    "binning_parameters",
-    "stats_generation_software",
-    "NCBI_lineage",
-    "broad_environment",
-    "local_environment",
-    "environmental_medium",
-    "metagenome",
-    "co-assembly",
-    "genome_coverage",
-    "genome_path",
+# compressed fasta formats ENA accepts for genome files
+COMPRESSED_FASTA_SUFFIXES = [".gz", ".bz2"]
+
+GENOME_NAME_FIELD = "genome_name"
+GENOME_CONTIG_FIELD = "contig_name"
+CHROMOSOME_NAME_FIELD = "chromosome_name"
+CHROMOSOME_TYPE_FIELD = "chromosome_type"
+CHROMOSOME_TOPOLOGY_FIELD = "chromosome_topology"
+CHROMOSOME_LOCATION_FIELD = "chromosome_location"
+
+# chromosome_name (CHROMOSOME_NAME in the chromosome list file) has no fixed vocabulary; it
+# appears as the /chromosome, /plasmid or /segment qualifier in the EMBL-Bank flat files.
+# ENA rules (https://ena-docs.readthedocs.io/en/latest/submit/fileprep/assembly.html#chromosome-list-file):
+# match the pattern below, be shorter than 33 characters, be unique within an assembly and
+# not contain any of CHROMOSOME_NAME_FORBIDDEN_SUBSTRINGS (case insensitive).
+# The hyphen is escaped so the class means the literal characters _ # - . (ENA's
+# "_#-." would otherwise be read as the range '#' to '.').
+CHROMOSOME_NAME_REGEX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_#\-.]*$")
+CHROMOSOME_NAME_MAX_LENGTH = 32
+CHROMOSOME_NAME_FORBIDDEN_SUBSTRINGS = [
+    "chr",
+    "chrm",
+    "chrom",
+    "chromosome",
+    "linkage group",
+    "linkage-group",
+    "linkage_group",
+    "plasmid",
 ]
 
-MAG_MANDATORY_FIELDS = ["rRNA_presence", "completeness", "contamination"]
+CHROMOSOME_TOPOLOGIES = [
+    "circular",
+    "linear"
+]
+CHROMOSOME_TYPES = {
+    "chromosome",
+    "plasmid",
+    "linkage_group",
+    "monopartite",
+    "segmented",
+    "multipartite"
+}
+CHROMOSOME_LOCATIONS_LIST = [
+    "Macronuclear",
+    "Nucleomorph",
+    "Mitochondrion",
+    "Kinetoplast",
+    "Chloroplast",
+    "Chromoplast",
+    "Plastid",
+    "Virion",
+    "Phage",
+    "Proviral",
+    "Prophage",
+    "Viroid",
+    "Cyanelle",
+    "Apicoplast",
+    "Leucoplast",
+    "Proplastid",
+    "Hydrogenosome",
+    "Chromatophore",
+]
+
+# --genome_info columns (GENOME_NAME_FIELD is defined above, shared with --chromosome-info)
+ACCESSIONS_FIELD = "accessions"
+ASSEMBLY_SOFTWARE_FIELD = "assembly_software"
+BINNING_SOFTWARE_FIELD = "binning_software"
+BINNING_PARAMETERS_FIELD = "binning_parameters"
+STATS_GENERATION_SOFTWARE_FIELD = "stats_generation_software"
+NCBI_LINEAGE_FIELD = "NCBI_lineage"
+BROAD_ENVIRONMENT_FIELD = "broad_environment"
+LOCAL_ENVIRONMENT_FIELD = "local_environment"
+ENVIRONMENTAL_MEDIUM_FIELD = "environmental_medium"
+METAGENOME_FIELD = "metagenome"
+CO_ASSEMBLY_FIELD = "co-assembly"
+GENOME_COVERAGE_FIELD = "genome_coverage"
+GENOME_PATH_FIELD = "genome_path"
+RRNA_PRESENCE_FIELD = "rRNA_presence"
+COMPLETENESS_FIELD = "completeness"
+CONTAMINATION_FIELD = "contamination"
+# optional --genome_info column: True when the genome has records in --chromosome-info;
+# a missing column or an empty cell means False
+HAS_CHROMOSOME_FIELD = "has_chromosome"
+
+BIN_MANDATORY_FIELDS = [
+    GENOME_NAME_FIELD,
+    ACCESSIONS_FIELD,
+    ASSEMBLY_SOFTWARE_FIELD,
+    BINNING_SOFTWARE_FIELD,
+    BINNING_PARAMETERS_FIELD,
+    STATS_GENERATION_SOFTWARE_FIELD,
+    NCBI_LINEAGE_FIELD,
+    BROAD_ENVIRONMENT_FIELD,
+    LOCAL_ENVIRONMENT_FIELD,
+    ENVIRONMENTAL_MEDIUM_FIELD,
+    METAGENOME_FIELD,
+    CO_ASSEMBLY_FIELD,
+    GENOME_COVERAGE_FIELD,
+    GENOME_PATH_FIELD,
+]
+
+MAG_MANDATORY_FIELDS = BIN_MANDATORY_FIELDS + [RRNA_PRESENCE_FIELD, COMPLETENESS_FIELD, CONTAMINATION_FIELD]
+
+TRUE_VALUES = ["true", "yes", "y"]
+FALSE_VALUES = ["false", "no", "n"]
 
 GEOGRAPHY_DIGIT_COORDS = 8
 
