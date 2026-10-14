@@ -46,6 +46,8 @@ from genomeuploader.constants import (
     MISSING_COLLECTION_DATE,
     GENOME_NAME_FIELD,
     HAS_CHROMOSOME_FIELD,
+    CO_ASSEMBLY_FIELD,
+    RRNA_PRESENCE_FIELD,
     TRUE_VALUES,
     FALSE_VALUES,
     ASSEMBLY_ACCESSION_RE,
@@ -470,10 +472,10 @@ class GenomeUpload:
         """
         logger.info("Retrieving info for genomes to submit...")
 
-        all_fields = MAG_MANDATORY_FIELDS + BIN_MANDATORY_FIELDS
+        # copy, so appending optional columns doesn't modify the MAG_MANDATORY_FIELDS constant
+        columns_to_read = list(MAG_MANDATORY_FIELDS)
 
         header_columns = pd.read_csv(self.genome_metadata, sep="\t", nrows=0).columns
-        columns_to_read = list(all_fields)
         if HAS_CHROMOSOME_FIELD in header_columns:
             columns_to_read.append(HAS_CHROMOSOME_FIELD)
 
@@ -486,7 +488,7 @@ class GenomeUpload:
         # make sure there are no empty cells
         clean_columns = list(metadata.dropna(axis=1))
         if self.genome_type == "MAGs":
-            missing_values = [item for item in all_fields if item not in clean_columns]
+            missing_values = [item for item in MAG_MANDATORY_FIELDS if item not in clean_columns]
         else:
             missing_values = [item for item in BIN_MANDATORY_FIELDS if item not in clean_columns]
 
@@ -496,7 +498,7 @@ class GenomeUpload:
         # True/False columns, converted after the empty-cell check so missing mandatory values
         # are reported as such; an empty cell left at this point (rRNA_presence for bins,
         # has_chromosome) means False
-        for column in ("co-assembly", "rRNA_presence", HAS_CHROMOSOME_FIELD):
+        for column in (CO_ASSEMBLY_FIELD, RRNA_PRESENCE_FIELD, HAS_CHROMOSOME_FIELD):
             metadata[column] = parse_bool_column(metadata, column)
 
         # check amount of genomes to register at the same time

@@ -6,6 +6,7 @@ import pytest
 
 from genomeuploader.genome_upload import *  # noqa: F401,F403 - GenomeUpload, compute_manifests
 from genomeuploader.chromosome_file import ChromosomeRecord, get_fasta_contig_ids
+from genomeuploader.constants import MAG_MANDATORY_FIELDS
 
 # All input files (genome metadata tsv, chromosome-info tsv, fasta.gz) used by these
 # tests are built on the fly under `tmp_path` - nothing here is read from tests/fixtures.
@@ -274,6 +275,19 @@ class Tests:
 
         alias = next(iter(genome_info))
         assert genome_info[alias]["has_chromosome"] is False
+
+    def test_mags_empty_has_chromosome_is_not_reported_as_missing(self, tmp_path):
+        genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
+        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("MAG1", genome_path, has_chromosome="")])
+        args = _base_args(tmp_path, genome_info_path, test_suffix="mags-empty-has-chromosome-unittest")
+        args["bins"] = False
+        mandatory_fields_before = list(MAG_MANDATORY_FIELDS)
+
+        genome_info = GenomeUpload(args).validate_metadata_tsv()
+
+        # has_chromosome is optional, and reading it must not add it to the shared constant
+        assert next(iter(genome_info.values()))["has_chromosome"] is False
+        assert MAG_MANDATORY_FIELDS == mandatory_fields_before
 
     def test_has_chromosome_invalid_value_raises(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
