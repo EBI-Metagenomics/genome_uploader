@@ -632,6 +632,9 @@ GEOGRAPHIC_LOCATIONS = [
     "Zimbabwe",
 ]
 
+# compressed fasta formats ENA accepts for genome files
+COMPRESSED_FASTA_SUFFIXES = [".gz", ".bz2"]
+
 GENOME_NAME_FIELD = "genome_name"
 GENOME_CONTIG_FIELD = "contig_name"
 CHROMOSOME_NAME_FIELD = "chromosome_name"
@@ -710,6 +713,12 @@ BIN_MANDATORY_FIELDS = [
 ]
 
 MAG_MANDATORY_FIELDS = ["rRNA_presence", "completeness", "contamination"]
+
+# optional --genome_info column: True when the genome has records in --chromosome-info;
+# a missing column or an empty cell means False
+HAS_CHROMOSOME_FIELD = "has_chromosome"
+TRUE_VALUES = ["true", "yes", "y"]
+FALSE_VALUES = ["false", "no", "n"]
 
 GEOGRAPHY_DIGIT_COORDS = 8
 

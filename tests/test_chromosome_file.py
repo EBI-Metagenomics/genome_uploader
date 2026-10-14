@@ -1,16 +1,11 @@
+import bz2
 import gzip
 from pathlib import Path
 
 import pytest
 
 from genomeuploader.genome_upload import *  # noqa: F401,F403 - GenomeUpload, compute_manifests
-from genomeuploader.constants import (
-    GENOME_CONTIG_FIELD,
-    CHROMOSOME_NAME_FIELD,
-    CHROMOSOME_TYPE_FIELD,
-    CHROMOSOME_TOPOLOGY_FIELD,
-    CHROMOSOME_LOCATION_FIELD,
-)
+from genomeuploader.chromosome_file import ChromosomeRecord, get_fasta_contig_ids
 
 # All input files (genome metadata tsv, chromosome-info tsv, fasta.gz) used by these
 # tests are built on the fly under `tmp_path` - nothing here is read from tests/fixtures.
@@ -33,6 +28,7 @@ GENOME_TSV_HEADER = [
     "environmental_medium",
     "rRNA_presence",
     "NCBI_lineage",
+    "has_chromosome",
 ]
 
 NCBI_LINEAGE = (
@@ -62,7 +58,7 @@ def _write_fasta_gz(path: Path, contig_ids: list) -> Path:
     return path
 
 
-def _genome_row(genome_name: str, genome_path: Path, accessions: str = "ERR6769700") -> list:
+def _genome_row(genome_name: str, genome_path: Path, accessions: str = "ERR6769700", has_chromosome: str = "False") -> list:
     return [
         genome_name,
         str(genome_path),
@@ -81,6 +77,7 @@ def _genome_row(genome_name: str, genome_path: Path, accessions: str = "ERR67697
         "mucosa",
         "True",
         NCBI_LINEAGE,
+        has_chromosome,
     ]
 
 
@@ -113,7 +110,7 @@ def _base_args(tmp_path: Path, genome_info: Path, chromosome_info: Path = None, 
 class Tests:
     def test_chromosome_genome_writes_chromosome_list(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "chromosome_bin.fa.gz", ["contig1"])
-        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path)])
+        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path, has_chromosome="True")])
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
             [["ERR6769700_bin.1", "contig1", "1", "chromosome", "circular"]],
@@ -121,7 +118,7 @@ class Tests:
         args = _base_args(tmp_path, genome_info_path, chromosome_info_path)
         gu = GenomeUpload(args)
         # the chromosome-info file is loaded and validated in __init__ already
-        assert gu.chromosome_metadata["ERR6769700_bin.1"][0][CHROMOSOME_NAME_FIELD] == "1"
+        assert gu.chromosome_metadata["ERR6769700_bin.1"][0].chromosome_name == "1"
 
         genome_info = gu.extract_genomes_info()
         alias = next(iter(genome_info))
@@ -129,11 +126,11 @@ class Tests:
         assert genome_info[alias]["has_chromosome"] is True
         records = genome_info[alias]["chromosome_records"]
         assert len(records) == 1
-        assert records[0][GENOME_CONTIG_FIELD] == "contig1"
-        assert records[0][CHROMOSOME_NAME_FIELD] == "1"
-        assert records[0][CHROMOSOME_TYPE_FIELD] == "chromosome"
-        assert records[0][CHROMOSOME_TOPOLOGY_FIELD] == "circular"
-        assert records[0][CHROMOSOME_LOCATION_FIELD] == ""
+        assert records[0].contig_name == "contig1"
+        assert records[0].chromosome_name == "1"
+        assert records[0].chromosome_type == "chromosome"
+        assert records[0].chromosome_topology == "circular"
+        assert records[0].chromosome_location == ""
 
         # don't call API again, force assign info for the next step
         genome_info[alias]["run_ref"] = "ERR6769700"
@@ -152,7 +149,7 @@ class Tests:
 
     def test_genome_with_multiple_chromosome_records_writes_all_lines(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "chromosome_bin.fa.gz", ["chr1", "chr2"])
-        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path)])
+        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path, has_chromosome="True")])
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
             [
@@ -196,7 +193,7 @@ class Tests:
         genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
         genome_info_path = _write_genome_tsv(
             tmp_path / "genome_info.tsv",
-            [_genome_row("MAG1", genome_path), _genome_row("MAG2", genome_path)],
+            [_genome_row("MAG1", genome_path, has_chromosome="True"), _genome_row("MAG2", genome_path)],
         )
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
@@ -227,9 +224,68 @@ class Tests:
             gu.extract_genomes_info()
         assert "genome_that_does_not_exist" in str(exc_info.value)
 
+    def test_has_chromosome_true_without_chromosome_info_raises(self, tmp_path):
+        genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
+        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("MAG1", genome_path, has_chromosome="True")])
+        args = _base_args(tmp_path, genome_info_path, test_suffix="has-chromosome-no-file-unittest")
+        gu = GenomeUpload(args)
+
+        with pytest.raises(ValueError, match="has_chromosome is True in --genome_info but no chromosome records") as exc_info:
+            gu.extract_genomes_info()
+        assert "MAG1" in str(exc_info.value)
+
+    def test_has_chromosome_true_but_genome_not_in_chromosome_info_raises(self, tmp_path):
+        genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
+        genome_info_path = _write_genome_tsv(
+            tmp_path / "genome_info.tsv",
+            [_genome_row("MAG1", genome_path, has_chromosome="True"), _genome_row("MAG2", genome_path, has_chromosome="yes")],
+        )
+        chromosome_info_path = _write_chromosome_info_tsv(
+            tmp_path / "chromosome_info.tsv",
+            [["MAG1", "contig1", "1", "chromosome", "circular"]],
+        )
+        args = _base_args(tmp_path, genome_info_path, chromosome_info_path, test_suffix="has-chromosome-missing-records-unittest")
+        gu = GenomeUpload(args)
+
+        with pytest.raises(ValueError, match="no chromosome records were found") as exc_info:
+            gu.extract_genomes_info()
+        assert "for: MAG2" in str(exc_info.value)
+
+    @pytest.mark.parametrize("has_chromosome", ["False", ""])
+    def test_chromosome_records_without_has_chromosome_raises(self, tmp_path, has_chromosome):
+        genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
+        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("MAG1", genome_path, has_chromosome=has_chromosome)])
+        chromosome_info_path = _write_chromosome_info_tsv(
+            tmp_path / "chromosome_info.tsv",
+            [["MAG1", "contig1", "1", "chromosome", "circular"]],
+        )
+        args = _base_args(tmp_path, genome_info_path, chromosome_info_path, test_suffix="records-without-flag-unittest")
+        gu = GenomeUpload(args)
+
+        with pytest.raises(ValueError, match="has_chromosome is not True in --genome_info for: MAG1"):
+            gu.extract_genomes_info()
+
+    def test_has_chromosome_column_missing_defaults_to_false(self, tmp_path):
+        genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
+        row = _genome_row("MAG1", genome_path)[:-1]
+        genome_info_path = _write_tsv(tmp_path / "genome_info.tsv", GENOME_TSV_HEADER[:-1], [row])
+        args = _base_args(tmp_path, genome_info_path, test_suffix="has-chromosome-missing-column-unittest")
+        genome_info = GenomeUpload(args).extract_genomes_info()
+
+        alias = next(iter(genome_info))
+        assert genome_info[alias]["has_chromosome"] is False
+
+    def test_has_chromosome_invalid_value_raises(self, tmp_path):
+        genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
+        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("MAG1", genome_path, has_chromosome="maybe")])
+        args = _base_args(tmp_path, genome_info_path, test_suffix="has-chromosome-invalid-unittest")
+
+        with pytest.raises(ValueError, match="has_chromosome must be True/False"):
+            GenomeUpload(args).extract_genomes_info()
+
     def test_chromosome_info_contig_name_not_in_fasta_raises(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "chromosome_bin.fa.gz", ["contig1"])
-        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path)])
+        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path, has_chromosome="True")])
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
             [["ERR6769700_bin.1", "contig_that_does_not_exist", "1", "chromosome", "circular"]],
@@ -323,7 +379,7 @@ class Tests:
         args = _base_args(tmp_path, tmp_path / "genome_info.tsv", chromosome_info_path, test_suffix="chromosome-valid-names-unittest")
 
         gu = GenomeUpload(args)
-        names = [r[CHROMOSOME_NAME_FIELD] for r in gu.chromosome_metadata["ERR6769700_bin.1"]]
+        names = [r.chromosome_name for r in gu.chromosome_metadata["ERR6769700_bin.1"]]
         assert names == ["1", "MIT", "pA_2#b-c.d", "a" * 32]
 
     def test_chromosome_info_duplicate_chromosome_name_for_genome_raises(self, tmp_path):
@@ -357,8 +413,8 @@ class Tests:
 
         gu = GenomeUpload(args)
         records = gu.chromosome_metadata["ERR6769700_bin.1"]
-        assert [r[CHROMOSOME_TYPE_FIELD] for r in records] == ["chromosome", "linkage_group"]
-        assert [r[CHROMOSOME_TOPOLOGY_FIELD] for r in records] == ["circular", "linear"]
+        assert [r.chromosome_type for r in records] == ["chromosome", "linkage_group"]
+        assert [r.chromosome_topology for r in records] == ["circular", "linear"]
 
     def test_chromosome_info_empty_contig_name_raises(self, tmp_path):
         chromosome_info_path = _write_chromosome_info_tsv(
@@ -392,7 +448,7 @@ class Tests:
 
     def test_mitochondrion_name_writes_chromosome_list(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "chromosome_bin.fa.gz", ["contig1"])
-        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path)])
+        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("ERR6769700_bin.1", genome_path, has_chromosome="True")])
         chromosome_info_path = _write_chromosome_info_tsv(
             tmp_path / "chromosome_info.tsv",
             [["ERR6769700_bin.1", "contig1", "MIT", "chromosome", "linear"]],
@@ -404,9 +460,9 @@ class Tests:
 
         records = genome_info[alias]["chromosome_records"]
         assert genome_info[alias]["has_chromosome"] is True
-        assert records[0][CHROMOSOME_NAME_FIELD] == "MIT"
-        assert records[0][CHROMOSOME_TYPE_FIELD] == "chromosome"
-        assert records[0][CHROMOSOME_TOPOLOGY_FIELD] == "linear"
+        assert records[0].chromosome_name == "MIT"
+        assert records[0].chromosome_type == "chromosome"
+        assert records[0].chromosome_topology == "linear"
 
         genome_info[alias]["run_ref"] = "ERR6769700"
         genome_info[alias]["study"] = "ERP000000"
@@ -440,3 +496,100 @@ class Tests:
 
         with pytest.raises(ValueError, match="contig_name"):
             GenomeUpload(args)
+
+
+@pytest.mark.parametrize("suffix, opener", [(".gz", gzip.open), (".bz2", bz2.open)])
+def test_get_fasta_contig_ids_reads_compressed_fasta(tmp_path, suffix, opener):
+    fasta_path = tmp_path / f"genome.fa{suffix}"
+    with opener(fasta_path, "wt") as f:
+        f.write(">contig1\nACGT\n>contig2\nGGCC\n")
+
+    assert get_fasta_contig_ids(fasta_path) == ["contig1", "contig2"]
+
+
+def test_get_fasta_contig_ids_rejects_uncompressed_extension(tmp_path):
+    fasta_path = tmp_path / "genome.fa"
+    fasta_path.write_text(">contig1\nACGT\n")
+
+    with pytest.raises(ValueError, match="must be compressed with gzip or bzip2"):
+        get_fasta_contig_ids(fasta_path)
+
+
+@pytest.mark.parametrize("suffix", [".gz", ".bz2"])
+def test_get_fasta_contig_ids_rejects_invalid_compressed_data(tmp_path, suffix):
+    fasta_path = tmp_path / f"genome.fa{suffix}"
+    fasta_path.write_text(">contig1\nACGT\n")
+
+    with pytest.raises(ValueError, match="is not valid"):
+        get_fasta_contig_ids(fasta_path)
+
+
+def _record(**overrides) -> ChromosomeRecord:
+    row = {
+        "genome_name": "MAG1",
+        "contig_name": "contig1",
+        "chromosome_name": "1",
+        "chromosome_type": "chromosome",
+        "chromosome_topology": "circular",
+        "chromosome_location": "",
+    }
+    row.update(overrides)
+    return ChromosomeRecord.from_row(row)
+
+
+def test_chromosome_record_from_row_lowercases_type_and_topology():
+    record = _record(chromosome_type="Linkage_Group", chromosome_topology="LINEAR")
+    assert record.chromosome_type == "linkage_group"
+    assert record.chromosome_topology == "linear"
+    assert record.validate() == []
+
+
+def test_chromosome_record_is_immutable():
+    record = _record()
+    with pytest.raises(AttributeError):
+        record.chromosome_name = "2"
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("1", None),
+        ("MIT", None),
+        ("pA_2#b-c.d", None),
+        ("", None),
+        ("_1", "must match the pattern"),
+        ("1$", "must match the pattern"),
+        ("a" * 33, "must be shorter than 33 characters"),
+        ("Chr1", "must not contain 'chr'"),
+        ("pPLASMID", "must not contain 'plasmid'"),
+    ],
+)
+def test_chromosome_record_validate_chromosome_name(name, expected):
+    errors = _record(chromosome_name=name).validate_chromosome_name()
+    if expected is None:
+        assert errors == []
+    else:
+        assert any(expected in error for error in errors)
+
+
+@pytest.mark.parametrize("value, valid", [("plasmid", True), ("Segmented", True), ("", True), ("segment", False)])
+def test_chromosome_record_validate_chromosome_type(value, valid):
+    assert (_record(chromosome_type=value).validate_chromosome_type() == []) is valid
+
+
+@pytest.mark.parametrize("value, valid", [("linear", True), ("Circular", True), ("", True), ("loop", False)])
+def test_chromosome_record_validate_chromosome_topology(value, valid):
+    assert (_record(chromosome_topology=value).validate_chromosome_topology() == []) is valid
+
+
+@pytest.mark.parametrize("value, valid", [("Mitochondrion", True), ("", True), ("mitochondrion", False)])
+def test_chromosome_record_validate_chromosome_location(value, valid):
+    assert (_record(chromosome_location=value).validate_chromosome_location() == []) is valid
+
+
+def test_chromosome_record_to_chromosome_list_line():
+    assert _record().to_chromosome_list_line() == "contig1\t1\tcircular-chromosome"
+    assert (
+        _record(chromosome_name="MIT", chromosome_topology="linear", chromosome_location="Mitochondrion").to_chromosome_list_line()
+        == "contig1\tMIT\tlinear-chromosome\tMitochondrion"
+    )

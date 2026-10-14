@@ -45,7 +45,9 @@ from genomeuploader.constants import (
     MISSING_LOCATION_DATA,
     MISSING_COLLECTION_DATE,
     GENOME_NAME_FIELD,
-    GENOME_CONTIG_FIELD,
+    HAS_CHROMOSOME_FIELD,
+    TRUE_VALUES,
+    FALSE_VALUES,
     ASSEMBLY_ACCESSION_RE,
     RUN_ACCESSION_RE,
 )
@@ -258,8 +260,8 @@ def create_manifest_dictionary(
         coverage (float): Genome coverage depth.
         is_coassembly (bool): Whether the genome comes from a co-assembly.
         has_chromosome (bool): Whether the genome has one or more chromosome records.
-        chromosome_records (list): The genome's chromosome records (one dict per contig
-            submitted as a chromosome; see chromosome_file.load_chromosome_metadata()),
+        chromosome_records (list): The genome's chromosome records (one
+            chromosome_file.ChromosomeRecord per contig submitted as a chromosome),
             empty when has_chromosome is False.
     Returns:
         dict: Manifest dictionary for the genome.
@@ -427,9 +429,10 @@ class GenomeUpload:
             co-assembly: True/False, whether the genome was generated from a co-assembly
             genome_coverage : genome coverage
             genome_path: path to genome to upload
-        Genomes to submit as chromosomes are not marked in this file; they are listed by
-        genome_name in the separate, optional --chromosome-info TSV instead (see
-        load_chromosome_metadata()).
+            has_chromosome (optional): True/False, whether the genome has contigs to submit as
+                chromosomes; a missing column or an empty cell means False. Genomes set to True
+                must have their chromosome records in the separate --chromosome-info TSV (see
+                load_chromosome_metadata()); the two are cross-checked in extract_genomes_info().
         Returns:
             dict: Dictionary of validated genome metadata.
         Raises:
@@ -439,7 +442,26 @@ class GenomeUpload:
 
         all_fields = MAG_MANDATORY_FIELDS + BIN_MANDATORY_FIELDS
 
-        metadata = pd.read_csv(self.genome_metadata, sep="\t", usecols=all_fields)
+        header_columns = pd.read_csv(self.genome_metadata, sep="\t", nrows=0).columns
+        columns_to_read = list(all_fields)
+        if HAS_CHROMOSOME_FIELD in header_columns:
+            columns_to_read.append(HAS_CHROMOSOME_FIELD)
+
+        metadata = pd.read_csv(self.genome_metadata, sep="\t", usecols=columns_to_read)
+
+        # has_chromosome is optional: missing column or empty cell -> False
+        if HAS_CHROMOSOME_FIELD not in metadata.columns:
+            metadata[HAS_CHROMOSOME_FIELD] = False
+        has_chromosome_values = metadata[HAS_CHROMOSOME_FIELD].map(
+            lambda v: "" if pd.isna(v) else str(v).strip().lower()
+        )
+        invalid_has_chromosome = has_chromosome_values.map(lambda v: v and v not in TRUE_VALUES + FALSE_VALUES)
+        if invalid_has_chromosome.any():
+            raise ValueError(
+                f"{HAS_CHROMOSOME_FIELD} must be True/False (or empty for False) for the following genomes: "
+                f"{', '.join(metadata.loc[invalid_has_chromosome, 'genome_name'])}"
+            )
+        metadata[HAS_CHROMOSOME_FIELD] = has_chromosome_values.isin(TRUE_VALUES)
 
         # make sure there are no empty cells
         clean_columns = list(metadata.dropna(axis=1))
@@ -546,20 +568,47 @@ class GenomeUpload:
         in __init__); each record's contig_name identifies one of that genome's fasta
         sequences. Every contig_name is checked against the genome's actual fasta
         headers before any genome is otherwise processed - a reference to a contig that
-        doesn't exist fails the whole run. Genomes not listed in --chromosome-info are
-        submitted normally. Every genome_name in --chromosome-info must match a genome
-        in --genome_info, or the whole run fails.
+        doesn't exist fails the whole run. The has_chromosome column of --genome_info must
+        be True exactly for the genomes that have records in --chromosome-info. Genomes
+        not listed in --chromosome-info are submitted normally. Every genome_name in
+        --chromosome-info must match a genome in --genome_info, or the whole run fails.
         Returns:
             dict: Dictionary of processed genome information.
         Raises:
             ValueError: If any contig_name in --chromosome-info doesn't exist in its
-                genome's fasta file, or if any genome_name in --chromosome-info doesn't
-                match a genome in --genome_info.
+                genome's fasta file, a genome has has_chromosome True but no chromosome
+                records (or records but has_chromosome not True), or if any genome_name in
+                --chromosome-info doesn't match a genome in --genome_info.
         """
         genome_info = self.validate_metadata_tsv()
 
         genome_paths = {genome_info[gen][GENOME_NAME_FIELD]: Path(genome_info[gen]["genome_path"]) for gen in genome_info}
         chromosome_file.validate_contig_names(self.chromosome_metadata, genome_paths)
+
+        # has_chromosome in --genome_info must agree with --chromosome-info in both directions
+        flagged_without_records = sorted(
+            genome_info[gen][GENOME_NAME_FIELD]
+            for gen in genome_info
+            if genome_info[gen][HAS_CHROMOSOME_FIELD] and genome_info[gen][GENOME_NAME_FIELD] not in self.chromosome_metadata
+        )
+        records_without_flag = sorted(
+            genome_info[gen][GENOME_NAME_FIELD]
+            for gen in genome_info
+            if not genome_info[gen][HAS_CHROMOSOME_FIELD] and genome_info[gen][GENOME_NAME_FIELD] in self.chromosome_metadata
+        )
+        mismatch_errors = []
+        if flagged_without_records:
+            mismatch_errors.append(
+                f"{HAS_CHROMOSOME_FIELD} is True in --genome_info but no chromosome records were found in "
+                f"--chromosome-info for: {', '.join(flagged_without_records)}"
+            )
+        if records_without_flag:
+            mismatch_errors.append(
+                f"chromosome records were found in --chromosome-info but {HAS_CHROMOSOME_FIELD} is not True "
+                f"in --genome_info for: {', '.join(records_without_flag)}"
+            )
+        if mismatch_errors:
+            raise ValueError("\n".join(mismatch_errors))
 
         matched_chromosome_genomes = set()
         for gen in list(genome_info):
@@ -592,12 +641,12 @@ class GenomeUpload:
 
             genome_info[gen]["alias"] = gen
 
+            # has_chromosome already comes from --genome_info and was cross-checked above
             chromosome_records = self.chromosome_metadata.get(genome_info[gen][GENOME_NAME_FIELD], [])
-            genome_info[gen]["has_chromosome"] = bool(chromosome_records)
             genome_info[gen]["chromosome_records"] = chromosome_records
             if chromosome_records:
                 matched_chromosome_genomes.add(genome_info[gen][GENOME_NAME_FIELD])
-                contig_names = ", ".join(record[GENOME_CONTIG_FIELD] for record in chromosome_records)
+                contig_names = ", ".join(record.contig_name for record in chromosome_records)
                 logger.warning(
                     f"Genome '{gen}' will be submitted with {len(chromosome_records)} chromosome record(s) "
                     f"({contig_names}). Make sure it is highly complete before submission."
@@ -1052,7 +1101,8 @@ __version__ = importlib.metadata.version("genome_uploader")
     "genome_name (must match a genome_name in --genome_info; a genome can have several rows, "
     "one per contig), contig_name (must match a sequence header in that genome's fasta; unique "
     "per genome_name), chromosome_name, chromosome_type, chromosome_topology, and "
-    "chromosome_location (optional). Genomes not listed here are submitted normally.",
+    "chromosome_location (optional). Genomes listed here must have has_chromosome set to True "
+    "in --genome_info.",
 )
 @click.option("-m", "--mags", is_flag=True, help="Select for MAG upload")
 @click.option("-b", "--bins", is_flag=True, help="Select for bin upload")

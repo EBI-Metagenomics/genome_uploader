@@ -12,9 +12,9 @@ When you submit genomes to the [ENA](https://www.ebi.ac.uk/ena/browser/home), yo
 ### Prepare Input TSV
 The `genome_uploader` takes as input one tsv (tab-separated values) table in the following format:
 
-| genome_name | genome_path | accessions | assembly_software | binning_software | binning_parameters | stats_generation_software | completeness | contamination | genome_coverage | metagenome | co-assembly | broad_environment | local_environment | environmental_medium | rRNA_presence | NCBI_lineage |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ERR4647712_crispatus | path/to/ERR4647712.fa.gz | ERR4647712 | megahit_v1.2.9 | MGnify-genomes-generation-pipeline_v1.0.0 | default | CheckM2_v1.0.1 | 100 | 0.38 | 14.2 | chicken gut metagenome | False | chicken | gut | mucosa | True | d__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Lactobacillaceae;g__Lactobacillus;s__Lactobacillus crispatus |
+| genome_name | genome_path | accessions | assembly_software | binning_software | binning_parameters | stats_generation_software | completeness | contamination | genome_coverage | metagenome | co-assembly | broad_environment | local_environment | environmental_medium | rRNA_presence | NCBI_lineage | has_chromosome | 
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ERR4647712_crispatus | path/to/ERR4647712.fa.gz | ERR4647712 | megahit_v1.2.9 | MGnify-genomes-generation-pipeline_v1.0.0 | default | CheckM2_v1.0.1 | 100 | 0.38 | 14.2 | chicken gut metagenome | False | chicken | gut | mucosa | True | d__Bacteria;p__Firmicutes;c__Bacilli;o__Lactobacillales;f__Lactobacillaceae;g__Lactobacillus;s__Lactobacillus crispatus | False |
 
 With columns indicating:
   * _genome_name_: genome id (unique string identifier)
@@ -36,13 +36,13 @@ With columns indicating:
   * _broad_environment_: `string` (explanation following)
   * _local_environment_: `string` (explanation following)
   * _environmental_medium_: `string` (explanation following)
+  * _has_chromosome_ (optional): `True/False`, whether the genome should be submitted as chromosome-level genome assembly. If the column is missing or the cell is empty, it defaults to `False`. Genomes with `has_chromosome` set to `True` must have their contigs listed in a separate TSV passed with `--chromosome-info` - see [Chromosome submission](#chromosome-submission) below.
 
-Genomes that have one or more contigs that need to be submitted as chromosomes are **not** marked in this table; they are listed in a separate, optional TSV instead - see [Chromosome submission](#chromosome-submission) below.
+An example of input tsv table can be found [here](examples/input_example.tsv).
 
+### Environment related arguments
 According to ENA checklist's guidelines, `broad_environment` describes the broad ecological context of a sample - desert, taiga, coral reef, ... `local_environment` is more local - lake, harbour, cliff, ... `environmental_medium` is either the material displaced by the sample, or the one in which the sample was embedded prior to the sampling event - air, soil, water, ...
 For host-associated metagenomic samples, the three variables can be defined similarly to the following example for the chicken gut metagenome: "chicken digestive system", "digestive tube", "caecum". More information can be found at [ERC000050](<https://www.ebi.ac.uk/ena/browser/view/ERC000050>) for bins and [ERC000047](<https://www.ebi.ac.uk/ena/browser/view/ERC000047>) for MAGs under field names "broad-scale environmental context", "local environmental context", "environmental medium"
-
-An example of input tsv table can be found [here](examples/input_example.tsv)
 
 ## _Warnings_
 
@@ -57,35 +57,31 @@ Raw-read runs or assemblies from which genomes were generated should already be 
 If you are working with your own, private data on ENA, you will need to add the `--private` flag to access private metadata through ENA API. This implies that if you are working on public data, you can omit the flag. However, you will need to submit two different batches of data if you are handling both private and public data.
 
 ### Submission of chromosome-level genome assembly
-By default `genome_uploader` submits input MAGs and bins as contig-level assemblies. High-quality genome MAG/bin assemblies, e.g. a complete genome assembled to one or more chromosomes, or individual chromosomes/plasmids/mitochondrion, or a combination of them, can be submitted as chromosome-level assembly. Refer to the [official ENA documentation](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome/mag.html#contig-assembly>) for more details.
+By default `genome_uploader` submits input MAGs and bins as contig-level assemblies. High-quality genome MAG/bin assemblies, complete or near-complete replicons (including plasmids, organelles, complete viral genomes, etc) can be submitted as chromosome-level assembly. Refer to the [official ENA documentation](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome/mag.html#contig-assembly>) for more details.
 
-Genomes to submit this way have to be listed in a **separate, optional TSV** providing additional metadata passed with `--chromosome-info` - **one row per each sequence** in each assembly. A genome can have several rows (e.g. one for the main chromosome and one for a plasmid), all sharing the same `genome_name`; genomes absent from the file (or every genome, if the flag is omitted entirely) are submitted normally as contig-level assemblies. The file has these columns:
+Genomes to submit this way have to be listed in a **separate, optional TSV** providing additional metadata passed with `--chromosome-info` - **one row per each sequence** in each assembly. Check [ENA docs](https://ena-docs.readthedocs.io/en/latest/submit/fileprep/assembly.html#chromosome-list-file) before populating this file. A genome can have several rows (e.g. one chromosome and one plasmid), all sharing the same `genome_name`, and each such genome must have `has_chromosome` set to `True` in the main `--genome_info` table. The file has these columns:
 
-| Column | Required | Accepted values |
-| --- | --- | --- |
-| `genome_name` | Yes | must match a `genome_name` from the main `--genome_info` table; repeat it for each additional contig of the same genome |
-| `contig_name` | Yes | must match a sequence header in that genome's fasta file; unique within each `genome_name` - two rows for the same genome can't point at the same contig |
+| Column | Required | Accepted values                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --- | --- |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `genome_name` | Yes | must match a `genome_name` from the main `--genome_info` table; repeat it for each additional contig of the same genome                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `contig_name` | Yes | must match a sequence header in that genome's fasta file; unique within each `genome_name` - two rows for the same genome can't point at the same contig                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `chromosome_name` | Yes | no fixed list (e.g. `1`, `2`, `MIT`); appears as the `/chromosome`, `/plasmid` or `/segment` qualifier in the EMBL-Bank flat files. Names must: match the pattern `^[A-Za-z0-9][A-Za-z0-9_#\-.]*$` (start with a letter or digit, then only letters, digits, `_`, `#`, `-` or `.`); be shorter than 33 characters; be unique within an assembly (i.e. within each `genome_name`); not contain any of the following as part of the name (case insensitive): `chr`, `chrm`, `chrom`, `chromosome`, `linkage group`, `linkage-group`, `linkage_group`, `plasmid` |
-| `chromosome_type` | Yes | case insensitive, written lowercase: `chromosome`, `plasmid`, `linkage_group`, `monopartite`, `segmented`, `multipartite` |
-| `chromosome_topology` | Yes | case insensitive, written lowercase: `circular`, `linear` |
-| `chromosome_location` | No (leave the cell empty to omit it) | `Macronuclear`, `Nucleomorph`, `Mitochondrion`, `Kinetoplast`, `Chloroplast`, `Chromoplast`, `Plastid`, `Virion`, `Phage`, `Proviral`, `Prophage`, `Viroid`, `Cyanelle`, `Apicoplast`, `Leucoplast`, `Proplastid`, `Hydrogenosome`, `Chromatophore` |
+| `chromosome_type` | Yes | case insensitive, one of written lowercase: `chromosome`, `plasmid`, `linkage_group`, `monopartite`, `segmented`, `multipartite`                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `chromosome_topology` | Yes | case insensitive, one of written lowercase: `circular`, `linear`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `chromosome_location` | No (leave the cell empty to omit it) | One of: `Macronuclear`, `Nucleomorph`, `Mitochondrion`, `Kinetoplast`, `Chloroplast`, `Chromoplast`, `Plastid`, `Virion`, `Phage`, `Proviral`, `Prophage`, `Viroid`, `Cyanelle`, `Apicoplast`, `Leucoplast`, `Proplastid`, `Hydrogenosome`, `Chromatophore`. If not provided, ENA assumes that eukaryotic chromosomes reside in the nucleus, prokaryotic chromosomes and plasmids - in the cytoplasm.                                                                                                                                                         |
 
-Example - a genome with a one chromosome and a plasmid:
+Example - a genome with one chromosome and plasmid:
 
 | genome_name | contig_name | chromosome_name | chromosome_type | chromosome_topology | chromosome_location |
-| --- | --- | --- | --- | --- | --- |
+| --- | --- | -- | --- | --- | --- |
 | ERR4647712_crispatus | contig_1 | 1 | chromosome | circular | |
-| ERR4647712_crispatus | contig_7 | 2 | plasmid | circular | |
-
-For every genome matched this way, the script checks that each listed `contig_name` actually exists among that genome's fasta sequence headers, and fails with an error if it doesn't. A chromosome list file is generated alongside the manifest and referenced from it via `CHROMOSOME_LIST`, with one line per row: `<contig_name>\t<chromosome_name>\t<chromosome_topology>-<chromosome_type>[\t<chromosome_location>]` - so the example above produces `contig_1\t1\tcircular-chromosome` and `contig_7\t2\tcircular-plasmid`. Only list a contig this way if you are confident the genome is highly complete.
-
-`--chromosome-info` is read and fully validated **before anything else runs**: if it is missing the `genome_name`, `contig_name`, `chromosome_name`, `chromosome_type` or `chromosome_topology` column, lists the same `genome_name`/`contig_name` or `genome_name`/`chromosome_name` pair more than once, or any row's `chromosome_name`, `chromosome_type`, `chromosome_topology` or (when provided) `chromosome_location` value is not accepted per the table above, the script stops immediately with an error listing every problem found. The `contig_name` -> fasta cross-check runs as soon as genome paths are known (before any genome is otherwise processed) and also stops the whole run if any contig is missing. Every `genome_name` in `--chromosome-info` must match a `genome_name` in `--genome_info`; if any don't, the script stops with an error listing them - no genome is skipped or partially processed.
+| ERR4647712_crispatus | contig_7 | pLAC3 | plasmid | circular | |
 
 ### TPA generation and upload
 If uploading TPA (Third PArty) genomes, you will need to contact [ENA support](<https://www.ebi.ac.uk/ena/browser/support>) before using the script. They will provide instructions on how to correctly register a TPA project where to submit your genomes. If both TPA and non-TPA genomes need to be uploaded, please divide them in two batches and use the `--tpa` flag only with TPA genomes.
 
 ### Compress your fasta files
-Files to be uploaded will need to be compressed (e.g. already in .gz format).
+Files to be uploaded will need to be compressed with gzip (`.gz`) or bzip2 (`.bz2`).
 
 ### Split your input tables
 No more than 5000 genomes can be submitted at the same time. If you have more than 5000, split your table into smaller ones and launch the `genome_uploader` for each table.
@@ -153,7 +149,7 @@ genome_upload \
 where
   * `-u UPLOAD_STUDY`: study accession for genomes upload to ENA (in format ERPxxxxxx or PRJEBxxxxxx)
   * `--genome_info METADATA_FILE` : genomes metadata file in tsv format
-  * `--chromosome-info CHROMOSOME_FILE`: optional tsv listing genomes to submit as chromosomes. See [Chromosome submission](#chromosome-submission) below.
+  * `--chromosome-info CHROMOSOME_FILE`: optional tsv listing genomes to submit as chromosomes. See [Submission of chromosome-level genome assembly submission](#submission-of-chromosome-level-genome-assembly) below.
   * `-m, --mags, --b, --bins`: select either of these for bin **or** MAG upload. If in doubt, check [which definition fits best according to ENA](<https://ena-docs.readthedocs.io/en/latest/submit/assembly/metagenome.html>)
   * `--out`: output folder (default: working directory)
   * `--force`: forces reset of sample xmls generation. This is useful if you changed something in your tsv table, or if ENA metadata haven't been downloaded correctly (you can check this in `ENA_backup.json`).
