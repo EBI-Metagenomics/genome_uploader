@@ -38,6 +38,8 @@ With columns indicating:
   * _environmental_medium_: `string` (explanation following)
   * _has_chromosome_ (optional): `True/False`, whether the genome should be submitted as chromosome-level genome assembly. If the column is missing or the cell is empty, it defaults to `False`. Genomes with `has_chromosome` set to `True` must have their contigs listed in a separate TSV passed with `--chromosome-info` - see [Chromosome submission](#chromosome-submission) below.
 
+Columns marked `True/False` (`rRNA_presence`, `co-assembly` and `has_chromosome`) are not case sensitive and accept `True`/`Yes`/`Y` for true and `False`/`No`/`N` for false (e.g. `true`, `YES` and `n` are all valid). An empty cell counts as `False` where the column is allowed to be empty (`rRNA_presence` for bins, `has_chromosome`). Any other value stops the script with an error naming the column and the genomes.
+
 An example of input tsv table can be found [here](examples/input_example.tsv).
 
 ### Environment related arguments
