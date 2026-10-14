@@ -77,6 +77,32 @@ def round_stats(stats: float) -> float:
     return new_stat
 
 
+def parse_bool_column(metadata: pd.DataFrame, column: str) -> pd.Series:
+    """
+    Converts a True/False column of the genome metadata table to booleans.
+
+    Values are matched case insensitively, ignoring surrounding whitespace, against
+    TRUE_VALUES (e.g. "True", "yes", "Y") and FALSE_VALUES (e.g. "False", "no", "N");
+    empty cells become False.
+    Args:
+        metadata (pd.DataFrame): Genome metadata table; must have a genome_name column,
+            used in the error message.
+        column (str): Name of the column to convert.
+    Returns:
+        pd.Series: Boolean series aligned with metadata.
+    Raises:
+        ValueError: If any value is neither in TRUE_VALUES nor in FALSE_VALUES.
+    """
+    values = metadata[column].map(lambda v: "" if pd.isna(v) else str(v).strip().lower())
+    invalid = values.map(lambda v: bool(v) and v not in TRUE_VALUES + FALSE_VALUES)
+    if invalid.any():
+        raise ValueError(
+            f"{column} must be one of {TRUE_VALUES + FALSE_VALUES} (case insensitive) for the following "
+            f"genomes: {', '.join(metadata.loc[invalid, 'genome_name'].astype(str))}"
+        )
+    return values.isin(TRUE_VALUES)
+
+
 def compute_mag_quality(completeness: float, contamination: float, rna_presence: bool) -> tuple[str, float, float]:
     """
     Computes the quality of a genome based on MIMAGs criteria.
@@ -87,7 +113,7 @@ def compute_mag_quality(completeness: float, contamination: float, rna_presence:
     Returns:
         tuple[str, float, float]: (quality string, completeness, contamination)
     """
-    rna_presence = str(rna_presence).lower() in ["true", "yes", "y"]
+    rna_presence = str(rna_presence).strip().lower() in TRUE_VALUES
     quality = MQ
     if float(completeness) >= 90 and float(contamination) <= 5 and rna_presence:
         quality = HQ
@@ -421,6 +447,7 @@ class GenomeUpload:
             completeness: float
             contamination: float
             rRNA_presence: True/False if 5S, 16S, and 23S genes have been detected in the genome
+                (optional for bins; an empty cell means False)
             NCBI_lineage: full NCBI lineage, either in tax id or strings
             broad_environment: string
             local_environment: string
@@ -433,6 +460,9 @@ class GenomeUpload:
                 chromosomes; a missing column or an empty cell means False. Genomes set to True
                 must have their chromosome records in the separate --chromosome-info TSV (see
                 load_chromosome_metadata()); the two are cross-checked in extract_genomes_info().
+        True/False columns (co-assembly, rRNA_presence, has_chromosome) accept any value of
+        TRUE_VALUES/FALSE_VALUES case insensitively and are converted to bool here
+        (see parse_bool_column()).
         Returns:
             dict: Dictionary of validated genome metadata.
         Raises:
@@ -449,19 +479,9 @@ class GenomeUpload:
 
         metadata = pd.read_csv(self.genome_metadata, sep="\t", usecols=columns_to_read)
 
-        # has_chromosome is optional: missing column or empty cell -> False
+        # has_chromosome is optional: a missing column means False for every genome
         if HAS_CHROMOSOME_FIELD not in metadata.columns:
             metadata[HAS_CHROMOSOME_FIELD] = False
-        has_chromosome_values = metadata[HAS_CHROMOSOME_FIELD].map(
-            lambda v: "" if pd.isna(v) else str(v).strip().lower()
-        )
-        invalid_has_chromosome = has_chromosome_values.map(lambda v: v and v not in TRUE_VALUES + FALSE_VALUES)
-        if invalid_has_chromosome.any():
-            raise ValueError(
-                f"{HAS_CHROMOSOME_FIELD} must be True/False (or empty for False) for the following genomes: "
-                f"{', '.join(metadata.loc[invalid_has_chromosome, 'genome_name'])}"
-            )
-        metadata[HAS_CHROMOSOME_FIELD] = has_chromosome_values.isin(TRUE_VALUES)
 
         # make sure there are no empty cells
         clean_columns = list(metadata.dropna(axis=1))
@@ -472,6 +492,12 @@ class GenomeUpload:
 
         if missing_values:
             raise ValueError(f"The following mandatory fields have missing values in the input file: {', '.join(missing_values)}")
+
+        # True/False columns, converted after the empty-cell check so missing mandatory values
+        # are reported as such; an empty cell left at this point (rRNA_presence for bins,
+        # has_chromosome) means False
+        for column in ("co-assembly", "rRNA_presence", HAS_CHROMOSOME_FIELD):
+            metadata[column] = parse_bool_column(metadata, column)
 
         # check amount of genomes to register at the same time
         if len(metadata) >= 5000:
@@ -634,10 +660,7 @@ class GenomeUpload:
             except IndexError:
                 pass
 
-            if str(genome_info[gen]["co-assembly"]).lower() in ["yes", "y", "true"]:
-                genome_info[gen]["co-assembly"] = True
-            else:
-                genome_info[gen]["co-assembly"] = False
+            # co-assembly is already a bool (see validate_metadata_tsv())
 
             genome_info[gen]["alias"] = gen
 

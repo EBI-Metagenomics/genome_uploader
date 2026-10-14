@@ -280,8 +280,33 @@ class Tests:
         genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [_genome_row("MAG1", genome_path, has_chromosome="maybe")])
         args = _base_args(tmp_path, genome_info_path, test_suffix="has-chromosome-invalid-unittest")
 
-        with pytest.raises(ValueError, match="has_chromosome must be True/False"):
+        with pytest.raises(ValueError, match="has_chromosome must be one of"):
             GenomeUpload(args).extract_genomes_info()
+
+    def test_bool_columns_accept_true_and_false_values_case_insensitively(self, tmp_path):
+        genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
+        row = _genome_row("MAG1", genome_path)
+        row[GENOME_TSV_HEADER.index("co-assembly")] = "no"
+        row[GENOME_TSV_HEADER.index("rRNA_presence")] = " YES "
+        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [row])
+        args = _base_args(tmp_path, genome_info_path, test_suffix="bool-values-unittest")
+        genome_info = GenomeUpload(args).validate_metadata_tsv()
+
+        values = next(iter(genome_info.values()))
+        assert values["co-assembly"] is False
+        assert values["rRNA_presence"] is True
+        assert values["has_chromosome"] is False
+
+    @pytest.mark.parametrize("column", ["co-assembly", "rRNA_presence"])
+    def test_bool_column_invalid_value_raises(self, tmp_path, column):
+        genome_path = _write_fasta_gz(tmp_path / "bin.fa.gz", ["contig1"])
+        row = _genome_row("MAG1", genome_path)
+        row[GENOME_TSV_HEADER.index(column)] = "maybe"
+        genome_info_path = _write_genome_tsv(tmp_path / "genome_info.tsv", [row])
+        args = _base_args(tmp_path, genome_info_path, test_suffix="bool-invalid-unittest")
+
+        with pytest.raises(ValueError, match=f"{column} must be one of .* for the following genomes: MAG1"):
+            GenomeUpload(args).validate_metadata_tsv()
 
     def test_chromosome_info_contig_name_not_in_fasta_raises(self, tmp_path):
         genome_path = _write_fasta_gz(tmp_path / "chromosome_bin.fa.gz", ["contig1"])
