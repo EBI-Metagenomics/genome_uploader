@@ -2,6 +2,7 @@ import subprocess
 from datetime import datetime as dt
 from pathlib import Path
 
+import pytest
 import responses as responses_lib
 
 from genomeuploader.ena_submit import EnaSubmit
