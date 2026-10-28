@@ -714,7 +714,7 @@ COMPLETENESS_FIELD = "completeness"
 CONTAMINATION_FIELD = "contamination"
 # optional --genome_info column: True when the genome has records in --chromosome-info;
 # a missing column or an empty cell means False
-HAS_CHROMOSOME_FIELD = "has_chromosome"
+CHROMOSOME_LEVEL_FIELD = "chromosome_level"
 
 BIN_MANDATORY_FIELDS = [
     GENOME_NAME_FIELD,

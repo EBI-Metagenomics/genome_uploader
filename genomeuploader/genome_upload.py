@@ -45,7 +45,7 @@ from genomeuploader.constants import (
     MISSING_LOCATION_DATA,
     MISSING_COLLECTION_DATE,
     GENOME_NAME_FIELD,
-    HAS_CHROMOSOME_FIELD,
+    CHROMOSOME_LEVEL_FIELD,
     CO_ASSEMBLY_FIELD,
     RRNA_PRESENCE_FIELD,
     TRUE_VALUES,
@@ -271,7 +271,7 @@ def create_manifest_dictionary(
     study: str,
     coverage: float,
     is_coassembly: bool,
-    has_chromosome: bool,
+    chromosome_level: bool,
     chromosome_records: list,
 ) -> dict:
     """
@@ -287,10 +287,10 @@ def create_manifest_dictionary(
         study (str): Study accession.
         coverage (float): Genome coverage depth.
         is_coassembly (bool): Whether the genome comes from a co-assembly.
-        has_chromosome (bool): Whether the genome has one or more chromosome records.
+        chromosome_level (bool): Whether the genome has one or more chromosome records.
         chromosome_records (list): The genome's chromosome records (one
             chromosome_file.ChromosomeRecord per contig submitted as a chromosome),
-            empty when has_chromosome is False.
+            empty when chromosome_level is False.
     Returns:
         dict: Manifest dictionary for the genome.
     """
@@ -305,7 +305,7 @@ def create_manifest_dictionary(
         "study": study,
         "coverageDepth": coverage,
         "co-assembly": is_coassembly,
-        "has_chromosome": has_chromosome,
+        "chromosome_level": chromosome_level,
         "chromosome_records": chromosome_records,
     }
 
@@ -333,7 +333,7 @@ def compute_manifests(genomes: dict) -> dict:
             genomes[g]["study"],
             genomes[g]["genome_coverage"],
             genomes[g]["co-assembly"],
-            genomes[g]["has_chromosome"],
+            genomes[g]["chromosome_level"],
             genomes[g]["chromosome_records"],
         )
         manifest_info[g]["accessionType"] = genomes[g]["accessionType"]
@@ -399,7 +399,7 @@ class GenomeUpload:
         self.test_suffix = args["test_suffix"]
 
         # optional TSV listing genomes to submit as chromosomes; loaded and fully
-        # validated up front so a broken --chromosome-info file fails immediately,
+        # validated up front so a broken --chromosome_info file fails immediately,
         # before any other processing (see chromosome_file.load_chromosome_metadata())
         chromosome_info = args.get("chromosome_info")
         self.chromosome_metadata = chromosome_file.load_chromosome_metadata(
@@ -458,11 +458,11 @@ class GenomeUpload:
             co-assembly: True/False, whether the genome was generated from a co-assembly
             genome_coverage : genome coverage
             genome_path: path to genome to upload
-            has_chromosome (optional): True/False, whether the genome has contigs to submit as
-                chromosomes; a missing column or an empty cell means False. Genomes set to True
-                must have their chromosome records in the separate --chromosome-info TSV (see
+            chromosome_level (optional): True/False, whether to submit the genome as chromosome-level assembly;
+                a missing column or an empty cell means False. Genomes set to True
+                must have their chromosome records in the separate --chromosome_info TSV (see
                 load_chromosome_metadata()); the two are cross-checked in extract_genomes_info().
-        True/False columns (co-assembly, rRNA_presence, has_chromosome) accept any value of
+        True/False columns (co-assembly, rRNA_presence, chromosome_level) accept any value of
         TRUE_VALUES/FALSE_VALUES case insensitively and are converted to bool here
         (see parse_bool_column()).
         Returns:
@@ -476,14 +476,14 @@ class GenomeUpload:
         columns_to_read = list(MAG_MANDATORY_FIELDS)
 
         header_columns = pd.read_csv(self.genome_metadata, sep="\t", nrows=0).columns
-        if HAS_CHROMOSOME_FIELD in header_columns:
-            columns_to_read.append(HAS_CHROMOSOME_FIELD)
+        if CHROMOSOME_LEVEL_FIELD in header_columns:
+            columns_to_read.append(CHROMOSOME_LEVEL_FIELD)
 
         metadata = pd.read_csv(self.genome_metadata, sep="\t", usecols=columns_to_read)
 
-        # has_chromosome is optional: a missing column means False for every genome
-        if HAS_CHROMOSOME_FIELD not in metadata.columns:
-            metadata[HAS_CHROMOSOME_FIELD] = False
+        # chromosome_level is optional: a missing column means False for every genome
+        if CHROMOSOME_LEVEL_FIELD not in metadata.columns:
+            metadata[CHROMOSOME_LEVEL_FIELD] = False
 
         # make sure there are no empty cells
         clean_columns = list(metadata.dropna(axis=1))
@@ -497,8 +497,8 @@ class GenomeUpload:
 
         # True/False columns, converted after the empty-cell check so missing mandatory values
         # are reported as such; an empty cell left at this point (rRNA_presence for bins,
-        # has_chromosome) means False
-        for column in (CO_ASSEMBLY_FIELD, RRNA_PRESENCE_FIELD, HAS_CHROMOSOME_FIELD):
+        # chromosome_level) means False
+        for column in (CO_ASSEMBLY_FIELD, RRNA_PRESENCE_FIELD, CHROMOSOME_LEVEL_FIELD):
             metadata[column] = parse_bool_column(metadata, column)
 
         # check amount of genomes to register at the same time
@@ -592,47 +592,47 @@ class GenomeUpload:
         Extracts and processes genome information from validated metadata.
 
         A genome has one or more chromosome records when its genome_name appears in
-        self.chromosome_metadata (loaded and validated up front from --chromosome-info
+        self.chromosome_metadata (loaded and validated up front from --chromosome_info
         in __init__); each record's contig_name identifies one of that genome's fasta
         sequences. Every contig_name is checked against the genome's actual fasta
         headers before any genome is otherwise processed - a reference to a contig that
-        doesn't exist fails the whole run. The has_chromosome column of --genome_info must
-        be True exactly for the genomes that have records in --chromosome-info. Genomes
-        not listed in --chromosome-info are submitted normally. Every genome_name in
-        --chromosome-info must match a genome in --genome_info, or the whole run fails.
+        doesn't exist fails the whole run. The chromosome_level column of --genome_info must
+        be True exactly for the genomes that have records in --chromosome_info. Genomes
+        not listed in --chromosome_info are submitted normally. Every genome_name in
+        --chromosome_info must match a genome in --genome_info, or the whole run fails.
         Returns:
             dict: Dictionary of processed genome information.
         Raises:
-            ValueError: If any contig_name in --chromosome-info doesn't exist in its
-                genome's fasta file, a genome has has_chromosome True but no chromosome
-                records (or records but has_chromosome not True), or if any genome_name in
-                --chromosome-info doesn't match a genome in --genome_info.
+            ValueError: If any contig_name in --chromosome_info doesn't exist in its
+                genome's fasta file, a genome has chromosome_level True but no chromosome
+                records (or records but chromosome_level not True), or if any genome_name in
+                --chromosome_info doesn't match a genome in --genome_info.
         """
         genome_info = self.validate_metadata_tsv()
 
         genome_paths = {genome_info[gen][GENOME_NAME_FIELD]: Path(genome_info[gen]["genome_path"]) for gen in genome_info}
         chromosome_file.validate_contig_names(self.chromosome_metadata, genome_paths)
 
-        # has_chromosome in --genome_info must agree with --chromosome-info in both directions
+        # chromosome_level in --genome_info must agree with --chromosome_info in both directions
         flagged_without_records = sorted(
             genome_info[gen][GENOME_NAME_FIELD]
             for gen in genome_info
-            if genome_info[gen][HAS_CHROMOSOME_FIELD] and genome_info[gen][GENOME_NAME_FIELD] not in self.chromosome_metadata
+            if genome_info[gen][CHROMOSOME_LEVEL_FIELD] and genome_info[gen][GENOME_NAME_FIELD] not in self.chromosome_metadata
         )
         records_without_flag = sorted(
             genome_info[gen][GENOME_NAME_FIELD]
             for gen in genome_info
-            if not genome_info[gen][HAS_CHROMOSOME_FIELD] and genome_info[gen][GENOME_NAME_FIELD] in self.chromosome_metadata
+            if not genome_info[gen][CHROMOSOME_LEVEL_FIELD] and genome_info[gen][GENOME_NAME_FIELD] in self.chromosome_metadata
         )
         mismatch_errors = []
         if flagged_without_records:
             mismatch_errors.append(
-                f"{HAS_CHROMOSOME_FIELD} is True in --genome_info but no chromosome records were found in "
-                f"--chromosome-info for: {', '.join(flagged_without_records)}"
+                f"{CHROMOSOME_LEVEL_FIELD} is True in --genome_info but no chromosome records were found in "
+                f"--chromosome_info for: {', '.join(flagged_without_records)}"
             )
         if records_without_flag:
             mismatch_errors.append(
-                f"chromosome records were found in --chromosome-info but {HAS_CHROMOSOME_FIELD} is not True "
+                f"chromosome records were found in --chromosome_info but {CHROMOSOME_LEVEL_FIELD} is not True "
                 f"in --genome_info for: {', '.join(records_without_flag)}"
             )
         if mismatch_errors:
@@ -662,11 +662,9 @@ class GenomeUpload:
             except IndexError:
                 pass
 
-            # co-assembly is already a bool (see validate_metadata_tsv())
-
             genome_info[gen]["alias"] = gen
 
-            # has_chromosome already comes from --genome_info and was cross-checked above
+            # chromosome_level already comes from --genome_info and was cross-checked above
             chromosome_records = self.chromosome_metadata.get(genome_info[gen][GENOME_NAME_FIELD], [])
             genome_info[gen]["chromosome_records"] = chromosome_records
             if chromosome_records:
@@ -684,7 +682,7 @@ class GenomeUpload:
         unmatched_chromosome_genomes = sorted(set(self.chromosome_metadata) - matched_chromosome_genomes)
         if unmatched_chromosome_genomes:
             raise ValueError(
-                f"{len(unmatched_chromosome_genomes)} genome_name value(s) in --chromosome-info "
+                f"{len(unmatched_chromosome_genomes)} genome_name value(s) in --chromosome_info "
                 "do not match any genome in --genome_info: "
                 f"{', '.join(unmatched_chromosome_genomes)}."
             )
@@ -1066,7 +1064,7 @@ class GenomeUpload:
         ]
         if genome_info["run_ref"]:
             values.insert(-1, ("RUN_REF", genome_info["run_ref"]))
-        if genome_info.get("has_chromosome"):
+        if genome_info.get(CHROMOSOME_LEVEL_FIELD):
             chromosome_list_path = chromosome_file.write_chromosome_list(
                 self.manifest_dir,
                 genome_info["alias"],
@@ -1119,14 +1117,14 @@ __version__ = importlib.metadata.version("genome_uploader")
 @click.option("-u", "--upload_study", required=True, help="Study accession for genomes upload")
 @click.option("--genome_info", type=click.Path(exists=True), required=True, help="Genomes metadata file")
 @click.option(
-    "--chromosome-info",
+    "--chromosome_info",
     type=click.Path(exists=True),
     required=False,
     help="Optional TSV listing contigs to submit as chromosomes, one row per contig. Columns: "
     "genome_name (must match a genome_name in --genome_info; a genome can have several rows, "
     "one per contig), contig_name (must match a sequence header in that genome's fasta; unique "
     "per genome_name), chromosome_name, chromosome_type, chromosome_topology, and "
-    "chromosome_location (optional). Genomes listed here must have has_chromosome set to True "
+    "chromosome_location (optional). Genomes listed here must have chromosome_level set to True "
     "in --genome_info.",
 )
 @click.option("-m", "--mags", is_flag=True, help="Select for MAG upload")
@@ -1160,6 +1158,9 @@ def main(upload_study, genome_info, chromosome_info, mags, bins, out, force, liv
 
     if test_suffix and live:
         raise click.UsageError("--test-suffix cannot be used with --live")
+
+    if bins and chromosome_info:
+        raise click.UsageError("bins can not be submitted as chromosome-level genome assembly")
 
     args = {
         "upload_study": upload_study,

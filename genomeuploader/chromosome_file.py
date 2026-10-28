@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """
-Everything specific to submitting a genome's contigs as ENA chromosome-level assembly: parsing the
+Everything specific to submitting a genome as ENA chromosome-level genome assembly: parsing the
 optional --chromosome-info TSV, validating its values and cross-checking them against
 the genomes' fasta files up front, and writing the ENA chromosome list file.
 See the ENA docs:
