@@ -95,7 +95,7 @@ class Tests:
             response = requests.get(f"{ENA_DEV_REPORT_URL}/samples/xml/{sample_accession}", auth=auth)
             assert response.status_code == 200, f"Could not fetch {sample_accession}: {response.text}"
             sample = et.fromstring(response.content).find("SAMPLE")
-            assert sample.get("center_name") == "EMG"
+            assert sample.get("center_name") == "EBI-EMG"
 
     def test_genomeuploader_re_register_samples(tmp_path):
         timestamp = str(int(dt.timestamp(dt.now())))
