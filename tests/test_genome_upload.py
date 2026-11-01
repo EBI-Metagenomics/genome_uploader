@@ -1,12 +1,17 @@
 import subprocess
+import xml.etree.ElementTree as et
 from datetime import datetime as dt
 from pathlib import Path
 
 import pytest
+import requests
 import responses as responses_lib
 
+from genomeuploader.ena import CredentialsManager
 from genomeuploader.ena_submit import EnaSubmit
 from genomeuploader.genome_upload import *
+
+ENA_DEV_REPORT_URL = "https://wwwdev.ebi.ac.uk/ena/submit/report"
 
 
 class Tests:
@@ -54,8 +59,6 @@ class Tests:
             "--bins",
             "--test-suffix",
             f"end-to-end-{timestamp}",
-            "--centre_name",
-            "EMG",
         ]
 
         result = subprocess.run(command, capture_output=True, text=True)
@@ -79,6 +82,20 @@ class Tests:
         assert len(lines) == number_of_bins + 1
         # should have sample id (ERS) and suffix from --test-suffix command
         assert "ERS" in "".join(lines) and "end-to-end" in "".join(lines)
+
+        # without --centre_name the XML must not set center_name, so ENA takes it from the Webin account
+        samples_xml = et.parse("tests/fixtures/bin_upload/genome_samples.xml").getroot()
+        assert samples_xml.find("SUBMISSION_SET/SUBMISSION").get("center_name") is None
+        assert all(sample.get("center_name") is None for sample in samples_xml.iter("SAMPLE"))
+
+        # registered samples should get the centre name of the test Webin account
+        auth = CredentialsManager.get_credentials()
+        for line in lines[1:]:
+            sample_accession = line.strip().split("\t")[1]
+            response = requests.get(f"{ENA_DEV_REPORT_URL}/samples/xml/{sample_accession}", auth=auth)
+            assert response.status_code == 200, f"Could not fetch {sample_accession}: {response.text}"
+            sample = et.fromstring(response.content).find("SAMPLE")
+            assert sample.get("center_name") == "EMG"
 
     def test_genomeuploader_re_register_samples(tmp_path):
         timestamp = str(int(dt.timestamp(dt.now())))

@@ -383,6 +383,11 @@ class GenomeUpload:
 
         self.tpa = args["tpa"]
         self.centre_name = args["centre_name"]
+        if not self.centre_name:
+            logger.warning(
+                "--centre_name is not set: ENA will use the centre name registered for your Webin account. "
+                "If you are submitting through a broker account, --centre_name is required."
+            )
         self.force = args["force"]
 
         self.work_dir = Path(args["out"])
@@ -936,7 +941,8 @@ class GenomeUpload:
             tpa_description = "Third Party Annotation (TPA) "
 
         submission = et.Element("SUBMISSION")
-        submission.set("center_name", self.centre_name)
+        if self.centre_name:
+            submission.set("center_name", self.centre_name)
         actions = et.SubElement(submission, "ACTIONS")
         action_sub = et.SubElement(actions, "ACTION")
         et.SubElement(action_sub, "ADD")
@@ -951,7 +957,8 @@ class GenomeUpload:
 
             sample = et.SubElement(sample_set, "SAMPLE")
             sample.set("alias", genomes[g]["alias"])
-            sample.set("center_name", self.centre_name)
+            if self.centre_name:
+                sample.set("center_name", self.centre_name)
 
             et.SubElement(sample, "TITLE").text = f"{assembly_type}: {genomes[g]['alias']}"
             sample_name = et.SubElement(sample, "SAMPLE_NAME")
@@ -1140,7 +1147,7 @@ __version__ = importlib.metadata.version("genome_uploader")
     "Use only for test mode (without --live)! Default: script execution timestamp.",
 )
 @click.option("--tpa", is_flag=True, help="Select if uploading TPA-generated genomes")
-@click.option("--centre_name", type=str, help="Centre name for submission")
+@click.option("--centre_name", type=str, help="Centre name for submission", required=False)
 @click.option(
     "--private",
     is_flag=True,
