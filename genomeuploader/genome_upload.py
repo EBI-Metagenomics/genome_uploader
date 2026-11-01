@@ -1147,7 +1147,7 @@ __version__ = importlib.metadata.version("genome_uploader")
     "Use only for test mode (without --live)! Default: script execution timestamp.",
 )
 @click.option("--tpa", is_flag=True, help="Select if uploading TPA-generated genomes")
-@click.option("--centre_name", type=str, help="Centre name for submission", required=False)
+@click.option("--centre_name", type=str, help="Centre name for broker submission", required=False)
 @click.option(
     "--private",
     is_flag=True,

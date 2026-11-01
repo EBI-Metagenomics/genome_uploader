@@ -144,7 +144,7 @@ genome_upload \
   -u UPLOAD_STUDY \
   --genome_info METADATA_FILE \
   (--mags | --bins) \
-  --centre_name CENTRE_NAME \
+  [--centre_name CENTRE_NAME] \
   [--chromosome-info CHROMOSOME_FILE] \
   [--out] [--force] [--live] [--tpa]
 ```
@@ -157,7 +157,7 @@ where
   * `--out`: output folder (default: working directory)
   * `--force`: forces reset of sample xmls generation. This is useful if you changed something in your tsv table, or if ENA metadata haven't been downloaded correctly (you can check this in `ENA_backup.json`).
   * `--live`: registers genomes on ENA's live server. Omitting this option allows to validate samples beforehand (it will need the `-test` option in the upload command for the test submission to work)
-  * `--centre_name CENTRE_NAME`: name of the centre generating and uploading genomes
+  * `--centre_name CENTRE_NAME`: name of the center generating and uploading genomes. It must be provided for broker accounts. If omitted, ENA uses the account's registered center name. Check [ENA documentation](https://ena-docs.readthedocs.io/en/latest/submit/general-guide/data-brokering.html) for more details.
   * `--tpa`: if uploading TPA (Third PArty) generated genomes
   * `--private`: if data is private
 
